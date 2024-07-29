@@ -3,6 +3,10 @@ uuid = "eb9f2fad-3fa0-4abb-839d-82a3b9cc9b30"
 authors = ["Yure Rocha <yuretalis@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+
 [compat]
 julia = "1.6.7"
 
