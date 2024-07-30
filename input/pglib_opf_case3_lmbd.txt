@@ -1,0 +1,19 @@
+Bus data: 3
+
+Existing circuits: 3
+Bfr Bto Nc X Cap. Cost
+       1       3       1           0.62         9000.0     0.0
+       3       2       1           0.75           50.0     0.0
+       1       2       1            0.9         9000.0     0.0
+
+Candidate circuits: 3
+Bfr Bto Nc X Cap. Cost
+       1       3       1           0.62         9000.0           62.0
+       3       2       1           0.75           50.0           75.0
+       1       2       1            0.9         9000.0           90.0
+
+Demand and Generation by bus: 3
+Bus G1 D1
+       1           1000          110.0
+       2           1000          110.0
+       3              0           95.0
