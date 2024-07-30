@@ -20,7 +20,7 @@ struct Circuit
     to::Int # "to" bus
 end
 
-function read_data(filename, nb_stages)
+function read_data(filename, is_phase2_en, nb_stages)
     s = open(filename) do f
         readlines(f)
     end
@@ -41,7 +41,7 @@ function read_data(filename, nb_stages)
     K = Array{Circuit}(undef, 0)
     nb_ca_circs = get_nb(s, i)
     i += 2
-    populate_circuits(I, K, gamma, f_bar, cost, s, i, nb_ca_circs)
+    populate_circuits(I, K, gamma, f_bar, cost, s, i, nb_ca_circs, is_phase2_en)
     i += nb_ca_circs + 1
 
     nb_dem_gen = get_nb(s, i)
@@ -54,10 +54,12 @@ function read_data(filename, nb_stages)
         bus = parse(Int, v[1])
         mid = Int((length(v) - 1) / 2) # minus 1 of the bus id
         for (t, g) in enumerate(v[2:nb_stages+1])
-            G[t, bus] = parse(Float64, g)
+            g = parse(Float64, g)
+            G[t, bus] = is_phase2_en ? mult_gen_load*g : g
         end
         for (t, d) in enumerate(v[mid+2:mid+nb_stages+1])
-            D[t, bus] = parse(Float64, d)
+            d = parse(Float64, d)
+            D[t, bus] = is_phase2_en ? mult_gen_load*d : d
         end
     end
     

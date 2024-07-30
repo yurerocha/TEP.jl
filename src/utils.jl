@@ -1,6 +1,11 @@
 const eps = 1e-6
 const penalty = 1e6
-const bigM = 1e10
+# const bigM = 1e10
+
+# experiments
+const mult_gen_load = 2
+const nb_candidates = 2
+const max_rand = 100
 
 function get_nb(s, i)
     return parse(Int, split(s[i], ":")[2])
@@ -49,11 +54,14 @@ function comp_incidence_matrix(data, f, t, i)
     return e
 end
 
-function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs)
+function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs, is_phase2_en=false)
     for i in nb_line:nb_line+nb_circs-1
         d = split(s[i])
         circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
         nb = parse(Int, d[3])
+        if is_phase2_en
+            nb = nb_candidates
+        end
         for _ in 1:nb
             # update the set of buses
             if !in(circ.fr, I)
@@ -64,7 +72,12 @@ function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs
             push!(circuits, circ)
             push!(gamma, comp_gamma(parse(Float64, d[4])))
             push!(f_bar, parse(Float64, d[5]))
-            push!(cost, parse(Float64, d[6]))
+            c = parse(Float64, d[6])
+            if is_phase2_en
+                c /= (nb_candidates + 1) # plus the existing circuit
+                c += c / rand(1:max_rand)
+            end
+            push!(cost, c)
         end
     end
 end

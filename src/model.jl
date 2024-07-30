@@ -1,11 +1,17 @@
 using JuMP
 using Gurobi
+using Dates
+using Random
 
 include("data.jl")
 
-function build_model(filename, nb_stages=1, is_skl_en=true)
+function build_model(filename, is_phase2_en=false, nb_stages=1, is_skl_en=true)
+    # nb of seconds since the Unix epoch
+    seed = Int(floor(datetime2unix(now())))
+    Random.seed!(seed)
+
     # load data
-    dt = read_data(filename, nb_stages)
+    dt = read_data(filename, is_phase2_en, nb_stages)
     md = Model(Gurobi.Optimizer)
     
     x = Dict{Tuple{Int, Int}, Any}()
@@ -73,6 +79,11 @@ function build_model(filename, nb_stages=1, is_skl_en=true)
                 @constraint(md, Delta_theta[t, k] == theta[t, dt.K[k - dt.nb_J].fr] - theta[t, dt.K[k - dt.nb_J].to])
                 y = f[t, k] - dt.gamma[k] * Delta_theta[t, k]
                 # y = f[t, k] - dt.gamma[k] * (theta[t, dt.K[k - dt.nb_J].fr] - theta[t, dt.K[k - dt.nb_J].to])
+
+                # there is a corresponding existing circuit for every candidate circuit
+                # following Ghita's thesis
+                bigM = dt.gamma[k-dt.nb_J] * (dt.f_bar[k] / dt.gamma[k])
+
                 @constraint(md, y <= bigM * (1 - x[t, k]))
                 @constraint(md, -y <= bigM * (1 - x[t, k]))
             end
@@ -101,4 +112,10 @@ function build_model(filename, nb_stages=1, is_skl_en=true)
     @objective(md, Min, sum(dt.cost[l] * x[t, l] for t in 1:dt.nb_T, l in dt.nb_J+1:dt.nb_J+dt.nb_K) + y_vars)
 
     optimize!(md)
+
+    println("Termination status: ", termination_status(md))
+    if termination_status(md) == MOI.OPTIMAL
+        obj = [value(x[t, l]) > 0.5 ? dt.cost[l] : 0.0 for t in 1:dt.nb_T, l in dt.nb_J+1:dt.nb_J+dt.nb_K]
+        println("Objective value: ", sum(obj))
+    end
 end
