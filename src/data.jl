@@ -1,5 +1,3 @@
-include("utils.jl")
-
 struct Data
     I # buses
     gamma # susceptance of circuits
@@ -20,7 +18,7 @@ struct Circuit
     to::Int # "to" bus
 end
 
-function read_data(filename, is_phase2_en, nb_stages)
+function read_data(filename, is_phase2_en, nb_stages=1)
     s = open(filename) do f
         readlines(f)
     end

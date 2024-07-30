@@ -2,11 +2,6 @@ const eps = 1e-6
 const penalty = 1e6
 # const bigM = 1e10
 
-# experiments
-const mult_gen_load = 2
-const nb_candidates = 2
-const max_rand = 100
-
 function get_nb(s, i)
     return parse(Int, split(s[i], ":")[2])
 end
@@ -58,9 +53,10 @@ function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs
     for i in nb_line:nb_line+nb_circs-1
         d = split(s[i])
         circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
-        nb = parse(Int, d[3])
         if is_phase2_en
             nb = nb_candidates
+        else
+            nb = parse(Int, d[3])
         end
         for _ in 1:nb
             # update the set of buses
