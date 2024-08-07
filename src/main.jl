@@ -2,52 +2,52 @@
 const mult_gen_load = 2
 const nb_candidates = 2
 const max_rand = 100
+const solver_time_limit = 3600
 
 function main()
     dir = "TransExpanProblem.jl"
     outputfile = "$dir/tep.md"
-
+    
     # nb of seconds since the Unix epoch
-    seed = Int(floor(datetime2unix(now())))
-    Random.seed!(seed)
+    # seed = Int(floor(datetime2unix(now())))
+    # Random.seed!(seed)
+    rng = Random.MersenneTwister(123)
 
-    # save seed
-    log("$dir/seed.txt", "$seed\n")
-    # tep log header
-    outstr = "| Instance |"
-    outstr *= " Build (s) | Solve (s) | Status | Objective |"^2 * "\n"
-    outstr *= "|:---"^9 * "| \n"
-    log(outputfile, outstr)
+    log_header(outputfile)
 
     files = readdir("$dir/input")
     # sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
-    # files = ["pglib_opf_case3_lmbd.txt"]
+    # files = ["pglib_opf_case588_sdet.txt"]
+    # skip = ["pglib_opf_case589_sdet.txt", "pglib_opf_case793_goc.txt",
+    #         "pglib_opf_case1803_snem.txt", "pglib_opf_case1888_rte.txt", 
+    #         "pglib_opf_case2312_goc.txt", "pglib_opf_case4661_sdet.txt"]
+    skip = []
+    is_mip_en = false
     for file in files
+        if file in skip
+            println("Skipping instance $file")
+            continue
+        end
+        println("Processing $file")
 
         inputfile = "$dir/input/$file"
         logfile = "$dir/log/$file"
-        outstr = "| $file "
-        for is_phase2_en in [false, true]
-            println("Processing $file")
-            dt = read_data(inputfile, is_phase2_en)
-            build_time = @elapsed (md = build_model(dt, true, logfile))
-            runtime, term_status, obj = solve(dt, md)
-            
-            outstr *= "| $(round(build_time, digits=5)) | $(round(runtime, digits=5)) | $term_status | $(round(obj, digits=2)) "
-            # in case the problem is infeasible or unbounded in the first run
-            if !is_phase2_en && term_status == MOI.INFEASIBLE_OR_UNBOUNDED
-                outstr *= "|-|-|-|-"
-                break
+        for is_phase2_en in [false]
+            dt = nothing
+            try
+                dt = read_data(inputfile, is_phase2_en, rng)
+                build_time = 
+                       @elapsed (md = build_model(dt, true, logfile, is_mip_en))
+                result = solve!(dt, md, is_mip_en)
+                log_instance(outputfile, file, build_time, result)
+            catch e
+                @warn e
+                log_instance(outputfile, 
+                             "<s>" * file * "</s>", 
+                             "-", 
+                             ntuple(v->'-', 6))
             end
         end
-        outstr *= "| \n"
-        log(outputfile, outstr)
-    end
-end
-
-function log(outputfile, str)
-    open(outputfile, "a") do f
-        write(f, str)
     end
 end

@@ -49,7 +49,7 @@ function comp_incidence_matrix(data, f, t, i)
     return e
 end
 
-function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs, is_phase2_en=false)
+function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs, is_phase2_en=false, rng=Random.default_rng())
     for i in nb_line:nb_line+nb_circs-1
         d = split(s[i])
         circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
@@ -66,16 +66,45 @@ function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs
                 push!(I, circ.to)
             end
             push!(circuits, circ)
-            push!(gamma, comp_gamma(parse(Float64, d[4])))
+            x = parse(Float64, d[4])
+            if iseq(x, 0.0)
+                throw(ArgumentError("Reactance equal to zero."))
+            end
+            push!(gamma, comp_gamma(x))
             push!(f_bar, parse(Float64, d[5]))
             c = parse(Float64, d[6])
             if is_phase2_en
                 c /= (nb_candidates + 1) # plus the existing circuit
-                c += c / rand(1:max_rand)
+                rn = rand(rng, 1:max_rand)
+                # @show rn
+                c += c / rn
             end
             push!(cost, c)
         end
     end
+end
+
+function log(outputfile, str)
+    open(outputfile, "a") do f
+        write(f, str)
+    end
+end
+
+function log_header(outputfile)
+    outstr = "| Instance |"
+    outstr *= " Build (s) | Solve (s) | Status | Rt solve (s) | Rt best | " * 
+              " Best bound | Objective | Gap (%) | \n"
+    outstr *= "|:---"^9 * "| \n"
+    log(outputfile, outstr)
+end
+
+function log_instance(outputfile, inst, build_time, result)
+    s = "| $inst | $build_time |"
+    for r in result
+        s *= " $r |"
+    end
+    s *= "\n"
+    log(outputfile, s)
 end
 
 function isl(a, b)

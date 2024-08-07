@@ -18,7 +18,7 @@ struct Circuit
     to::Int # "to" bus
 end
 
-function read_data(filename, is_phase2_en, nb_stages=1)
+function read_data(filename, is_phase2_en, rng, nb_stages=1)
     s = open(filename) do f
         readlines(f)
     end
@@ -33,13 +33,22 @@ function read_data(filename, is_phase2_en, nb_stages=1)
     cost = Array{Float64}(undef, 0)
     nb_ex_circs = get_nb(s, i)
     i += 2
-    populate_circuits(I, J, gamma, f_bar, cost, s, i, nb_ex_circs)
+    try 
+        populate_circuits(I, J, gamma, f_bar, cost, s, i, nb_ex_circs)
+    catch e
+        throw(e)
+    end
+
     i += nb_ex_circs + 1
 
     K = Array{Circuit}(undef, 0)
     nb_ca_circs = get_nb(s, i)
     i += 2
-    populate_circuits(I, K, gamma, f_bar, cost, s, i, nb_ca_circs, is_phase2_en)
+    try
+        populate_circuits(I, K, gamma, f_bar, cost, s, i, nb_ca_circs, is_phase2_en, rng)
+    catch e
+        throw(e)
+    end
     i += nb_ca_circs + 1
 
     nb_dem_gen = get_nb(s, i)
