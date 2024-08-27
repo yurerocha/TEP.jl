@@ -49,11 +49,11 @@ function comp_incidence_matrix(data, f, t, i)
     return e
 end
 
-function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs, is_phase2_en=false, rng=Random.default_rng())
+function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs, is_cand_en=false, rng=Random.default_rng())
     for i in nb_line:nb_line+nb_circs-1
         d = split(s[i])
         circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
-        if is_phase2_en
+        if is_cand_en
             nb = nb_candidates
         else
             nb = parse(Int, d[3])
@@ -73,7 +73,7 @@ function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs
             push!(gamma, comp_gamma(x))
             push!(f_bar, parse(Float64, d[5]))
             c = parse(Float64, d[6])
-            if is_phase2_en
+            if is_cand_en
                 c /= (nb_candidates + 1) # plus the existing circuit
                 rn = rand(rng, 1:max_rand)
                 # @show rn
@@ -92,8 +92,8 @@ end
 
 function log_header(outputfile)
     outstr = "| Instance |"
-    outstr *= " Build (s) | Solve (s) | Status | Rt solve (s) | Rt best | " * 
-              " Best bound | Objective | Gap (%) | \n"
+    outstr *= " Build (s) | Solve (s) | Status | Rt solve (s) | " *
+              " Rt best bound | Best bound | Objective | Gap (%) | \n"
     outstr *= "|:---"^9 * "| \n"
     log(outputfile, outstr)
 end
@@ -101,7 +101,13 @@ end
 function log_instance(outputfile, inst, build_time, result)
     s = "| $inst | $build_time |"
     for r in result
-        s *= " $r |"
+        if typeof(r) == Float64
+            # s *= @sprintf(" %.2f |", r)
+            r = round(r, digits=2)
+            s *= " $r |"
+        else
+            s *= " $r |"
+        end
     end
     s *= "\n"
     log(outputfile, s)
