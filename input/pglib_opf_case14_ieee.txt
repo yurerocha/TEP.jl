@@ -1,6 +1,6 @@
 Bus data: 14
 
-Existing circuits: 20
+Existing lines: 20
 Bfr Bto Nc X Cap. Cost
        1       2       1        0.05917          472.0     0.0
        1       5       1        0.22304          128.0     0.0
@@ -23,7 +23,7 @@ Bfr Bto Nc X Cap. Cost
       12      13       1        0.19988           99.0     0.0
       13      14       1        0.34802           76.0     0.0
 
-Candidate circuits: 20
+Candidate lines: 20
 Bfr Bto Nc X Cap. Cost
        1       2       1        0.05917          472.0          5.917
        1       5       1        0.22304          128.0         22.304
@@ -46,7 +46,7 @@ Bfr Bto Nc X Cap. Cost
       12      13       1        0.19988           99.0         19.988
       13      14       1        0.34802           76.0         34.802
 
-Demand and Generation by bus: 14
+Generation and demand by bus: 12
 Bus G1 D1
        1          170.0            0.0
        2           29.5           21.7
@@ -54,8 +54,6 @@ Bus G1 D1
        4            0.0           47.8
        5            0.0            7.6
        6            0.0           11.2
-       7            0.0            0.0
-       8            0.0            0.0
        9            0.0           29.5
       10            0.0            9.0
       11            0.0            3.5
