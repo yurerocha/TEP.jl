@@ -239,8 +239,8 @@ function mipstart!(data, model_data)
     x = model_data.x
     @info "MIP start"
     for t in 1:data.nb_T, k in data.nb_J+1:data.nb_J+data.nb_K
-        # set_start_value(x[t, k], 1)
-        set_lower_bound(x[t, k], 1)
+        set_start_value(x[t, k], 1)
+        # set_lower_bound(x[t, k], 1)
     end
     # Limits the number of feasible MIP solutions found. Optimization returns 
     # with a SOLUTION_LIMIT status once the limit has been reached. To find a 
@@ -288,10 +288,9 @@ function heuristic!(data, model, x)
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), maxint)
 end
 
-function check_idle_circuits!(data, model_data)
+function check_idle_candidate_circuits!(data, model_data)
     x = model_data.x
     f = model_data.f
-    # provavelmente o fluxo nos circuitos existentes vai ficar no limite
     flow = Array{Float64}(undef, data.nb_T, data.nb_J + data.nb_K)
     for t in 1:data.nb_T
         k = data.nb_J + 1
@@ -310,7 +309,7 @@ function check_idle_circuits!(data, model_data)
             acc = 0.0
             for _ in 1:nb_candidates
                 acc += flow[t, k]
-                # in case one of the candidates circuits is idle
+                # in case one of idle candidates circuits
                 @info data.f_bar[k], acc
                 if iseq(flow[t, k], 0.0)
                     @info "idle", t, k, flow[t, k]
@@ -334,4 +333,18 @@ function check_idle_circuits!(data, model_data)
         end
     end
     @show data.nb_J, data.nb_K
+end
+
+function detect_cycles_in_sol(data, model_data)
+    x = model_data.x
+    elist = []
+    for t in 1:data.nb_T
+        for k in data.nb_J+1:data.nb_J+data.nb_K
+            if value(x[t, k]) > 0.5
+                push!(elist, data.K[k - data.nb_J])
+            end
+        end
+    end
+
+    @info elist
 end

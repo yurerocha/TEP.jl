@@ -15,8 +15,8 @@ function run(instance)
     model_dt = build_model(dt, true, logfile, true)
 
     mipstart!(dt, model_dt)
-    @info has_values(model_dt.model)
-    check_idle_circuits!(dt, model_dt)
+    detect_cycles_in_solution(dt, model_dt)
+    # check_idle_candidate_circuits!(dt, model_dt)
     solve!(model_dt, true)
     # if status != MOI.INFEASIBLE && status != MOI.INFEASIBLE_OR_UNBOUNDED
     #     heuristic!(dt, md, x)
@@ -37,17 +37,17 @@ function run_all()
     files = readdir("$dir/input")
     # sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
-    skip = ["pglib_opf_case588_sdet.txt", "pglib_opf_case793_goc.txt",
-            "pglib_opf_case1803_snem.txt", "pglib_opf_case1888_rte.txt", 
-            "pglib_opf_case2312_goc.txt", "pglib_opf_case4661_sdet.txt"]
-    # run the solver with binary decision variables
-    files = ["pglib_opf_case3_lmbd.txt"]
+    # skip = ["pglib_opf_case588_sdet.txt", "pglib_opf_case793_goc.txt",
+    #         "pglib_opf_case1803_snem.txt", "pglib_opf_case1888_rte.txt", 
+    #         "pglib_opf_case2312_goc.txt", "pglib_opf_case4661_sdet.txt"]
+    # # run the solver with binary decision variables
+    # files = ["pglib_opf_case3_lmbd.txt"]
     is_mip_en = true
-    for file in files
-        if file in skip
-            println("Skipping instance $file")
-            continue
-        end
+    for file in files[10:end]
+        # if file in skip
+        #     println("Skipping instance $file")
+        #     continue
+        # end
         println("Processing $file")
 
         inputfile = "$dir/input/$file"
@@ -57,6 +57,7 @@ function run_all()
             dt = read_data(inputfile, rng)
             build_time = 
                        @elapsed (md = build_model(dt, true, logfile, is_mip_en))
+            mipstart!(dt, md)
             result = solve!(md, is_mip_en)
             log_instance(outputfile, file, build_time, result)
         catch e
