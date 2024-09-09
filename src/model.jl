@@ -16,6 +16,7 @@ struct ModelData
     model
     x
     f
+    theta
 end
 
 function build_model(data, 
@@ -86,12 +87,13 @@ function build_model(data,
 
         l = d - g
         y = 0
-        if isl(rhs_sum, 0.0)
-            y = @variable(md, lower_bound = 0, base_name="y$t.$i")
-            # y_vars += penalty*y
-            # modifies y_vars in place
-            add_to_expression!(y_vars, penalty, y)
-        elseif isg(rhs_sum, 0.0)
+        # if isl(rhs_sum, 0.0)
+        #     y = @variable(md, lower_bound = 0, base_name="y$t.$i")
+        #     # y_vars += penalty*y
+        #     # modifies y_vars in place
+        #     add_to_expression!(y_vars, penalty, y)
+        # elseif 
+        if isg(rhs_sum, 0.0)
             y = @variable(md, upper_bound = 0, base_name="y$t.$i")
             # y_vars -= penalty*y
             # modifies y_vars in place
@@ -167,10 +169,10 @@ function build_model(data,
         #         k in data.nb_J+1:data.nb_J+data.nb_K) + y_vars)
     end
 
-    return ModelData(md, x, f)
+    return ModelData(md, x, f, theta)
 end
 
-function solve!(model_data, is_mip_en=true)
+function solve!(model_data, data, is_mip_en=true)
     model = model_data.model
 
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
@@ -200,6 +202,19 @@ function solve!(model_data, is_mip_en=true)
     optimize!(model)
 
     status = termination_status(model)
+
+    for t in 1:data.nb_T, i in data.I
+        @show i, value(model_data.theta[t, i])
+    end
+
+    for t in 1:data.nb_T
+        for j in 1:data.nb_J
+            @show data.J[j], value(model_data.f[t, j])
+        end
+        for k in data.nb_J+1:data.nb_J+data.nb_K
+            @show data.K[k-data.nb_J], value(model_data.f[t, k])
+        end
+    end
     
     best_bound = "-"
     obj = "-"
@@ -248,7 +263,6 @@ function mipstart!(data, model_data)
     # heuristics when the solution limit is set to exactly 1.
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
     optimize!(model)
-    @info solve_time(model), has_values(model)
 
     # set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
     return termination_status(model)
@@ -285,9 +299,13 @@ function heuristic!(data, model, x)
             @warn "Fail to rm candidate circuit c($t, $k)"
         end
     end
-    set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), maxint)
+    set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
 end
 
+"""
+
+Testar: pglib_opf_case60_c.txt
+"""
 function check_idle_candidate_circuits!(data, model_data)
     x = model_data.x
     f = model_data.f
@@ -335,16 +353,29 @@ function check_idle_candidate_circuits!(data, model_data)
     @show data.nb_J, data.nb_K
 end
 
+"""
+    https://juliagraphs.org/Graphs.jl/dev/algorithms/cycles/#Graphs.simplecycles
+    TransExpanProblem.jl/input/pglib_opf_case89_pegase.txt"
+    TransExpanProblem.jl/input/pglib_opf_case2000_goc.txt"
+"""
 function detect_cycles_in_sol(data, model_data)
     x = model_data.x
     elist = []
     for t in 1:data.nb_T
         for k in data.nb_J+1:data.nb_J+data.nb_K
             if value(x[t, k]) > 0.5
-                push!(elist, data.K[k - data.nb_J])
+                c = data.K[k - data.nb_J]
+                push!(elist, (c.fr, c.to))
             end
         end
     end
 
-    @info elist
+    # @info elist
+    g = SimpleDiGraph(Graphs.SimpleEdge.(elist));
+    # @info collect(edges(g))
+
+    c = cycle_basis(g)
+    # c = simplecycles(g)
+
+    @info c
 end

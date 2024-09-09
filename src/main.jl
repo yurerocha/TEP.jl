@@ -15,9 +15,10 @@ function run(instance)
     model_dt = build_model(dt, true, logfile, true)
 
     mipstart!(dt, model_dt)
-    detect_cycles_in_solution(dt, model_dt)
-    # check_idle_candidate_circuits!(dt, model_dt)
-    solve!(model_dt, true)
+    detect_cycles_in_sol(dt, model_dt)
+    # heuristic!(dt, model_dt.model, model_dt.x)
+    check_idle_candidate_circuits!(dt, model_dt)
+    solve!(model_dt, dt, true)
     # if status != MOI.INFEASIBLE && status != MOI.INFEASIBLE_OR_UNBOUNDED
     #     heuristic!(dt, md, x)
     # end
