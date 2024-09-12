@@ -4,10 +4,13 @@ authors = ["Yure Rocha <yuretalis@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
+Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+Karnak = "cd156443-31ad-4f6f-850f-a93ee5f75905"
+MetaGraphs = "626554b9-1ddb-594c-aa3c-2596fe9399a5"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 

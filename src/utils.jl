@@ -2,6 +2,18 @@ const eps = 1e-6
 const penalty = 1e6
 # const bigM = 1e10
 
+function isl(a, b)
+    return a < b - eps
+end
+
+function isg(a, b)
+    return a > b + eps
+end
+
+function iseq(a, b)
+    return abs(a - b) < eps
+end
+
 function get_nb(s, i)
     return parse(Int, split(s[i], ":")[2])
 end
@@ -49,7 +61,8 @@ function comp_incidence_matrix(data, f, t, i)
     return e
 end
 
-function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, nb_circs, is_cand_en=false, rng=Random.default_rng())
+function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, 
+                           nb_circs, is_cand_en=false, rng=Random.default_rng())
     for i in nb_line:nb_line+nb_circs-1
         d = split(s[i])
         circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
@@ -113,14 +126,21 @@ function log_instance(outputfile, inst, build_time, result)
     log(outputfile, s)
 end
 
-function isl(a, b)
-    return a < b - eps
-end
-
-function isg(a, b)
-    return a > b + eps
-end
-
-function iseq(a, b)
-    return abs(a - b) < eps
+"""
+    comp_bigM(data)
+As there is at least one existing circuit for every candidate line, the big-M is
+computed as discussed in Ghita's thesis.
+"""
+function comp_bigM(data, k)
+    bigM = 1000000
+    for (j, circuit) in enumerate(data.J)
+        if circuit.fr == data.K[k - data.nb_J].fr && 
+           circuit.to == data.K[k - data.nb_J].to
+            tmp = data.gamma[k] * 
+                  (data.f_bar[j] / data.gamma[j])
+            bigM = min(bigM, tmp)
+        end
+    end
+    bigM = abs(bigM)
+    return bigM
 end

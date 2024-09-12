@@ -1,5 +1,5 @@
 # experiments
-const mult_gen_load = 2
+const mult_gen_load = 1
 const nb_candidates = 2
 const max_rand = 100
 const solver_time_limit = 600
@@ -15,9 +15,8 @@ function run(instance)
     model_dt = build_model(dt, true, logfile, true)
 
     mipstart!(dt, model_dt)
-    detect_cycles_in_sol(dt, model_dt)
-    # heuristic!(dt, model_dt.model, model_dt.x)
-    check_idle_candidate_circuits!(dt, model_dt)
+    free_buses = detect_cycles_in_sol(dt, model_dt)
+    check_idle_candidate_circuits!(dt, model_dt, free_buses)
     solve!(model_dt, dt, true)
     # if status != MOI.INFEASIBLE && status != MOI.INFEASIBLE_OR_UNBOUNDED
     #     heuristic!(dt, md, x)
@@ -58,8 +57,10 @@ function run_all()
             dt = read_data(inputfile, rng)
             build_time = 
                        @elapsed (md = build_model(dt, true, logfile, is_mip_en))
-            mipstart!(dt, md)
-            result = solve!(md, is_mip_en)
+            mipstart!(dt, model_dt)
+            free_buses = detect_cycles_in_sol(dt, model_dt)
+            check_idle_candidate_circuits!(dt, model_dt, free_buses)
+            result = solve!(model_dt, dt, true)
             log_instance(outputfile, file, build_time, result)
         catch e
             @warn e

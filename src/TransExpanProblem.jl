@@ -5,6 +5,8 @@ using Random
 using JuMP
 using Gurobi
 using Graphs
+using Karnak
+using Colors
 # using Printf
 
 include("utils.jl")

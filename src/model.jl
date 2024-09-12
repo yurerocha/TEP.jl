@@ -65,7 +65,6 @@ function build_model(data,
         end
     end
 
-    # sum of rhs
     rhs_sum = 0.0
     for t in 1:data.nb_T, i in data.I
         # some buses may not have load or generation
@@ -74,7 +73,7 @@ function build_model(data,
 
         rhs_sum += d - g
     end
-    # @show rhs_sum
+    @show rhs_sum
 
     # first Kirccohff law
     y_vars = AffExpr(0.0)
@@ -109,7 +108,8 @@ function build_model(data,
             for j in 1:data.nb_J
                 @constraint(md, Delta_theta[t, j] == 
                             theta[t, data.J[j].fr] - theta[t, data.J[j].to])
-                @constraint(md, f[t, j] == data.gamma[j] * Delta_theta[t, j])
+                @constraint(md, f[t, j] == data.gamma[j] * Delta_theta[t, j],
+                            base_name="ol$t.$j")
                 # @constraint(md, f[t, j] == data.gamma[j] * 
                 #             (theta[t, data.J[j].fr] - theta[t, data.J[j].to]))
             end
@@ -123,14 +123,10 @@ function build_model(data,
                     # y = f[t, k] - data.gamma[k] * 
                     #     (theta[t, data.K[k - data.nb_J].fr] - 
                     #     theta[t, data.K[k - data.nb_J].to])
+                    bigM = comp_bigM(data, k)
 
-                    # there is an existing circuit for every candidate circuit
-                    # following Ghita's thesis
-                    bigM = data.gamma[k-data.nb_J] * 
-                           (data.f_bar[k] / data.gamma[k])
-
-                    @constraint(md, y <= bigM * (1 - x[t, k]))
-                    @constraint(md, -y <= bigM * (1 - x[t, k]))
+                    @constraint(md, y <= bigM * (1 - x[t, k]), base_name="ol$t.$k")
+                    @constraint(md, -y <= bigM * (1 - x[t, k]), base_name="ol$t.$k")
                 end
             end
         end
@@ -160,7 +156,7 @@ function build_model(data,
 
         e = y_vars
         for t in 1:data.nb_T, k in data.nb_J+1:data.nb_J+data.nb_K
-            e += data.cost[k] * x[t, k] + 10000 * f[t, k]
+            e += data.cost[k] * x[t, k]
         end
         @objective(md, Min, e)
         # @objective(md, Min, sum(
@@ -203,18 +199,18 @@ function solve!(model_data, data, is_mip_en=true)
 
     status = termination_status(model)
 
-    for t in 1:data.nb_T, i in data.I
-        @show i, value(model_data.theta[t, i])
-    end
+    # for t in 1:data.nb_T, i in data.I
+    #     @show i, value(model_data.theta[t, i])
+    # end
 
-    for t in 1:data.nb_T
-        for j in 1:data.nb_J
-            @show data.J[j], value(model_data.f[t, j])
-        end
-        for k in data.nb_J+1:data.nb_J+data.nb_K
-            @show data.K[k-data.nb_J], value(model_data.f[t, k])
-        end
-    end
+    # for t in 1:data.nb_T
+    #     for j in 1:data.nb_J
+    #         @show data.J[j], value(model_data.f[t, j])
+    #     end
+    #     for k in data.nb_J+1:data.nb_J+data.nb_K
+    #         @show data.K[k-data.nb_J], value(model_data.f[t, k])
+    #     end
+    # end
     
     best_bound = "-"
     obj = "-"
@@ -306,15 +302,14 @@ end
 
 Testar: pglib_opf_case60_c.txt
 """
-function check_idle_candidate_circuits!(data, model_data)
+function check_idle_candidate_circuits!(data, model_data, free_buses)
     x = model_data.x
-    f = model_data.f
-    flow = Array{Float64}(undef, data.nb_T, data.nb_J + data.nb_K)
+    f = Array{Float64}(undef, data.nb_T, data.nb_K)
     for t in 1:data.nb_T
         k = data.nb_J + 1
         while k <= data.nb_J + data.nb_K
             for _ in 1:nb_candidates
-                flow[t, k] = value(f[t, k])
+                f[t, k - data.nb_J] = value(model_data.f[t, k])
                 k += 1
             end
         end
@@ -325,29 +320,44 @@ function check_idle_candidate_circuits!(data, model_data)
         while k <= data.nb_J + data.nb_K
             i = 0
             acc = 0.0
-            for _ in 1:nb_candidates
-                acc += flow[t, k]
-                # in case one of idle candidates circuits
-                @info data.f_bar[k], acc
-                if iseq(flow[t, k], 0.0)
-                    @info "idle", t, k, flow[t, k]
-                    set_lower_bound(x[t, k], 0)
-                    set_upper_bound(x[t, k], 0)
-                    i += 1
+            for l in k:k + nb_candidates - 1
+                acc += f[t, l - data.nb_J]
+            end
+
+            if iseq(acc, 0.0)
+                # all candidate circuits are idle and can be removed
+                @info "acc = 0"
+                for l in k:k + nb_candidates - 1
+                    println("\trm ", l)
+                    set_lower_bound(x[t, l], 0)
+                    set_upper_bound(x[t, l], 0)
                 end
-                k += 1
+            else
+                l_fit = 0
+                for l in k:k + nb_candidates - 1
+                    # the flow fits in a single candidate circuit
+                    c = data.K[l - data.nb_J]
+                    if isl(abs(acc), data.f_bar[l]) && 
+                       (c.fr in free_buses || c.to in free_buses)
+                        l_fit = l
+                        break
+                    end
+                end
+
+                if l_fit > 0
+                    # the flow fits in a single candidate circuit
+                    @info "fit", l_fit - data.nb_J, acc, data.f_bar[l_fit]
+                    for l in k:k + nb_candidates - 1
+                        if l != l_fit
+                            c = data.K[l - data.nb_J]
+                            println("\trm ", l, " ", c.fr, ":", c.to) 
+                            set_lower_bound(x[t, l], 0)
+                            set_upper_bound(x[t, l], 0)
+                        end
+                    end
+                end
             end
-            if i == nb_candidates
-                @warn "Two idle circuits"
-            elseif isl(abs(acc), data.f_bar[k - 1])
-                # the circuits have the same maximum flow
-                # in case the flow fits the capacity of a single circuit, the 
-                # other circuit will be removed from the solution
-                @info data.f_bar[k - 1], acc, t, k - 1
-                @warn "A single idle circuit"
-                set_lower_bound(x[t, k - 1], 0)
-                set_upper_bound(x[t, k - 1], 0)
-            end
+            k += nb_candidates
         end
     end
     @show data.nb_J, data.nb_K
@@ -359,23 +369,69 @@ end
     TransExpanProblem.jl/input/pglib_opf_case2000_goc.txt"
 """
 function detect_cycles_in_sol(data, model_data)
+    @info "Detect cycles"
     x = model_data.x
     elist = []
     for t in 1:data.nb_T
-        for k in data.nb_J+1:data.nb_J+data.nb_K
-            if value(x[t, k]) > 0.5
-                c = data.K[k - data.nb_J]
+        k = 1
+        while k <= data.nb_K
+            if value(x[t, data.nb_J + k]) > 0.5
+                c = data.K[k]
                 push!(elist, (c.fr, c.to))
             end
+            k += nb_candidates
+        end
+    end
+    len_elist = length(elist)
+    unique!(elist)
+    @info len_elist, length(elist), elist
+
+    g = SimpleGraph(Graphs.SimpleEdge.(elist))
+    # g = SimpleDiGraph(Graphs.SimpleEdge.(elist));
+
+    cycles = cycle_basis(g)
+    # c = simplecycles(g)
+    # c = simplecycles_limited_length(g, 10, 10)
+
+    vertices = collect(data.I)
+    sort!(vertices)
+    @pdf begin
+        background("grey10")
+        fontsize(8)
+        sethue("white")
+        @layer begin
+            drawgraph(g,
+                      layout = stress, 
+                      vertexlabels = vertices,
+                      edgestrokeweights = 0.5,
+                      # vertexfillcolors = 
+                      #     [RGB(rand(3)/2...) 
+                      #        for i in 1:nv(g)]
+            )
+        end
+        for (n, c) in enumerate(cycles)
+            cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in 1:length(c)]
+            @layer begin
+                sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))
+                drawgraph(g, 
+                          layout = stress,
+                          # vertexlabels = (v) -> v in c && string(v),
+                          vertexlabels = vertices,
+                          edgelist = cycleedges,
+                          edgestrokeweights = 3
+                )
+            end
+        end
+    end 1200 800 "graph60.pdf"
+
+    busy_buses = Set{Int}()
+    for c in cycles
+        for v in c
+            push!(busy_buses, v)
         end
     end
 
-    # @info elist
-    g = SimpleDiGraph(Graphs.SimpleEdge.(elist));
-    # @info collect(edges(g))
-
-    c = cycle_basis(g)
-    # c = simplecycles(g)
-
-    @info c
+    free_buses = setdiff(data.I, busy_buses)
+    @info "Free buses: ", free_buses
+    return free_buses
 end
