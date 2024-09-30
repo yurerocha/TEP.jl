@@ -1,3 +1,14 @@
+# Gurobi MAXINT value
+const MAXINT = 2_000_000_000
+
+struct ModelData 
+    model
+    rhs_sign
+    x
+    f
+    theta
+end
+
 """
     build_model(
         data,
@@ -8,17 +19,6 @@
 
 Build model.
 """
-
-# Gurobi MAXINT value
-const MAXINT = 2_000_000_000
-
-struct ModelData 
-    model
-    x
-    f
-    theta
-end
-
 function build_model(data, 
                      is_skl_en=true, 
                      logfile="TransExpanProblem.jl/log/log.txt",
@@ -28,144 +28,124 @@ function build_model(data,
     set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
     set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
     
-    x = Dict{Tuple{Int, Int}, VariableRef}()
+    x = Dict{Int, VariableRef}()
     if is_mip_en
-        for t in 1:data.nb_T, k in data.nb_J+1:data.nb_J+data.nb_K
-            x[t, k] = @variable(md, binary=true, base_name="x")
+        for k in data.nb_J+1:data.nb_J+data.nb_K
+            x[k] = @variable(md, binary=true, base_name="x")
         end
     end
 
     # flow variables
-    f = @variable(md, f[t=1:data.nb_T, l=1:(data.nb_J + data.nb_K)], 
-                  base_name="f")
-    # f = Dict{Tuple{Int, Int}, Any}()
-    # for t in 1:data.nb_T, l in 1:data.nb_J+data.nb_K
-    #     if l > data.nb_J
-    #         f[t, l] = @variable(md, obj=10000, base_name="f")
-    #     else
-    #         f[t, l] = @variable(md, base_name="f")
-    #     end
-    # end
+    f = @variable(md, f[l=1:(data.nb_J + data.nb_K)], base_name="f")
 
     # angle variables
-    theta = @variable(md, theta[t=1:data.nb_T, i=data.I], base_name="theta")
-    Delta_theta = @variable(md, Delta_theta[t=1:data.nb_T, 
-                            l=1:data.nb_J+data.nb_K], 
+    theta = @variable(md, theta[i=data.I], base_name="theta")
+    Delta_theta = @variable(md, Delta_theta[l=1:data.nb_J+data.nb_K], 
                             base_name="Delta_theta")
-    gen = Dict{Tuple{Int, Int}, Any}()
-    for t in 1:data.nb_T, i in data.I
+    gen = Dict{Int, Any}()
+    for i in data.I
         # some buses may not have load or generation
-        if (t, i) in keys(data.G)
-            g_max =  data.G[t, i]
+        if i in keys(data.G)
+            g_max =  data.G[i]
             if isl(g_max, 0.0)
-                @show g_max, t, i
+                @show g_max, i
             end
-            gen[t, i] = @variable(md, lower_bound=0, upper_bound=g_max, 
-                                  base_name="gen")
+            gen[i] = @variable(md, lower_bound=0, 
+                               upper_bound=g_max, 
+                               base_name="gen")
         end
     end
 
     rhs_sum = 0.0
-    for t in 1:data.nb_T, i in data.I
+    for i in data.I
         # some buses may not have load or generation
-        d = (t, i) in keys(data.D) ? data.D[t, i] : 0.0
-        g = (t, i) in keys(data.G) ? data.G[t, i] : 0.0
+        d = i in keys(data.D) ? data.D[i] : 0.0
+        g = i in keys(data.G) ? data.G[i] : 0.0
 
-        rhs_sum += d - g
+        rhs_sum += g - d
     end
     @show rhs_sum
 
     # first Kirccohff law
-    y_vars = AffExpr(0.0)
-    for t in 1:data.nb_T, i in data.I
+    xi_vars = AffExpr(0.0)
+    for i in data.I
         # incidence matrix
-        e = comp_incidence_matrix(data, f, t, i)
+        e = comp_incidence_matrix(data, f, i)
         # some buses may not have load or generation
-        d = (t, i) in keys(data.D) ? data.D[t, i] : 0.0
-        g = (t, i) in keys(data.G) ? gen[t, i] : 0.0
+        d = i in keys(data.D) ? data.D[i] : 0.0
+        g = i in keys(data.G) ? gen[i] : 0.0
 
-        l = d - g
-        y = 0
-        # if isl(rhs_sum, 0.0)
-        #     y = @variable(md, lower_bound = 0, base_name="y$t.$i")
-        #     # y_vars += penalty*y
-        #     # modifies y_vars in place
-        #     add_to_expression!(y_vars, penalty, y)
-        # elseif 
-        if isg(rhs_sum, 0.0)
-            y = @variable(md, upper_bound = 0, base_name="y$t.$i")
+        xi = 0
+        # there is more demand than the generators can provide
+        if isl(rhs_sum, 0.0)
+            xi = @variable(md, lower_bound=0, base_name="xi$i")
             # y_vars -= penalty*y
-            # modifies y_vars in place
-            add_to_expression!(y_vars, -penalty, y)
+            # modifies xi_vars in place
+            add_to_expression!(xi_vars, penalty, xi)
         end
-        @constraint(md, e == l + y, base_name="fkl$t.$i")
+        @constraint(md, e + g + xi == d, base_name="fkl$i")
     end
 
     if is_skl_en
         # second Kirchhoff law
-        for t in 1:data.nb_T
-            # existing circuits
-            for j in 1:data.nb_J
-                @constraint(md, Delta_theta[t, j] == 
-                            theta[t, data.J[j].fr] - theta[t, data.J[j].to])
-                @constraint(md, f[t, j] == data.gamma[j] * Delta_theta[t, j],
-                            base_name="ol$t.$j")
-                # @constraint(md, f[t, j] == data.gamma[j] * 
-                #             (theta[t, data.J[j].fr] - theta[t, data.J[j].to]))
-            end
-            if is_mip_en
-                # candidate circuits
-                for k in data.nb_J+1:data.nb_J+data.nb_K
-                    @constraint(md, Delta_theta[t, k] == 
-                                theta[t, data.K[k - data.nb_J].fr] - 
-                                theta[t, data.K[k - data.nb_J].to])
-                    y = f[t, k] - data.gamma[k] * Delta_theta[t, k]
-                    # y = f[t, k] - data.gamma[k] * 
-                    #     (theta[t, data.K[k - data.nb_J].fr] - 
-                    #     theta[t, data.K[k - data.nb_J].to])
-                    bigM = comp_bigM(data, k)
+        # existing circuits
+        for j in 1:data.nb_J
+            @constraint(md, Delta_theta[j] == 
+                        theta[data.J[j].fr] - theta[data.J[j].to])
+            @constraint(md, f[j] == data.gamma[j] * Delta_theta[j],
+                        base_name="ol$j")
+            # @constraint(md, f[t, j] == data.gamma[j] * 
+            #             (theta[t, data.J[j].fr] - theta[t, data.J[j].to]))
+        end
+        if is_mip_en
+            # candidate circuits
+            for k in data.nb_J+1:data.nb_J+data.nb_K
+                @constraint(md, Delta_theta[k] == 
+                            theta[data.K[k - data.nb_J].fr] - 
+                            theta[data.K[k - data.nb_J].to])
+                y = f[k] - data.gamma[k] * Delta_theta[k]
+                # y = f[t, k] - data.gamma[k] * 
+                #     (theta[t, data.K[k - data.nb_J].fr] - 
+                #     theta[t, data.K[k - data.nb_J].to])
+                bigM = comp_bigM(data, k)
 
-                    @constraint(md, y <= bigM * (1 - x[t, k]), base_name="ol$t.$k")
-                    @constraint(md, -y <= bigM * (1 - x[t, k]), base_name="ol$t.$k")
-                end
+                @constraint(md, y <= bigM * (1 - x[k]), base_name="ol$k")
+                @constraint(md, -y <= bigM * (1 - x[k]), base_name="ol$k")
             end
         end
     end
 
     # flow limits
-    for t in 1:data.nb_T
-        # existing circuits
-        for j in 1:data.nb_J
-            @constraint(md, f[t, j] <= data.f_bar[j])
-            @constraint(md, -f[t, j] <= data.f_bar[j])
-        end
-        if is_mip_en
-            # candidate circuits
-            for k in data.nb_J+1:data.nb_J+data.nb_K
-                @constraint(md, f[t, k] <= data.f_bar[k] * x[t, k])
-                @constraint(md, -f[t, k] <= data.f_bar[k] * x[t, k])
-            end
+    # existing circuits
+    for j in 1:data.nb_J
+        @constraint(md, f[j] <= data.f_bar[j])
+        @constraint(md, -f[j] <= data.f_bar[j])
+    end
+    if is_mip_en
+        # candidate circuits
+        for k in data.nb_J+1:data.nb_J+data.nb_K
+            @constraint(md, f[k] <= data.f_bar[k] * x[k])
+            @constraint(md, -f[k] <= data.f_bar[k] * x[k])
         end
     end
 
     if is_mip_en
-        # interstage constraints
-        for t in 2:data.nb_T, k in data.nb_J+1:data.nb_J+data.nb_K
-            @constraint(md, x[t - 1, k] <= x[t, k])
-        end
-
-        e = y_vars
-        for t in 1:data.nb_T, k in data.nb_J+1:data.nb_J+data.nb_K
-            e += data.cost[k] * x[t, k]
+        # objective function
+        e = xi_vars
+        for k in data.nb_J+1:data.nb_J+data.nb_K
+            e += data.cost[k] * x[k]
         end
         @objective(md, Min, e)
-        # @objective(md, Min, sum(
-        #     data.cost[k] * x[t, k] 
-        #     for t in 1:data.nb_T, 
-        #         k in data.nb_J+1:data.nb_J+data.nb_K) + y_vars)
     end
 
-    return ModelData(md, x, f, theta)
+    rhs_sign = 0
+    if isg(rhs_sum, 0.0)
+        rhs_sign = 1
+    elseif isl(rhs_sum, 0.0)
+        rhs_sign = -1
+    end
+
+    return ModelData(md, rhs_sign, x, f, theta)
 end
 
 function solve!(model_data, data, is_mip_en=true)
@@ -198,19 +178,6 @@ function solve!(model_data, data, is_mip_en=true)
     optimize!(model)
 
     status = termination_status(model)
-
-    # for t in 1:data.nb_T, i in data.I
-    #     @show i, value(model_data.theta[t, i])
-    # end
-
-    # for t in 1:data.nb_T
-    #     for j in 1:data.nb_J
-    #         @show data.J[j], value(model_data.f[t, j])
-    #     end
-    #     for k in data.nb_J+1:data.nb_J+data.nb_K
-    #         @show data.K[k-data.nb_J], value(model_data.f[t, k])
-    #     end
-    # end
     
     best_bound = "-"
     obj = "-"
@@ -243,15 +210,14 @@ end
 
 """
     mipstart(data, model, x)
-Mip starts all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
+Mip start all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
 """
 function mipstart!(data, model_data)
     model = model_data.model
     x = model_data.x
     @info "MIP start"
-    for t in 1:data.nb_T, k in data.nb_J+1:data.nb_J+data.nb_K
-        set_start_value(x[t, k], 1)
-        # set_lower_bound(x[t, k], 1)
+    for k in data.nb_J+1:data.nb_J+data.nb_K
+        set_start_value(x[k], 1)
     end
     # Limits the number of feasible MIP solutions found. Optimization returns 
     # with a SOLUTION_LIMIT status once the limit has been reached. To find a 
@@ -269,10 +235,10 @@ end
 """
 function heuristic!(data, model, x)
     @warn "Heuristic"
-    cost = Array{Tuple{Int, Int, Float64}}(undef, data.nb_T*data.nb_K)
+    cost = Array{Tuple{Int, Int, Float64}}(undef, data.nb_K)
     i = 1
-    for t in 1:data.nb_T, k in data.nb_J+1:data.nb_J+data.nb_K
-        cost[i] = (t, k, data.cost[k])
+    for k in data.nb_J+1:data.nb_J+data.nb_K
+        cost[i] = (k, data.cost[k])
         i += 1
     end
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
@@ -304,61 +270,56 @@ Testar: pglib_opf_case60_c.txt
 """
 function check_idle_candidate_circuits!(data, model_data, free_buses)
     x = model_data.x
-    f = Array{Float64}(undef, data.nb_T, data.nb_K)
-    for t in 1:data.nb_T
-        k = data.nb_J + 1
-        while k <= data.nb_J + data.nb_K
-            for _ in 1:nb_candidates
-                f[t, k - data.nb_J] = value(model_data.f[t, k])
-                k += 1
-            end
+    f = Array{Float64}(undef, data.nb_K)
+    k = data.nb_J + 1
+    while k <= data.nb_J + data.nb_K
+        for _ in 1:nb_candidates
+            f[k - data.nb_J] = value(model_data.f[k])
+            k += 1
         end
     end
 
-    for t in 1:data.nb_T
-        k = data.nb_J + 1
-        while k <= data.nb_J + data.nb_K
-            i = 0
-            acc = 0.0
-            for l in k:k + nb_candidates - 1
-                acc += f[t, l - data.nb_J]
-            end
-
-            if iseq(acc, 0.0)
-                # all candidate circuits are idle and can be removed
-                @info "acc = 0"
-                for l in k:k + nb_candidates - 1
-                    println("\trm ", l)
-                    set_lower_bound(x[t, l], 0)
-                    set_upper_bound(x[t, l], 0)
-                end
-            else
-                l_fit = 0
-                for l in k:k + nb_candidates - 1
-                    # the flow fits in a single candidate circuit
-                    c = data.K[l - data.nb_J]
-                    if isl(abs(acc), data.f_bar[l]) && 
-                       (c.fr in free_buses || c.to in free_buses)
-                        l_fit = l
-                        break
-                    end
-                end
-
-                if l_fit > 0
-                    # the flow fits in a single candidate circuit
-                    @info "fit", l_fit - data.nb_J, acc, data.f_bar[l_fit]
-                    for l in k:k + nb_candidates - 1
-                        if l != l_fit
-                            c = data.K[l - data.nb_J]
-                            println("\trm ", l, " ", c.fr, ":", c.to) 
-                            set_lower_bound(x[t, l], 0)
-                            set_upper_bound(x[t, l], 0)
-                        end
-                    end
-                end
-            end
-            k += nb_candidates
+    k = data.nb_J + 1
+    while k <= data.nb_J + data.nb_K
+        acc = 0.0
+        for l in k:k + nb_candidates - 1
+            acc += f[l - data.nb_J]
         end
+
+        if iseq(acc, 0.0)
+            # all candidate circuits are idle and can be removed
+            @info "acc = 0"
+            for l in k:k + nb_candidates - 1
+                println("\trm ", l)
+                set_lower_bound(x[l], 0)
+                set_upper_bound(x[l], 0)
+            end
+        else
+            l_fit = 0
+            for l in k:k + nb_candidates - 1
+                # the flow fits in a single candidate circuit
+                c = data.K[l - data.nb_J]
+                if isl(abs(acc), data.f_bar[l]) && 
+                    (c.fr in free_buses || c.to in free_buses)
+                    l_fit = l
+                    break
+                end
+            end
+
+            if l_fit > 0
+                # the flow fits in a single candidate circuit
+                @info "fit", l_fit - data.nb_J, acc, data.f_bar[l_fit]
+                for l in k:k + nb_candidates - 1
+                    if l != l_fit
+                        c = data.K[l - data.nb_J]
+                        println("\trm ", l, " ", c.fr, ":", c.to) 
+                        set_lower_bound(x[l], 0)
+                        set_upper_bound(x[l], 0)
+                    end
+                end
+            end
+        end
+        k += nb_candidates
     end
     @show data.nb_J, data.nb_K
 end
@@ -368,23 +329,21 @@ end
     TransExpanProblem.jl/input/pglib_opf_case89_pegase.txt"
     TransExpanProblem.jl/input/pglib_opf_case2000_goc.txt"
 """
-function detect_cycles_in_sol(data, model_data)
+function detect_cycles_in_sol(data, model_data, filename="graph")
     @info "Detect cycles"
     x = model_data.x
     elist = []
-    for t in 1:data.nb_T
-        k = 1
-        while k <= data.nb_K
-            if value(x[t, data.nb_J + k]) > 0.5
-                c = data.K[k]
-                push!(elist, (c.fr, c.to))
-            end
-            k += nb_candidates
+    k = 1
+    while k <= data.nb_K
+        if value(x[data.nb_J + k]) > 0.5
+            c = data.K[k]
+            push!(elist, (c.fr, c.to))
         end
+        k += nb_candidates
     end
     len_elist = length(elist)
     unique!(elist)
-    @info len_elist, length(elist), elist
+    # @info len_elist, length(elist), elist
 
     g = SimpleGraph(Graphs.SimpleEdge.(elist))
     # g = SimpleDiGraph(Graphs.SimpleEdge.(elist));
@@ -395,10 +354,12 @@ function detect_cycles_in_sol(data, model_data)
 
     vertices = collect(data.I)
     sort!(vertices)
+    @info "Drawing graph", length(vertices), length(cycles)
     @pdf begin
         background("grey10")
         fontsize(8)
         sethue("white")
+        println("Drawing first layer")
         @layer begin
             drawgraph(g,
                       layout = stress, 
@@ -410,6 +371,7 @@ function detect_cycles_in_sol(data, model_data)
             )
         end
         for (n, c) in enumerate(cycles)
+            println("\rLayer:", n, " of:", length(cycles))
             cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in 1:length(c)]
             @layer begin
                 sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))
@@ -422,7 +384,8 @@ function detect_cycles_in_sol(data, model_data)
                 )
             end
         end
-    end 1200 800 "graph60.pdf"
+    end 1200 800 filename * ".pdf"
+    @info "Done drawing graph"
 
     busy_buses = Set{Int}()
     for c in cycles

@@ -1,24 +1,23 @@
-struct Data
-    I # buses
-    gamma # susceptance of circuits
-    f_bar # capacity of circuits
-    cost
-    J # existing circuits
-    K # candidate circuits
-    D # load
-    G # generation
-    nb_T # nb of stages
-    nb_I # nb of buses
-    nb_J # nb of existing circuits
-    nb_K # nb of candidate circuits
-end
-
 struct Circuit
     fr::Int # "from" bus
     to::Int # "to" bus
 end
 
-function read_data(filename, rng, nb_stages=1)
+struct Data
+    I::Set{Int} # buses
+    gamma::Array{Float64} # susceptance of circuits
+    f_bar::Array{Float64} # capacity of circuits
+    cost::Array{Float64}
+    J::Array{Circuit} # existing circuits
+    K::Array{Circuit} # candidate circuits
+    D::Dict{Int, Float64} # load
+    G::Dict{Int, Float64} # generation
+    nb_I::Int # nb of buses
+    nb_J::Int # nb of existing circuits
+    nb_K::Int # nb of candidate circuits
+end
+
+function read_data(filename, rng)
     s = open(filename) do f
         readlines(f)
     end
@@ -45,7 +44,8 @@ function read_data(filename, rng, nb_stages=1)
     nb_ca_circs = get_nb(s, i)
     i += 2
     try
-        populate_circuits(I, K, gamma, f_bar, cost, s, i, nb_ca_circs, true, rng)
+        populate_circuits(I, K, gamma, f_bar, cost, 
+                          s, i, nb_ca_circs, true, rng)
     catch e
         throw(e)
     end
@@ -53,23 +53,23 @@ function read_data(filename, rng, nb_stages=1)
 
     nb_dem_gen = get_nb(s, i)
     i += 2
-    D = Dict{Tuple{Int, Int}, Float64}()
-    G = Dict{Tuple{Int, Int}, Float64}()
+    D = Dict{Int, Float64}()
+    G = Dict{Int, Float64}()
     # update I here?
     for j in i:i+nb_dem_gen-1
         v = split(s[j])
         bus = parse(Int, v[1])
-        mid = Int((length(v) - 1) / 2) # minus 1 of the bus id
-        for (t, g) in enumerate(v[2:nb_stages+1])
-            g = parse(Float64, g)
-            G[t, bus] = mult_gen_load*g
-        end
-        for (t, d) in enumerate(v[mid+2:mid+nb_stages+1])
-            d = parse(Float64, d)
-            D[t, bus] = mult_gen_load*d
-        end
+        G[bus] = mult_gen_load * parse(Float64, v[2])
+        D[bus] = mult_gen_load * parse(Float64, v[3])
     end
+    # @show G
+    # @show D
+    # @show I
+    # @show J
+    # @show K
+    # @show gamma
+    # @show f_bar
+    # @show cost
     
-    return Data(I, gamma, f_bar, cost, J, K, D, G, 
-                nb_stages, nb_I, length(J), length(K))
+    return Data(I, gamma, f_bar, cost, J, K, D, G, nb_I, length(J), length(K))
 end

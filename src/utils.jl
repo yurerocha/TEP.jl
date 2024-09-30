@@ -19,6 +19,15 @@ function get_nb(s, i)
 end
 
 """
+    get_filename(input)
+Return the filename without the path and the extension.
+"""
+function get_filename(input)
+    e = split(input, "/")[end]
+    return split(e, ".")[1]
+end
+
+"""
     comp_gamma(x, r=0.0)
 
 Compute the susceptance of a circuit.
@@ -40,22 +49,22 @@ end
 
 Compute incidence matrix with existing and candidate circuits.
 """
-function comp_incidence_matrix(data, f, t, i)
+function comp_incidence_matrix(data, f, i)
     e = 0
     for j in 1:data.nb_J
         circ = data.J[j]
         if circ.to == i
-            e += f[t, j]
+            e += f[j]
         elseif circ.fr == i
-            e -= f[t, j]
+            e -= f[j]
         end
     end
     for k in 1:data.nb_K
         circ = data.K[k]
         if circ.to == i
-            e += f[t, data.nb_J+k]
+            e += f[data.nb_J + k]
         elseif circ.fr == i
-            e -= f[t, data.nb_J+k]
+            e -= f[data.nb_J + k]
         end
     end
     return e
@@ -105,14 +114,14 @@ end
 
 function log_header(outputfile)
     outstr = "| Instance |"
-    outstr *= " Build (s) | Solve (s) | Status | Rt solve (s) | " *
+    outstr *= " Build (s) | RHS | Solve (s) | Status | Rt solve (s) | " *
               " Rt best bound | Best bound | Objective | Gap (%) | \n"
-    outstr *= "|:---"^9 * "| \n"
+    outstr *= "|:---"^10 * "| \n"
     log(outputfile, outstr)
 end
 
-function log_instance(outputfile, inst, build_time, result)
-    s = "| $inst | $build_time |"
+function log_instance(outputfile, inst, build_time, rhs_sign, result)
+    s = "| $inst | $build_time | $rhs_sign |"
     for r in result
         if typeof(r) == Float64
             # s *= @sprintf(" %.2f |", r)
