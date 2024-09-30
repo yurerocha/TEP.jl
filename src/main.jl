@@ -1,5 +1,5 @@
 # experiments
-const mult_gen_load = 1
+const mult_gen_load = 2.0
 const nb_candidates = 2
 const max_rand = 100
 const solver_time_limit = 600
@@ -13,11 +13,13 @@ function run(instance)
     dt = read_data(instance, rng)
 
     model_dt = build_model(dt, true, logfile, true)
-
-    mipstart!(dt, model_dt)
-    free_buses = detect_cycles_in_sol(dt, model_dt)
-    check_idle_candidate_circuits!(dt, model_dt, free_buses)
+    # model_dt = build_compact(dt)
     solve!(model_dt, dt, true)
+
+    # mipstart!(dt, model_dt)
+    # free_buses = detect_cycles_in_sol(dt, model_dt, get_filename(instance))
+    # check_idle_candidate_circuits!(dt, model_dt, free_buses)
+    # solve!(model_dt, dt, true)
     # if status != MOI.INFEASIBLE && status != MOI.INFEASIBLE_OR_UNBOUNDED
     #     heuristic!(dt, md, x)
     # end
@@ -43,7 +45,7 @@ function run_all()
     # # run the solver with binary decision variables
     # files = ["pglib_opf_case3_lmbd.txt"]
     is_mip_en = true
-    for file in files[10:end]
+    for file in files
         # if file in skip
         #     println("Skipping instance $file")
         #     continue
@@ -56,17 +58,18 @@ function run_all()
         try
             dt = read_data(inputfile, rng)
             build_time = 
-                       @elapsed (md = build_model(dt, true, logfile, is_mip_en))
+                 @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
             mipstart!(dt, model_dt)
-            free_buses = detect_cycles_in_sol(dt, model_dt)
-            check_idle_candidate_circuits!(dt, model_dt, free_buses)
+            # free_buses = detect_cycles_in_sol(dt, model_dt)
+            # check_idle_candidate_circuits!(dt, model_dt, free_buses)
             result = solve!(model_dt, dt, true)
-            log_instance(outputfile, file, build_time, result)
+            log_instance(outputfile, file, build_time, 
+                         model_dt.rhs_sign, result)
         catch e
             @warn e
             log_instance(outputfile, 
                          "<s>" * file * "</s>", 
-                         "-", 
+                         '-', '-',
                          ntuple(v->'-', 6))
         end
     end
