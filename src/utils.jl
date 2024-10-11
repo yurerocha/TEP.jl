@@ -153,3 +153,56 @@ function comp_bigM(data, k)
     bigM = abs(bigM)
     return bigM
 end
+
+"""
+Makes matrix B invertible: zero out the row corresponding to the reference
+bus and then set the diagonal term for the reference bus to 1.
+"""
+function make_invertible!(B, refbus)
+    B[refbus, :] .= 0
+    B[refbus, refbus] = 1
+end
+
+"""
+Computes B⁻¹ by solving the linear system Ax = b for every row of the identity 
+matrix. After the inversion, sets B[refbus, refbus] = 0.
+"""
+function comp_inverse!(B, refbus=1)
+    # A = [1 2; 3 4]
+    _, n = size(B)
+    X = Matrix{Float64}(undef, n, n)
+    # @show det(BigFloat.(B)), rank(B), n
+    # @show rank(B), n
+    make_invertible!(B, refbus)
+    @assert rank(B) == n
+    # @show isone(inv(B) * B)
+    # iden = 1.0 * I(n)
+    # for j in 1:n
+    #     # @show iden[:, j]
+    #     p = LinearProblem(B, iden[:, j])
+    #     sol = solve(p)
+    #     X[:, j] = sol.u
+    # end
+    X = B \ 1.0I(n)
+    @show is_one(X * B)
+    # X[refbus, refbus] = 0
+    
+    return X
+end
+
+"""
+Checks if the matrix is the identity matrix.
+"""
+function is_one(I)
+    _, n = size(I)
+    for i in 1:n, j in 1:n
+        if i == j
+            if !iseq(I[i, j], 1.0)
+                return false
+            end
+        elseif !iseq(I[i, j], 0.0)
+            return false
+        end
+    end
+    return true
+end

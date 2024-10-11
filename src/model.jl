@@ -329,21 +329,28 @@ end
     TransExpanProblem.jl/input/pglib_opf_case89_pegase.txt"
     TransExpanProblem.jl/input/pglib_opf_case2000_goc.txt"
 """
-function detect_cycles_in_sol(data, model_data, filename="graph")
+function detect_cycles(data, filename="graph")
     @info "Detect cycles"
-    x = model_data.x
+    # x = model_data.x
+    # elist = []
+    # k = 1
+    # while k <= data.nb_K
+    #     if value(x[data.nb_J + k]) > 0.5
+    #         c = data.K[k]
+    #         push!(elist, (c.fr, c.to))
+    #     end
+    #     k += nb_candidates
+    # end
     elist = []
     k = 1
     while k <= data.nb_K
-        if value(x[data.nb_J + k]) > 0.5
-            c = data.K[k]
-            push!(elist, (c.fr, c.to))
-        end
+        c = data.K[k]
+        push!(elist, (c.fr, c.to))
         k += nb_candidates
     end
     len_elist = length(elist)
     unique!(elist)
-    # @info len_elist, length(elist), elist
+    @info len_elist, length(elist), elist
 
     g = SimpleGraph(Graphs.SimpleEdge.(elist))
     # g = SimpleDiGraph(Graphs.SimpleEdge.(elist));
@@ -371,7 +378,7 @@ function detect_cycles_in_sol(data, model_data, filename="graph")
             )
         end
         for (n, c) in enumerate(cycles)
-            println("\rLayer:", n, " of:", length(cycles))
+            @printf "\rLayer: %d of %d" n length(cycles)
             cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in 1:length(c)]
             @layer begin
                 sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))

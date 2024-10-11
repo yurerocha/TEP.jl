@@ -7,12 +7,14 @@ using Gurobi
 using Graphs
 using Karnak
 using Colors
-# using Printf
+using LinearSolve
+using LinearAlgebra
+using Printf
 
 include("utils.jl")
 include("data.jl")
 include("model.jl")
 include("main.jl")
-# include("compact_model.jl")
+include("compact_model.jl")
 
 end

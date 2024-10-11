@@ -12,9 +12,11 @@ function run(instance)
 
     dt = read_data(instance, rng)
 
-    model_dt = build_model(dt, true, logfile, true)
-    # model_dt = build_compact(dt)
-    solve!(model_dt, dt, true)
+    # model_dt = build_model(dt, true, logfile, true)
+    # detect_cycles(dt)
+    model_dt = build_compact(dt)
+    # solve!(model_dt, dt, true)
+    # update_beta!(dt, model_dt, 2, 1e-5)
 
     # mipstart!(dt, model_dt)
     # free_buses = detect_cycles_in_sol(dt, model_dt, get_filename(instance))
@@ -39,38 +41,37 @@ function run_all()
     files = readdir("$dir/input")
     # sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
-    # skip = ["pglib_opf_case588_sdet.txt", "pglib_opf_case793_goc.txt",
-    #         "pglib_opf_case1803_snem.txt", "pglib_opf_case1888_rte.txt", 
-    #         "pglib_opf_case2312_goc.txt", "pglib_opf_case4661_sdet.txt"]
-    # # run the solver with binary decision variables
-    # files = ["pglib_opf_case3_lmbd.txt"]
+    skip = ["pglib_opf_case1803_snem.txt"]
+    # run the solver with binary decision variables
     is_mip_en = true
     for file in files
-        # if file in skip
-        #     println("Skipping instance $file")
-        #     continue
-        # end
+        if file in skip
+            println("Skipping instance $file")
+            continue
+        end
         println("Processing $file")
 
-        inputfile = "$dir/input/$file"
+        inputfile = "$dir/input2/$file"
         logfile = "$dir/log/$file"
         dt = nothing
-        try
-            dt = read_data(inputfile, rng)
-            build_time = 
-                 @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
-            mipstart!(dt, model_dt)
-            # free_buses = detect_cycles_in_sol(dt, model_dt)
-            # check_idle_candidate_circuits!(dt, model_dt, free_buses)
-            result = solve!(model_dt, dt, true)
-            log_instance(outputfile, file, build_time, 
-                         model_dt.rhs_sign, result)
-        catch e
-            @warn e
-            log_instance(outputfile, 
-                         "<s>" * file * "</s>", 
-                         '-', '-',
-                         ntuple(v->'-', 6))
-        end
+        dt = read_data(inputfile, rng)
+        model_dt = build_compact(dt)
+        # try
+        #     dt = read_data(inputfile, rng)
+        #     build_time = 
+        #          @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
+        #     mipstart!(dt, model_dt)
+        #     # free_buses = detect_cycles_in_sol(dt, model_dt)
+        #     # check_idle_candidate_circuits!(dt, model_dt, free_buses)
+        #     result = solve!(model_dt, dt, true)
+        #     log_instance(outputfile, file, build_time, 
+        #                  model_dt.rhs_sign, result)
+        # catch e
+        #     @warn e
+        #     log_instance(outputfile, 
+        #                  "<s>" * file * "</s>", 
+        #                  '-', '-',
+        #                  ntuple(v->'-', 6))
+        # end
     end
 end
