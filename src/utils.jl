@@ -155,42 +155,7 @@ function comp_bigM(data, k)
 end
 
 """
-Makes matrix B invertible: zero out the row corresponding to the reference
-bus and then set the diagonal term for the reference bus to 1.
-"""
-function make_invertible!(B, refbus)
-    B[refbus, :] .= 0
-    B[refbus, refbus] = 1
-end
-
-"""
-Computes B⁻¹ by solving the linear system Ax = b for every row of the identity 
-matrix. After the inversion, sets B[refbus, refbus] = 0.
-"""
-function comp_inverse!(B, refbus=1)
-    # A = [1 2; 3 4]
-    _, n = size(B)
-    X = Matrix{Float64}(undef, n, n)
-    # @show det(BigFloat.(B)), rank(B), n
-    # @show rank(B), n
-    make_invertible!(B, refbus)
-    @assert rank(B) == n
-    # @show isone(inv(B) * B)
-    # iden = 1.0 * I(n)
-    # for j in 1:n
-    #     # @show iden[:, j]
-    #     p = LinearProblem(B, iden[:, j])
-    #     sol = solve(p)
-    #     X[:, j] = sol.u
-    # end
-    X = B \ 1.0I(n)
-    @show is_one(X * B)
-    # X[refbus, refbus] = 0
-    
-    return X
-end
-
-"""
+    is_one(I)
 Checks if the matrix is the identity matrix.
 """
 function is_one(I)
@@ -205,4 +170,93 @@ function is_one(I)
         end
     end
     return true
+end
+
+"""
+    detect_cycles(data, filename="graph")
+Detects cycles in the graph.
+"""
+function detect_cycles(data, filename="graph")
+    @info "Detect cycles"
+    # x = model_data.x
+    # elist = []
+    # k = 1
+    # while k <= data.nb_K
+    #     if value(x[data.nb_J + k]) > 0.5
+    #         c = data.K[k]
+    #         push!(elist, (c.fr, c.to))
+    #     end
+    #     k += nb_candidates
+    # end
+    elist = []
+    k = 1
+    while k <= data.nb_K
+        c = data.K[k]
+        push!(elist, (c.fr, c.to))
+        k += nb_candidates
+    end
+    len_elist = length(elist)
+    unique!(elist)
+    @info len_elist, length(elist), elist
+
+    g = SimpleGraph(Graphs.SimpleEdge.(elist))
+    # g = SimpleDiGraph(Graphs.SimpleEdge.(elist));
+
+    cycles = cycle_basis(g)
+    # c = simplecycles(g)
+    # c = simplecycles_limited_length(g, 10, 10)
+
+    vertices = collect(data.I)
+    sort!(vertices)
+    @info "Drawing graph", length(vertices), length(cycles)
+    @pdf begin
+        background("grey10")
+        fontsize(8)
+        sethue("white")
+        println("Drawing first layer")
+        @layer begin
+            drawgraph(g,
+                      layout = stress, 
+                      vertexlabels = vertices,
+                      edgestrokeweights = 0.5,
+                      # vertexfillcolors = 
+                      #     [RGB(rand(3)/2...) 
+                      #        for i in 1:nv(g)]
+            )
+        end
+        for (n, c) in enumerate(cycles)
+            @printf "\rLayer: %d of %d" n length(cycles)
+            cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in 1:length(c)]
+            @layer begin
+                sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))
+                drawgraph(g, 
+                          layout = stress,
+                          # vertexlabels = (v) -> v in c && string(v),
+                          vertexlabels = vertices,
+                          edgelist = cycleedges,
+                          edgestrokeweights = 3
+                )
+            end
+        end
+    end 1200 800 filename * ".pdf"
+    @info "Done drawing graph"
+
+    busy_buses = Set{Int}()
+    for c in cycles
+        for v in c
+            push!(busy_buses, v)
+        end
+    end
+
+    free_buses = setdiff(data.I, busy_buses)
+    @info "Free buses: ", free_buses
+    return free_buses
+end
+
+"""
+    iseq(A::Matrix, B::Matrix)
+Returns true if the matrices are equal.
+"""
+function iseq(A::Matrix, B::Matrix)
+    return norm(A - B) < eps
 end

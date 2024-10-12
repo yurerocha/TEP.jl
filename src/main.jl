@@ -3,6 +3,7 @@ const mult_gen_load = 2.0
 const nb_candidates = 2
 const max_rand = 100
 const solver_time_limit = 600
+const debugging_level = 1
 
 function run(instance)
     dir = "TransExpanProblem.jl"
@@ -16,7 +17,7 @@ function run(instance)
     # detect_cycles(dt)
     model_dt = build_compact(dt)
     # solve!(model_dt, dt, true)
-    # update_beta!(dt, model_dt, 2, 1e-5)
+    update_beta!(dt, model_dt, 2, 1e-5)
 
     # mipstart!(dt, model_dt)
     # free_buses = detect_cycles_in_sol(dt, model_dt, get_filename(instance))
