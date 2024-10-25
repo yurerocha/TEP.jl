@@ -14,12 +14,22 @@ function iseq(a, b)
     return abs(a - b) < eps
 end
 
+"""
+    iseq(A::Matrix, B::Matrix)
+
+Return true if matrices A and B are equal.
+"""
+function iseq(A::Matrix, B::Matrix)
+    return norm(A - B) < eps
+end
+
 function get_nb(s, i)
     return parse(Int, split(s[i], ":")[2])
 end
 
 """
     get_filename(input)
+
 Return the filename without the path and the extension.
 """
 function get_filename(input)
@@ -36,11 +46,25 @@ function comp_gamma(x, r=0.0)
     return x / (x^2 + r^2)
 end
 
-function get_fr_to(J, K, l)
-    if l <= length(J)
-        return J[l].fr, J[l].to
+"""
+    get_circuit(data,
+                l)
+
+Return the circuit at position l.
+"""
+function get_circuit(dt, l)
+    if l <= dt.nb_J
+        return dt.J[l]
     else
-        return K[l - length(J)].fr, K[l - length(J)].to
+        return dt.K[l - dt.nb_J]
+    end
+end
+
+function get_cand(dt, l)
+    for i in 1:dt.nb_K
+        if dt.K[i].fr == l.fr && dt.K[i].to == l.to
+            return i
+        end
     end
 end
 
@@ -137,8 +161,12 @@ end
 
 """
     comp_bigM(data)
-As there is at least one existing circuit for every candidate line, the big-M is
-computed as discussed in Ghita's thesis.
+
+Compute the big-M value for the model. 
+
+
+The big-M is computed as discussed in Ghita's thesis, as there is at least one
+existing line conecting every two buses.
 """
 function comp_bigM(data, k)
     bigM = 1000000
@@ -156,7 +184,8 @@ end
 
 """
     is_one(I)
-Checks if the matrix is the identity matrix.
+
+Check if the matrix is the identity matrix.
 """
 function is_one(I)
     _, n = size(I)
@@ -173,73 +202,37 @@ function is_one(I)
 end
 
 """
-    detect_cycles(data, filename="graph")
-Detects cycles in the graph.
+    detect_cycles(data, model, is_drawing_en, filename="graph")
+
+Detect cycles in the graph and return the free buses (those outside cycles).
 """
-function detect_cycles(data, filename="graph")
+function detect_cycles(dt, md, is_drawing_en=true, filename="graph")
+    # TODO: Add "demand - generation" to the vertices.
     @info "Detect cycles"
-    # x = model_data.x
-    # elist = []
-    # k = 1
-    # while k <= data.nb_K
-    #     if value(x[data.nb_J + k]) > 0.5
-    #         c = data.K[k]
-    #         push!(elist, (c.fr, c.to))
-    #     end
-    #     k += nb_candidates
-    # end
     elist = []
     k = 1
-    while k <= data.nb_K
-        c = data.K[k]
+    while k <= dt.nb_K
+        c = dt.K[k]
         push!(elist, (c.fr, c.to))
         k += nb_candidates
     end
-    len_elist = length(elist)
     unique!(elist)
-    @info len_elist, length(elist), elist
+    @info length(elist), elist
 
     g = SimpleGraph(Graphs.SimpleEdge.(elist))
-    # g = SimpleDiGraph(Graphs.SimpleEdge.(elist));
+    # g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
 
     cycles = cycle_basis(g)
+    @info cycles
     # c = simplecycles(g)
     # c = simplecycles_limited_length(g, 10, 10)
 
-    vertices = collect(data.I)
-    sort!(vertices)
-    @info "Drawing graph", length(vertices), length(cycles)
-    @pdf begin
-        background("grey10")
-        fontsize(8)
-        sethue("white")
-        println("Drawing first layer")
-        @layer begin
-            drawgraph(g,
-                      layout = stress, 
-                      vertexlabels = vertices,
-                      edgestrokeweights = 0.5,
-                      # vertexfillcolors = 
-                      #     [RGB(rand(3)/2...) 
-                      #        for i in 1:nv(g)]
-            )
-        end
-        for (n, c) in enumerate(cycles)
-            @printf "\rLayer: %d of %d" n length(cycles)
-            cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in 1:length(c)]
-            @layer begin
-                sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))
-                drawgraph(g, 
-                          layout = stress,
-                          # vertexlabels = (v) -> v in c && string(v),
-                          vertexlabels = vertices,
-                          edgelist = cycleedges,
-                          edgestrokeweights = 3
-                )
-            end
-        end
-    end 1200 800 filename * ".pdf"
-    @info "Done drawing graph"
+    if is_drawing_en
+        # vertices = collect(dt.I)
+        # sort!(vertices)
+        draw_cycles(dt, md, elist, cycles, filename)
+        @info "Done drawing graph"
+    end
 
     busy_buses = Set{Int}()
     for c in cycles
@@ -248,15 +241,119 @@ function detect_cycles(data, filename="graph")
         end
     end
 
-    free_buses = setdiff(data.I, busy_buses)
+    free_buses = setdiff(dt.I, busy_buses)
     @info "Free buses: ", free_buses
     return free_buses
 end
 
 """
-    iseq(A::Matrix, B::Matrix)
-Returns true if the matrices are equal.
+    draw_cycles(data, model, graph, cycles, filename)
 """
-function iseq(A::Matrix, B::Matrix)
-    return norm(A - B) < eps
+function draw_cycles(dt, md, elist, cycles, filename)
+    g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
+    flows = Dict{Circuit, Float64}()
+    for l in 1:dt.nb_J+dt.nb_K
+        c = get_circuit(dt, l)
+        if c in keys(flows)
+            flows[c] += value(md.f[l])
+        else
+            flows[c] = value(md.f[l])
+        end
+    end
+    vertices = [round(Int, value(md.g[i]) - (i in keys(dt.D) ? dt.D[i] : 0.0))
+                for i in 1:dt.nb_I]
+    edgeweights = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
+    # Generate n maximally distinguishable colors in LCHab space.
+    vertexfillc = distinguishable_colors(nv(g), colorant"blue")
+    @svg begin
+        background("grey10")
+        fontsize(8)
+        sethue("white")
+        println("Drawing first layer")
+        @layer begin
+            drawgraph(g,
+                      layout = stress, 
+                      vertexlabels = vertices,
+                      edgegaps = 12,
+                      edgestrokeweights = 0.5,
+                      edgelabels = edgeweights,
+                      vertexfillcolors = vertexfillc,
+                      vertexshapesizes = 12
+                      # vertexfillcolors = 
+                      #     [RGB(rand(3)/2...) 
+                      #        for i in 1:nv(g)]
+            )
+        end
+        # for (n, c) in enumerate(cycles)
+        #     @printf "\rLayer: %d of %d" n length(cycles)
+        #     cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in 1:length(c)]
+        #     @layer begin
+        #         sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))
+        #         setopacity(0.1)
+        #         drawgraph(g, 
+        #                   layout = stress,
+        #                   # vertexlabels = (v) -> v in c && string(v),
+        #                   vertexlabels = vertices,
+        #                   edgegaps = 12,
+        #                   edgelist = cycleedges,
+        #                   edgestrokeweights = 3
+        #         )
+        #     end
+        # end
+    end 1000 1000 filename * ".svg"
+end
+
+"""
+    draw_solution(data, model, filename="solution")
+
+Draw the graph of a solution.
+
+Each edge is labeled with the flow value and each vertex is labeled with
+"generation - demand".
+"""
+function draw_solution(dt, md, filename="solution")
+    flows = Dict{Circuit, Float64}()
+    for l in 1:dt.nb_J+dt.nb_K
+        c = get_circuit(dt, l)
+        if c in keys(flows)
+            flows[c] += value(md.f[l])
+        else
+            flows[c] = value(md.f[l])
+        end
+    end
+    elist = []
+    for l in 1:dt.nb_J+dt.nb_K
+        c = get_circuit(dt, l)
+        push!(elist, (c.fr, c.to))
+    end
+    @show flows
+    unique!(elist)
+
+    g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
+
+    vertices = [round(Int, value(md.g[i]) - (i in keys(dt.D) ? dt.D[i] : 0.0))
+                for i in 1:dt.nb_I]
+    edgeweights = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
+    # Generate n maximally distinguishable colors in LCHab space.
+    vertexfillc = distinguishable_colors(nv(g), colorant"blue")
+    @svg begin
+        background("grey10")
+        fontsize(8)
+        sethue("white")
+        println("Drawing first layer")
+        @layer begin
+            drawgraph(g,
+                      layout = stress, 
+                      vertexlabels = vertices,
+                      edgegaps = 12,
+                      edgestrokeweights = 0.5,
+                      edgelabels = edgeweights,
+                      vertexfillcolors = vertexfillc,
+                      vertexshapesizes = 12
+                      # vertexfillcolors = 
+                      #     [RGB(rand(3)/2...) 
+                      #        for i in 1:nv(g)]
+            )
+        end
+    end 1000 1000 filename * ".svg"
 end

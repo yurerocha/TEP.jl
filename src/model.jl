@@ -20,6 +20,7 @@ end
 Build model.
 """
 function build_model(data, 
+                     free_buses=[],
                      is_skl_en=true, 
                      logfile="TransExpanProblem.jl/log/log.txt",
                      is_mip_en=true)
@@ -210,7 +211,7 @@ end
 
 """
     mipstart(data, model, x)
-Mip start all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
+Mip starts all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
 """
 function mipstart!(data, model_data)
     model = model_data.model

@@ -10,6 +10,8 @@ using Colors
 using LinearSolve
 using LinearAlgebra
 using Printf
+using SimpleWeightedGraphs
+using GraphPlot
 
 include("utils.jl")
 include("data.jl")

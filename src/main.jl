@@ -13,11 +13,10 @@ function run(instance)
 
     dt = read_data(instance, rng)
 
-    # model_dt = build_model(dt, true, logfile, true)
-    # detect_cycles(dt)
-    model_dt = build_compact(dt)
+    # free_buses = detect_cycles(dt)
+    # model_dt = build_model(dt, free_buses, true, logfile, true)
     # solve!(model_dt, dt, true)
-    update_beta!(dt, model_dt, 2, 1e-5)
+    add_circuits_heur!(dt)
 
     # mipstart!(dt, model_dt)
     # free_buses = detect_cycles_in_sol(dt, model_dt, get_filename(instance))
