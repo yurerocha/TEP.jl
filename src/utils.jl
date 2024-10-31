@@ -137,17 +137,23 @@ function log(outputfile, str)
 end
 
 function log_header(outputfile)
-    outstr = "| Instance |"
+    outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D > G | Solve (s) | Incumbent (s) | Status |" *
               " Rt solve (s) | Rt best bound | Best bound | Objective | " * 
               " Gap (%) | \n"
-    outstr *= "|:---"^11 * "| \n"
+    outstr *= "|:---"^14 * "| \n"
     log(outputfile, outstr)
 end
 
-function log_instance(outputfile, inst, build_time, is_xi_req, result)
-    s = "| $inst | $(round(build_time, digits=2)) | $is_xi_req |"
-    for r in result
+"""
+    log_instance(outputfile, instance, data, build_time, is_xi_req, results)
+"""
+function log_instance(outputfile, inst, dt, build_time, is_xi_req, results)
+    N = dt.nb_I
+    L = (dt.nb_K + dt.nb_J)
+    s = "| $inst | $N | $L | $(round(L / N, digits=2)) |" * 
+        " $(round(build_time, digits=2)) | $(Int(is_xi_req)) |"
+    for r in results
         if typeof(r) == Float64
             # s *= @sprintf(" %.2f |", r)
             r = round(r, digits=2)

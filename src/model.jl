@@ -1,5 +1,6 @@
 # Gurobi MAXINT value
 const MAXINT = 2_000_000_000
+const inf = 1e6
 
 struct ModelData 
     model
@@ -147,39 +148,34 @@ function solve!(model_data, data, is_mip_en=true)
 
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
 
-    # callback to get the root node best bound and runtime
     rt_runtime = 0.0
-    rt_best_bound = 0.0
-    function root_node_callback(model, cb_where::Cint)
-        if cb_where != GRB_CB_MIPNODE
-            return
-        end
-
-        node_count = Ref{Cdouble}()
-        GRBcbget(model, cb_where, GRB_CB_MIPNODE_NODCNT, node_count)
-        if iseq(node_count[], 0.0)
-            runtime = Ref{Cdouble}()
-            root_bound = Ref{Cdouble}()
-            GRBcbget(model, cb_where, GRB_CB_RUNTIME, runtime)
-            GRBcbget(model, cb_where, GRB_CB_MIPNODE_OBJBND, root_bound)
-    
-            rt_runtime = runtime[]
-            rt_best_bound = root_bound[]
-        end
-    end
-    set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
-
     incumbent_time = solver_time_limit
-    # Time to find an incumbent solution
-    function incumbent_time_callback(model, cb_where::Cint)
-        if cb_where == GRB_CB_MIPSOL
+    rt_best_bound = 0.0
+    # Callback to get the root node best bound and runtime, and the time to find
+    # the first incumbent solution
+    function root_node_callback(model, cb_where::Cint)
+        if cb_where == GRB_CB_MIPNODE
+            node_count = Ref{Cdouble}()
+            GRBcbget(model, cb_where, GRB_CB_MIPNODE_NODCNT, node_count)
+            if iseq(node_count[], 0.0)
+                runtime = Ref{Cdouble}()
+                root_bound = Ref{Cdouble}()
+                GRBcbget(model, cb_where, GRB_CB_RUNTIME, runtime)
+                GRBcbget(model, cb_where, GRB_CB_MIPNODE_OBJBND, root_bound)
+
+                rt_runtime = runtime[]
+                rt_best_bound = root_bound[]
+            end
+        elseif cb_where == GRB_CB_MIPSOL && 
+               iseq(incumbent_time, solver_time_limit)
+            # Second condition prevents incumbent_time from being updated after 
+            # the first incumbent solution is found
             runtime = Ref{Cdouble}()
             GRBcbget(model, cb_where, GRB_CB_RUNTIME, runtime)
             incumbent_time = runtime[]
         end
     end
-    set_attribute(model, Gurobi.CallbackFunction(), incumbent_time_callback)
-    @show incumbent_time
+    set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
     
     optimize!(model)
 

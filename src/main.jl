@@ -44,7 +44,7 @@ function run_all()
     skip = ["pglib_opf_case1803_snem.txt"]
     # run the solver with binary decision variables
     is_mip_en = true
-    for file in files[1:2]
+    for file in files
         if file in skip
             println("Skipping instance $file")
             continue
@@ -59,12 +59,12 @@ function run_all()
         try
             dt = read_data(inputfile, rng)
             build_time = 
-                    @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
+                @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
             # mipstart!(dt, model_dt)
             # free_buses = detect_cycles_in_sol(dt, model_dt)
             # check_idle_candidate_circuits!(dt, model_dt, free_buses)
             result = solve!(model_dt, dt, true)
-            log_instance(outputfile, file, build_time, 
+            log_instance(outputfile, file, dt, build_time, 
                          model_dt.is_xi_req, result)
         catch e
             @warn e
