@@ -138,14 +138,15 @@ end
 
 function log_header(outputfile)
     outstr = "| Instance |"
-    outstr *= " Build (s) | RHS | Solve (s) | Status | Rt solve (s) | " *
-              " Rt best bound | Best bound | Objective | Gap (%) | \n"
+    outstr *= " Build (s) | D > G | Solve (s) | Incumbent (s) | Status |" *
+              " Rt solve (s) | Rt best bound | Best bound | Objective | " * 
+              " Gap (%) | \n"
     outstr *= "|:---"^10 * "| \n"
     log(outputfile, outstr)
 end
 
-function log_instance(outputfile, inst, build_time, rhs_sign, result)
-    s = "| $inst | $build_time | $rhs_sign |"
+function log_instance(outputfile, inst, build_time, is_xi_req, result)
+    s = "| $inst | $build_time | $is_xi_req |"
     for r in result
         if typeof(r) == Float64
             # s *= @sprintf(" %.2f |", r)

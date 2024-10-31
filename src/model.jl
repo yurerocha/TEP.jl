@@ -3,10 +3,10 @@ const MAXINT = 2_000_000_000
 
 struct ModelData 
     model
-    rhs_sign
     x
     f
     theta
+    is_xi_req
 end
 
 """
@@ -19,8 +19,7 @@ end
 
 Build model.
 """
-function build_model(data, 
-                     free_buses=[],
+function build_model(data,
                      is_skl_en=true, 
                      logfile="TransExpanProblem.jl/log/log.txt",
                      is_mip_en=true)
@@ -65,7 +64,8 @@ function build_model(data,
 
         rhs_sum += g - d
     end
-    @show rhs_sum
+    is_xi_req = isl(rhs_sum, 0.0)
+    @info rhs_sum, is_xi_req
 
     # first Kirccohff law
     xi_vars = AffExpr(0.0)
@@ -78,7 +78,7 @@ function build_model(data,
 
         xi = 0
         # there is more demand than the generators can provide
-        if isl(rhs_sum, 0.0)
+        if is_xi_req
             xi = @variable(md, lower_bound=0, base_name="xi$i")
             # y_vars -= penalty*y
             # modifies xi_vars in place
@@ -139,14 +139,7 @@ function build_model(data,
         @objective(md, Min, e)
     end
 
-    rhs_sign = 0
-    if isg(rhs_sum, 0.0)
-        rhs_sign = 1
-    elseif isl(rhs_sum, 0.0)
-        rhs_sign = -1
-    end
-
-    return ModelData(md, rhs_sign, x, f, theta)
+    return ModelData(md, x, f, theta, is_xi_req)
 end
 
 function solve!(model_data, data, is_mip_en=true)
@@ -172,6 +165,17 @@ function solve!(model_data, data, is_mip_en=true)
     
             rt_runtime = runtime[]
             rt_best_bound = root_bound[]
+        end
+    end
+    set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
+
+    incumbent_time = solver_time_limit
+    # Time to find an incumbent solution
+    function incumbent_time_callback(movel, cb_where::Cint)
+        if has_values(model)
+            runtime = Ref{Cdouble}()
+            GRBcbget(model, cb_where, GRB_CB_RUNTIME, runtime)
+            incumbent_time = runtime
         end
     end
     set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
@@ -201,7 +205,8 @@ function solve!(model_data, data, is_mip_en=true)
     end
 
     return solve_time(model), 
-           status, 
+           status,
+           incumbent_time,
            rt_runtime, 
            rt_best_bound, 
            best_bound, 
@@ -216,7 +221,7 @@ Mip starts all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
 function mipstart!(data, model_data)
     model = model_data.model
     x = model_data.x
-    @info "MIP start"
+    @warn "MIP start"
     for k in data.nb_J+1:data.nb_J+data.nb_K
         set_start_value(x[k], 1)
     end

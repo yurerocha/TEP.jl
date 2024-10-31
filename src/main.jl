@@ -55,23 +55,23 @@ function run_all()
         logfile = "$dir/log/$file"
         dt = nothing
         dt = read_data(inputfile, rng)
-        model_dt = build_compact(dt)
-        # try
-        #     dt = read_data(inputfile, rng)
-        #     build_time = 
-        #          @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
-        #     mipstart!(dt, model_dt)
-        #     # free_buses = detect_cycles_in_sol(dt, model_dt)
-        #     # check_idle_candidate_circuits!(dt, model_dt, free_buses)
-        #     result = solve!(model_dt, dt, true)
-        #     log_instance(outputfile, file, build_time, 
-        #                  model_dt.rhs_sign, result)
-        # catch e
-        #     @warn e
-        #     log_instance(outputfile, 
-        #                  "<s>" * file * "</s>", 
-        #                  '-', '-',
-        #                  ntuple(v->'-', 6))
-        # end
+        # model_dt = build_compact(dt)
+        try
+            dt = read_data(inputfile, rng)
+            build_time = 
+                    @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
+            # mipstart!(dt, model_dt)
+            # free_buses = detect_cycles_in_sol(dt, model_dt)
+            # check_idle_candidate_circuits!(dt, model_dt, free_buses)
+            result = solve!(model_dt, dt, true)
+            log_instance(outputfile, file, build_time, 
+                         model_dt.is_xi_req, result)
+        catch e
+            @warn e
+            log_instance(outputfile, 
+                         "<s>" * file * "</s>", 
+                         '-', '-',
+                         ntuple(v->'-', 8))
+        end
     end
 end
