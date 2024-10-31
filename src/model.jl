@@ -171,14 +171,15 @@ function solve!(model_data, data, is_mip_en=true)
 
     incumbent_time = solver_time_limit
     # Time to find an incumbent solution
-    function incumbent_time_callback(movel, cb_where::Cint)
-        if has_values(model)
+    function incumbent_time_callback(model, cb_where::Cint)
+        if cb_where == GRB_CB_MIPSOL
             runtime = Ref{Cdouble}()
             GRBcbget(model, cb_where, GRB_CB_RUNTIME, runtime)
-            incumbent_time = runtime
+            incumbent_time = runtime[]
         end
     end
-    set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
+    set_attribute(model, Gurobi.CallbackFunction(), incumbent_time_callback)
+    @show incumbent_time
     
     optimize!(model)
 
@@ -205,8 +206,8 @@ function solve!(model_data, data, is_mip_en=true)
     end
 
     return solve_time(model), 
-           status,
            incumbent_time,
+           status,
            rt_runtime, 
            rt_best_bound, 
            best_bound, 

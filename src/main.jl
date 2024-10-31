@@ -44,7 +44,7 @@ function run_all()
     skip = ["pglib_opf_case1803_snem.txt"]
     # run the solver with binary decision variables
     is_mip_en = true
-    for file in files
+    for file in files[1:2]
         if file in skip
             println("Skipping instance $file")
             continue

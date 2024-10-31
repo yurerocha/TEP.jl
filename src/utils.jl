@@ -141,12 +141,12 @@ function log_header(outputfile)
     outstr *= " Build (s) | D > G | Solve (s) | Incumbent (s) | Status |" *
               " Rt solve (s) | Rt best bound | Best bound | Objective | " * 
               " Gap (%) | \n"
-    outstr *= "|:---"^10 * "| \n"
+    outstr *= "|:---"^11 * "| \n"
     log(outputfile, outstr)
 end
 
 function log_instance(outputfile, inst, build_time, is_xi_req, result)
-    s = "| $inst | $build_time | $is_xi_req |"
+    s = "| $inst | $(round(build_time, digits=2)) | $is_xi_req |"
     for r in result
         if typeof(r) == Float64
             # s *= @sprintf(" %.2f |", r)
