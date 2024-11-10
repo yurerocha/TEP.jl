@@ -311,21 +311,21 @@ function draw_cycles(dt, md, elist, cycles, filename)
 end
 
 """
-    draw_solution(data, model, filename="solution")
+    draw_solution(data, model, flows, filename="solution")
 
 Draw the graph of a solution.
 
 Each edge is labeled with the flow value and each vertex is labeled with
 "generation - demand".
 """
-function draw_solution(dt, md, filename="solution")
+function draw_solution(dt, md, f, filename="solution")
     flows = Dict{Circuit, Float64}()
-    for l in 1:dt.nb_J+dt.nb_K
+    for l in 1:dt.nb_J + dt.nb_K
         c = get_circuit(dt, l)
         if c in keys(flows)
-            flows[c] += value(md.f[l])
+            flows[c] += value(f[l])
         else
-            flows[c] = value(md.f[l])
+            flows[c] = value(f[l])
         end
     end
     elist = []

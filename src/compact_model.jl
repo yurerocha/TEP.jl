@@ -12,6 +12,7 @@ struct CompactModel
     B_inv # n x n inverse of matrix B
     beta # m x m matrix, where β = ΓSB⁻¹
     f # m x 1 vector of line flows
+    f_cons # m x 1 vector of line flow constraints
 end
 
 """
@@ -124,11 +125,7 @@ function build_compact(data, free_buses=[],
     f = beta * bus_inj
 
     # Flow lower and upper bounds constra_ints
-    f_cons = Array{ConstraintRef}(undef, data.nb_J + data.nb_K)
-    for l in 1:data.nb_J + data.nb_K
-        f_cons[l] = @constraint(md, -data.f_bar[l] <= f[l], base_name="fle$l")
-        f_cons[l] = @constraint(md, f[l] <= data.f_bar[l], base_name="fge$l")
-    end
+    f_cons = flow_cons(data, md, data.nb_J + data.nb_K, f)
 
     # Load balance constra_ints
     e_t = ones(data.nb_I)'
@@ -136,7 +133,20 @@ function build_compact(data, free_buses=[],
     @constraint(md, e_t * gl_lhs == e_t * d, base_name="load_balance")
 
     return CompactModel(md, data.nb_J + data.nb_K, data.nb_I, S, Gamma, d, g, 
-                        is_xi_req, xi, B, B_inv, beta, f)
+                        is_xi_req, xi, B, B_inv, beta, f, f_cons)
+end
+
+"""
+    flow_cons(data, model, nb_lines, flows)
+Lower and upper bounds on flows.
+"""
+function flow_cons(dt, md, m, f)
+    f_cons = Array{ConstraintRef}(undef, dt.nb_J + dt.nb_K)
+    for l in 1:m
+        f_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l], base_name="fle$l")
+        f_cons[l] = @constraint(md, f[l] <= dt.f_bar[l], base_name="fge$l")
+    end
+    return f_cons
 end
 
 """
@@ -173,8 +183,8 @@ end
         new_susceptance
     )
 
-Update the beta matrix through a rank-1 update after removing a circuit from 
-the model.
+Update the beta matrix through a rank-1 update after removing a circuit from the 
+model.
 """
 function update_beta!(dt, md, i, gamma_star=1e-8)
     gamma_i = dt.gamma[i]
@@ -285,13 +295,142 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
     println("Status: ", status)
     # detect_cycles(dt, md, true)
 
-    # TODO: Printar IIS na instância 60
-
     # Extract and fix the generation
-    # g = value.(md.g)
-    # xi = md.is_xi_req ? value.(md.xi) : 0
+    g = value.(md.g)
+    xi = md.is_xi_req ? value.(md.xi) : 0
+
+    # At the first it, all candidate circuits are removed
+    circuits = [l for l in dt.nb_J + 1:dt.nb_J + dt.nb_K]
+    beta = rm_circuits(md, circuits, gamma_star)
+    # All removed circuits are candidates for reinsertion
+    candidates = Set(circuits)
+    bus_inj = comp_bus_injections(md.d, g, md.is_xi_req, xi)
+
+    acc_add = 0
+    for it in 1:20
+        println("iteration: ", it)
+
+        viols = comp_viols(dt, md, beta, bus_inj)
+        viol = sum([abs(v[2]) for v in viols])
+
+        circuits = choose_circuits(dt, viols, candidates)
+
+        print(" nb_cand:", length(candidates))
+        print(" nb_viol:", length(viols))
+        print(" sum_viol:", viol)
+        print(" nb_circ:", length(circuits))
+        acc_add += length(circuits)
+        print(" acc_add:", acc_add)
+        print(" total:", dt.nb_K)
+        println(" circuits:", circuits)
+
+        if length(viols) != 0 && length(circuits) == 0
+            println("Reoptimize!")
+            # Update flows in the compact model and recompute g and xi
+            # delete(md.model, md.f_cons)
+            f = beta * bus_inj
+            # md.f_cons[:] = flow_cons(dt, md.model, md.m, f)
+            draw_solution(dt, md, f)
+            optimize!(md.model)
+            status = termination_status(md.model)
+            println("Status: ", status)
+            break
+        end
+
+        beta = insert_circuits(dt, md, circuits)
+    end
 
     # f = md.beta * comp_bus_injections(md.d, g, md.is_xi_req, xi)
     # println("f: ", f)
-    draw_solution(dt, md)
+    # draw_solution(dt, md, f)
+end
+
+# Algorithm:
+# 1. Build the compact model
+# 2. Solve the compact model with all candidate circuits to obtain g
+# 3. Remove all candidate circuits and solve the linear system
+# 4. Add the λ% circuits that violate the most the flow
+#   4.1. Keep track of the circuits included
+
+"""
+    rm_circuits(model, indices, gamma_star = 1e-8)
+Remove circuits from the model by setting the diagonal terms of the susceptance
+to a small value.
+
+Returns the new β matrix.
+"""
+function rm_circuits(md, circuits, gamma_star = 1e-8)
+    for l in circuits
+        md.Gamma[l, l] = gamma_star
+    end
+
+    B = md.S' * md.Gamma * md.S
+    B_inv = comp_inverse!(B)
+    beta = md.Gamma * md.S * B_inv
+    return beta
+end
+
+"""
+    insert_circuits(data, model, indices)
+Insert circuits in the model by setting the diagonal terms of the susceptance.
+"""
+function insert_circuits(dt, md, indices)
+    for l in indices
+        md.Gamma[l, l] = dt.gamma[l]
+    end
+
+    B = md.S' * md.Gamma * md.S
+    B_inv = comp_inverse!(B)
+    beta = md.Gamma * md.S * B_inv
+    return beta
+end
+
+"""
+    comp_viols(dt, md, bus_inj)
+Compute the violations of the flow constraints.
+
+Returns a sorted list of tuples with the line index and the violation.
+"""
+function comp_viols(dt, md, beta, bus_inj)
+    f = beta * bus_inj
+    viols = Array{Tuple{Int, Float64}}(undef, 0)
+    for l in 1:md.m
+        v = abs(f[l]) - dt.f_bar[l]
+        if isg(v, 0.0)
+            push!(viols, (l, v))
+        end
+    end
+    sort!(viols, by=x->x[2], rev=true)
+    println("violations:", viols)
+    return viols
+end
+
+"""
+    choose_circuits(data, viols, candidates)
+Choose the λ circuits to add to the model, considering the available candidates.
+"""
+function choose_circuits(dt, viols, candidates)
+    lambda = 1
+    nb_circuits = round(Int, lambda * length(viols))
+    print("max_nb_circ:", nb_circuits)
+    l = 1
+    circuits = []
+    for i in 1:nb_circuits
+        l = viols[i][1]
+        if l <= dt.nb_J
+            # Shift to the candidates in case l is an existing circuit
+            l = dt.nb_J + nb_candidates * (l - 1) + 1
+            for k in l:l + nb_candidates - 1
+                if k in candidates
+                    push!(circuits, k)
+                    delete!(candidates, k)
+                    break # Add a single candidate at a time
+                end
+            end
+        elseif l in candidates
+            push!(circuits, l)
+            delete!(candidates, l)
+        end
+    end
+    return circuits
 end
