@@ -140,8 +140,8 @@ function log_header(outputfile)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D > G | Solve (s) | Incumbent (s) | Status |" *
               " Rt solve (s) | Rt best bound | Best bound | Objective | " * 
-              " Gap (%) | \n"
-    outstr *= "|:---"^14 * "| \n"
+              " Gap (%) | VR (%) | IR (%) | \n"
+    outstr *= "|:---"^16 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -311,14 +311,14 @@ function draw_cycles(dt, md, elist, cycles, filename)
 end
 
 """
-    draw_solution(data, model, flows, filename="solution")
+    draw_solution(data, model, flows, violations, filename="solution")
 
 Draw the graph of a solution.
 
 Each edge is labeled with the flow value and each vertex is labeled with
 "generation - demand".
 """
-function draw_solution(dt, md, f, filename="solution")
+function draw_solution(dt, md, f, viols, filename="solution")
     flows = Dict{Circuit, Float64}()
     for l in 1:dt.nb_J + dt.nb_K
         c = get_circuit(dt, l)
@@ -329,23 +329,48 @@ function draw_solution(dt, md, f, filename="solution")
         end
     end
     elist = []
-    for l in 1:dt.nb_J+dt.nb_K
+    for l in 1:dt.nb_J + dt.nb_K
         c = get_circuit(dt, l)
         push!(elist, (c.fr, c.to))
     end
-    @show flows
+    # @show flows
     unique!(elist)
 
     g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
+    edgestrokecolors = [colorant"black" for _ in elist]
+    for (i, e) in enumerate(edges(g))
+        for v in viols
+            c = get_circuit(dt, v[1])
+            if (src(e), dst(e)) == (c.fr, c.to)
+                edgestrokecolors[i] = colorant"red"
+            end
+        end
+    end
 
-    vertices = [round(Int, value(md.g[i]) - (i in keys(dt.D) ? dt.D[i] : 0.0))
-                for i in 1:dt.nb_I]
+    delta = [round(Int, value(md.g[i]) - (i in keys(dt.D) ? dt.D[i] : 0.0))
+             for i in 1:dt.nb_I]
     edgeweights = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
     # Generate n maximally distinguishable colors in LCHab space.
-    vertexfillc = distinguishable_colors(nv(g), colorant"blue")
+    # vertexfillc = distinguishable_colors(nv(g), colorant"blue")
+
+    vertexfillc = Array{Colorant}(undef, nv(g))
+    vertices = Array{String}(undef, nv(g))
+    I = sort(collect(dt.I))
+    @show length(I), length(delta)
+    for i in eachindex(delta)
+        d = delta[i]
+        vertices[i] = "$(I[i]):$d"
+        if d < 0 
+            vertexfillc[i] = colorant"red"
+        elseif d > 0
+            vertexfillc[i] = colorant"green"
+        else
+            vertexfillc[i] = colorant"yellow"
+        end
+    end
     @svg begin
         background("grey10")
-        fontsize(8)
+        fontsize(7)
         sethue("white")
         println("Drawing first layer")
         @layer begin
@@ -355,6 +380,7 @@ function draw_solution(dt, md, f, filename="solution")
                       edgegaps = 12,
                       edgestrokeweights = 0.5,
                       edgelabels = edgeweights,
+                      edgestrokecolors = edgestrokecolors,
                       vertexfillcolors = vertexfillc,
                       vertexshapesizes = 12
                       # vertexfillcolors = 
@@ -362,5 +388,5 @@ function draw_solution(dt, md, f, filename="solution")
                       #        for i in 1:nv(g)]
             )
         end
-    end 1000 1000 filename * ".svg"
+    end 2000 2000 filename * ".svg"
 end

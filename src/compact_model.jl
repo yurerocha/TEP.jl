@@ -55,8 +55,15 @@ function build_compact(data, free_buses=[],
             if isl(g_max, 0.0)
                 @show g_max, t, i
             end
-            g[i] = @variable(md, lower_bound=0, upper_bound=g_max, 
-                             base_name="g$i")
+            # If xi slack variables are required, then the generation is bounded
+            # to its maximum
+            if is_xi_req
+                g[i] = @variable(md, lower_bound=g_max, upper_bound=g_max, 
+                                 base_name="g$i")
+            else
+                g[i] = @variable(md, lower_bound=0, upper_bound=g_max,
+                                 base_name="g$i")
+            end
         else
             g[i] = @variable(md, lower_bound=0, upper_bound=0, 
                              base_name="g$i")
@@ -88,29 +95,22 @@ function build_compact(data, free_buses=[],
     end
 
     Gamma = zeros(data.nb_J + data.nb_K, data.nb_J + data.nb_K)
+    # # Do not insert candidate circuits involving free buses
+    # circ = get_circuit(data, l)
+    # if l > data.nb_J && (circ.fr in free_buses || circ.to in free_buses)
+    #     # Simulates inactive candidate circuits
+    #     # TODO: Colocar só a condição que faz Gamma[l, l] = data.gamma[l]
+    #     # TODO: Garantir que a não inserção do circuito não adiciona gargalos
+    #     # na geração de um nó (ver debug_log_inst60.txt). Isso tem que ser
+    #     # feito de forma iterativa a partir das folhas.
+    #     Gamma[l, l] = gamma_star
+    # else
+    #     Gamma[l, l] = data.gamma[l]
+    # end
     for l in 1:data.nb_J + data.nb_K
+        # Insert half the candidate lines
         Gamma[l, l] = data.gamma[l]
-        # circ = get_circuit(data, l)
-
-        # # Do not insert candidate circuits involving free buses
-        # if l > data.nb_J && (circ.fr in free_buses || circ.to in free_buses)
-        #     # Simulates inactive candidate circuits
-        #     # TODO: Colocar só a condição que faz Gamma[l, l] = data.gamma[l]
-        #     # TODO: Garantir que a não inserção do circuito não adiciona gargalos
-        #     # na geração de um nó (ver debug_log_inst60.txt). Isso tem que ser
-        #     # feito de forma iterativa a partir das folhas.
-        #     Gamma[l, l] = gamma_star
-        # else
-        #     Gamma[l, l] = data.gamma[l]
-        # end
     end
-    
-    
-    # @show d
-    # @show g
-    # @show S
-    # @show Gamma
-
 
     # @show d
     # @show g
@@ -143,8 +143,10 @@ Lower and upper bounds on flows.
 function flow_cons(dt, md, m, f)
     f_cons = Array{ConstraintRef}(undef, dt.nb_J + dt.nb_K)
     for l in 1:m
-        f_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l], base_name="fle$l")
-        f_cons[l] = @constraint(md, f[l] <= dt.f_bar[l], base_name="fge$l")
+        # f_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l], base_name="fle$l")
+        # f_cons[l] = @constraint(md, f[l] <= dt.f_bar[l], base_name="fge$l")
+        f_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l])
+        f_cons[l] = @constraint(md, f[l] <= dt.f_bar[l])
     end
     return f_cons
 end
@@ -186,7 +188,7 @@ end
 Update the beta matrix through a rank-1 update after removing a circuit from the 
 model.
 """
-function update_beta!(dt, md, i, gamma_star=1e-8)
+function update_beta!(dt, md, i::Int, gamma_star = 1e-8)
     gamma_i = dt.gamma[i]
     # gamma_star = dt.gamma[i]
     @show "Update β", gamma_star, gamma_i
@@ -213,6 +215,7 @@ function update_beta!(dt, md, i, gamma_star=1e-8)
     # Update B⁻¹
     num = md.B_inv * a_i * a_i' * md.B_inv
     den = 1.0 / (gamma_star - gamma_i) + a_i' * md.B_inv * a_i
+    @show md.B_inv, -num / den
     md.B_inv[:,:] -= num / den
     
     md.Gamma[i, i] *= gamma_star / gamma_i
@@ -225,7 +228,7 @@ function update_beta!(dt, md, i, gamma_star=1e-8)
         betaC = md.Gamma * md.S * BC_inv
 
         # @info norm(md.B_inv - BC_inv)
-        # @info norm(md.beta - betaC)
+        @info norm(md.beta - betaC)
         # @assert iseq(md.B_inv, BC_inv)
         @assert iseq(md.beta, betaC)
     end
@@ -250,13 +253,13 @@ end
 Compute B⁻¹ by solving the linear system Ax = b for every row of the identity 
 matrix. 
 """
-function comp_inverse!(B, refbus=1)
+function comp_inverse!(B, refbus = 1)
     _, n = size(B)
     X = Matrix{Float64}(undef, n, n)
     make_invertible!(B, refbus)
     X = B \ 1.0I(n)
 
-    if debugging_level == 1
+    if debugging_level == 5
         @assert rank(B) == n
         @assert is_one(X * B)
     end
@@ -289,8 +292,6 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
     # TODO: Será que seria possível fazer a busca binária por ciclos?
     # TODO: Printar as soluções com fluxo, geração e demanda (muito importante)
     optimize!(md.model)
-    # t = @elapsed update_beta!(dt, md, dt.nb_J + 1)
-    # println("Time:", t)
     status = termination_status(md.model)
     println("Status: ", status)
     # detect_cycles(dt, md, true)
@@ -304,45 +305,75 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
     beta = rm_circuits(md, circuits, gamma_star)
     # All removed circuits are candidates for reinsertion
     candidates = Set(circuits)
+    inserted_candidates = Set{Int}()
     bus_inj = comp_bus_injections(md.d, g, md.is_xi_req, xi)
 
     acc_add = 0
+    sum_viol_init = 0.0
+    r1 = 0.0
+    r2 = 0.0
     for it in 1:20
-        println("iteration: ", it)
+        print("---------- iteration ", it)
+        println(" ----------")
 
         viols = comp_viols(dt, md, beta, bus_inj)
         viol = sum([abs(v[2]) for v in viols])
+        if it == 1
+            sum_viol_init = viol
+        end
 
         circuits = choose_circuits(dt, viols, candidates)
 
-        print(" nb_cand:", length(candidates))
-        print(" nb_viol:", length(viols))
+        # print(" nb_cand:", length(candidates))
+        # print(" nb_viol:", length(viols))
         print(" sum_viol:", viol)
-        print(" nb_circ:", length(circuits))
+        print(" sum_viol_init:", sum_viol_init)
+        r1 = viol / sum_viol_init
+        println(" sum_viol_ratio:", r1)
+        # print(" nb_circ:", length(circuits))
+        inserted_candidates = union(inserted_candidates, Set(circuits))
         acc_add += length(circuits)
         print(" acc_add:", acc_add)
         print(" total:", dt.nb_K)
-        println(" circuits:", circuits)
+        r2 = acc_add / dt.nb_K
+        println(" add_ratio:", r2)
+        # println(" circuits:", circuits)
 
-        if length(viols) != 0 && length(circuits) == 0
-            println("Reoptimize!")
-            # Update flows in the compact model and recompute g and xi
-            # delete(md.model, md.f_cons)
-            f = beta * bus_inj
-            # md.f_cons[:] = flow_cons(dt, md.model, md.m, f)
-            draw_solution(dt, md, f)
-            optimize!(md.model)
-            status = termination_status(md.model)
-            println("Status: ", status)
-            break
-        end
+        # if length(viols) != 0 && length(circuits) == 0
+        # # if it % 2 == 0
+        #     println("Reoptimize!")
+        #     # Update flows in the compact model and recompute g and xi
+        #     # delete(md.model, md.f_cons)
+        #     # for fc in md.f_cons
+        #     #     println(is_valid(md.model, fc))
+        #     # end
+        #     f = beta * bus_inj
+        #     # md.f_cons[:] = flow_cons(dt, md.model, md.m, f)
 
-        beta = insert_circuits(dt, md, circuits)
+        #     for k in inserted_candidates
+        #         set_start_value(md.f[k], f[k])
+        #     end
+        #     draw_solution(dt, md, f, viols)
+        #     optimize!(md.model)
+        #     status = termination_status(md.model)
+        #     println("Status: ", status)
+        #     # break
+        # end
+
+        beta = add_circuits(dt, md, circuits)
     end
+    # model_dt = build_model(dt)
+    # for k in inserted_candidates
+    #     set_start_value(model_dt.x[k], 1)
+    # end
+    # optimize!(model_dt.model)
+    # status = termination_status(model_dt.model)
+    # println("Status: ", status)
 
     # f = md.beta * comp_bus_injections(md.d, g, md.is_xi_req, xi)
     # println("f: ", f)
     # draw_solution(dt, md, f)
+    return inserted_candidates, r1, r2
 end
 
 # Algorithm:
@@ -371,10 +402,10 @@ function rm_circuits(md, circuits, gamma_star = 1e-8)
 end
 
 """
-    insert_circuits(data, model, indices)
+    add_circuits(data, model, indices)
 Insert circuits in the model by setting the diagonal terms of the susceptance.
 """
-function insert_circuits(dt, md, indices)
+function add_circuits(dt, md, indices)
     for l in indices
         md.Gamma[l, l] = dt.gamma[l]
     end
@@ -400,8 +431,7 @@ function comp_viols(dt, md, beta, bus_inj)
             push!(viols, (l, v))
         end
     end
-    sort!(viols, by=x->x[2], rev=true)
-    println("violations:", viols)
+    # println("violations:", viols)
     return viols
 end
 
@@ -410,9 +440,14 @@ end
 Choose the λ circuits to add to the model, considering the available candidates.
 """
 function choose_circuits(dt, viols, candidates)
-    lambda = 1
-    nb_circuits = round(Int, lambda * length(viols))
-    print("max_nb_circ:", nb_circuits)
+    lambda = 1.0
+    if !iseq(lambda, 1.0)
+        sort!(viols, by=x->x[2], rev=true)
+        nb_circuits = round(Int, lambda * length(viols))
+    else
+        nb_circuits = length(viols)
+    end
+    # print("max_nb_circ:", nb_circuits)
     l = 1
     circuits = []
     for i in 1:nb_circuits
