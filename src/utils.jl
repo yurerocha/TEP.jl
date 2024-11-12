@@ -140,8 +140,8 @@ function log_header(outputfile)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D > G | Solve (s) | Incumbent (s) | Status |" *
               " Rt solve (s) | Rt best bound | Best bound | Objective | " * 
-              " Gap (%) | VR (%) | IR (%) | \n"
-    outstr *= "|:---"^16 * "| \n"
+              " Gap (%) | Heur (s) | VR (%) | IR (%) | \n"
+    outstr *= "|:---"^17 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -217,20 +217,17 @@ function detect_cycles(dt, md, is_drawing_en=true, filename="graph")
     # TODO: Add "demand - generation" to the vertices.
     @info "Detect cycles"
     elist = []
-    k = 1
-    while k <= dt.nb_K
-        c = dt.K[k]
+    for c in dt.J
         push!(elist, (c.fr, c.to))
-        k += nb_candidates
     end
     unique!(elist)
-    @info length(elist), elist
+    # @info length(elist), elist
 
     g = SimpleGraph(Graphs.SimpleEdge.(elist))
     # g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
 
     cycles = cycle_basis(g)
-    @info cycles
+    # @info cycles
     # c = simplecycles(g)
     # c = simplecycles_limited_length(g, 10, 10)
 
@@ -241,16 +238,17 @@ function detect_cycles(dt, md, is_drawing_en=true, filename="graph")
         @info "Done drawing graph"
     end
 
-    busy_buses = Set{Int}()
-    for c in cycles
+    buses_per_cycle = Vector{Set{Int}}(undef, length(cycles))
+    for (i, c) in enumerate(cycles)
+        buses_per_cycle[i] = Set{Int}()
         for v in c
-            push!(busy_buses, v)
+            push!(buses_per_cycle[i], v)
         end
     end
 
-    free_buses = setdiff(dt.I, busy_buses)
-    @info "Free buses: ", free_buses
-    return free_buses
+    # free_buses = setdiff(dt.I, busy_buses)
+    # @info "Free buses: ", free_buses
+    return cycles, buses_per_cycle
 end
 
 """
@@ -291,23 +289,23 @@ function draw_cycles(dt, md, elist, cycles, filename)
                       #        for i in 1:nv(g)]
             )
         end
-        # for (n, c) in enumerate(cycles)
-        #     @printf "\rLayer: %d of %d" n length(cycles)
-        #     cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in 1:length(c)]
-        #     @layer begin
-        #         sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))
-        #         setopacity(0.1)
-        #         drawgraph(g, 
-        #                   layout = stress,
-        #                   # vertexlabels = (v) -> v in c && string(v),
-        #                   vertexlabels = vertices,
-        #                   edgegaps = 12,
-        #                   edgelist = cycleedges,
-        #                   edgestrokeweights = 3
-        #         )
-        #     end
-        # end
-    end 1000 1000 filename * ".svg"
+        for (n, c) in enumerate(cycles)
+            @printf "\rLayer: %d of %d" n length(cycles)
+            cycleedges = [Edge(c[i], c[mod1(i + 1, end)]) for i in eachindex(c)]
+            @layer begin
+                sethue(HSB(rescale(n, 1, length(cycles) + 1, 0, 360), 0.8, 0.6))
+                setopacity(0.1)
+                drawgraph(g, 
+                          layout = stress,
+                          # vertexlabels = (v) -> v in c && string(v),
+                          vertexlabels = vertices,
+                          edgegaps = 12,
+                          edgelist = cycleedges,
+                          edgestrokeweights = 3
+                )
+            end
+        end
+    end 2000 2000 filename * ".svg"
 end
 
 """
@@ -337,19 +335,19 @@ function draw_solution(dt, md, f, viols, filename="solution")
     unique!(elist)
 
     g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
-    edgestrokecolors = [colorant"black" for _ in elist]
+    edgestrokecolors = [colorant"grey10" for _ in elist]
     for (i, e) in enumerate(edges(g))
         for v in viols
             c = get_circuit(dt, v[1])
             if (src(e), dst(e)) == (c.fr, c.to)
-                edgestrokecolors[i] = colorant"red"
+                edgestrokecolors[i] = colorant"white"
             end
         end
     end
 
     delta = [round(Int, value(md.g[i]) - (i in keys(dt.D) ? dt.D[i] : 0.0))
              for i in 1:dt.nb_I]
-    edgeweights = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
+    edgelabels = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
     # Generate n maximally distinguishable colors in LCHab space.
     # vertexfillc = distinguishable_colors(nv(g), colorant"blue")
 
@@ -357,6 +355,7 @@ function draw_solution(dt, md, f, viols, filename="solution")
     vertices = Array{String}(undef, nv(g))
     I = sort(collect(dt.I))
     @show length(I), length(delta)
+    vertexshapesizes = []
     for i in eachindex(delta)
         d = delta[i]
         vertices[i] = "$(I[i]):$d"
@@ -367,9 +366,11 @@ function draw_solution(dt, md, f, viols, filename="solution")
         else
             vertexfillc[i] = colorant"yellow"
         end
+        push!(vertexshapesizes, 10 * log10(abs(d)))
     end
     @svg begin
         background("grey10")
+        # background("white")
         fontsize(7)
         sethue("white")
         println("Drawing first layer")
@@ -378,15 +379,15 @@ function draw_solution(dt, md, f, viols, filename="solution")
                       layout = stress, 
                       vertexlabels = vertices,
                       edgegaps = 12,
-                      edgestrokeweights = 0.5,
-                      edgelabels = edgeweights,
+                      edgestrokeweights = 5,
+                      edgelabels = edgelabels,
                       edgestrokecolors = edgestrokecolors,
                       vertexfillcolors = vertexfillc,
-                      vertexshapesizes = 12
+                      vertexshapesizes = vertexshapesizes
                       # vertexfillcolors = 
                       #     [RGB(rand(3)/2...) 
                       #        for i in 1:nv(g)]
             )
         end
-    end 2000 2000 filename * ".svg"
+    end 6000 6000 filename * ".svg"
 end
