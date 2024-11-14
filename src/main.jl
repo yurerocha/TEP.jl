@@ -2,7 +2,7 @@
 const mult_gen_load = 2.0
 const nb_candidates = 2
 const max_rand = 100
-const solver_time_limit = 600
+const solver_time_limit = 60
 const debugging_level = 1
 
 function run(instance)
@@ -45,10 +45,10 @@ function run_all()
     # run the solver with binary decision variables
     is_mip_en = true
     files = [
-        # "pglib_opf_case588_sdet.txt",
-        # "pglib_opf_case1354_pegase.txt",
-        # "pglib_opf_case2848_rte.txt",
-        # "pglib_opf_case2853_sdet.txt",
+        "pglib_opf_case588_sdet.txt",
+        "pglib_opf_case1354_pegase.txt",
+        "pglib_opf_case2848_rte.txt",
+        "pglib_opf_case2853_sdet.txt",
         "pglib_opf_case2869_pegase.txt",
         "pglib_opf_case3022_goc.txt",
         "pglib_opf_case4917_goc.txt",

@@ -108,9 +108,12 @@ function build_compact(data, free_buses=[],
     #     Gamma[l, l] = data.gamma[l]
     # end
     for l in 1:data.nb_J + data.nb_K
-        # Insert half the candidate lines
         Gamma[l, l] = data.gamma[l]
     end
+    # for l in data.nb_J + 1:data.nb_J + data.nb_K:2
+    #     # Insert half the candidate lines
+    #     Gamma[l, l] = gamma_star
+    # end
 
     # @show d
     # @show g
