@@ -1,5 +1,7 @@
 # experiments
-const mult_gen_load = 2.0
+const gen_max_add_slack_percent = 0.15
+const gen_slack_percent = 0.05
+const mult_load = 2.0
 const nb_candidates = 2
 const max_rand = 100
 const solver_time_limit = 60
@@ -41,21 +43,22 @@ function run_all()
     files = readdir("$dir/input")
     # sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
-    skip = ["pglib_opf_case793_goc.txt", "pglib_opf_case1803_snem.txt"]
+    # skip = ["pglib_opf_case793_goc.txt", "pglib_opf_case1803_snem.txt"]
+    skip = ["pglib_opf_case1803_snem.txt"]
     # run the solver with binary decision variables
     is_mip_en = true
-    files = [
-        "pglib_opf_case588_sdet.txt",
-        "pglib_opf_case1354_pegase.txt",
-        "pglib_opf_case2848_rte.txt",
-        "pglib_opf_case2853_sdet.txt",
-        "pglib_opf_case2869_pegase.txt",
-        "pglib_opf_case3022_goc.txt",
-        "pglib_opf_case4917_goc.txt",
-        "pglib_opf_case10000_goc.txt",
-        "pglib_opf_case13659_pegase.txt",
-        "pglib_opf_case30000_goc.txt"
-    ]
+    # files = [
+    #     "pglib_opf_case588_sdet.txt",
+    #     "pglib_opf_case1354_pegase.txt",
+    #     "pglib_opf_case2848_rte.txt",
+    #     "pglib_opf_case2853_sdet.txt",
+    #     "pglib_opf_case2869_pegase.txt",
+    #     "pglib_opf_case3022_goc.txt",
+    #     "pglib_opf_case4917_goc.txt",
+    #     "pglib_opf_case10000_goc.txt",
+    #     "pglib_opf_case13659_pegase.txt",
+    #     "pglib_opf_case30000_goc.txt"
+    # ]
     for file in files
         if file in skip
             println("Skipping instance $file")
@@ -69,19 +72,24 @@ function run_all()
         dt = read_data(inputfile, rng)
         # model_dt = build_compact(dt)
         try
-            dt = read_data(inputfile, rng)
+            # dt = read_data(inputfile, rng)
             build_time = @elapsed (model_dt = 
                                       build_model(dt, true, logfile, is_mip_en))
             
-            heur_time = @elapsed((inserted_candidates, 
-                                  viol_ratio, 
-                                  ins_ratio) = add_circuits_heur!(dt))
-            for k in inserted_candidates
-                set_start_value(model_dt.x[k], 1)
-            end
+            # heur_time = @elapsed((inserted_candidates, 
+            #                       viol_ratio, 
+            #                       ins_ratio) = add_circuits_heur!(dt))
+            # for k in inserted_candidates
+            #     set_start_value(model_dt.x[k], 1)
+            # end
+
+            heur_time = 0.0
+            viol_ratio = 0.0
+            ins_ratio = 0.0
 
             results = solve!(model_dt, dt, true)
-            results = (results..., heur_time, viol_ratio, ins_ratio)
+            results = (model_dt.dem_gen_ratio, results..., 
+                       heur_time, viol_ratio, ins_ratio)
             log_instance(outputfile, file, dt, build_time, 
                          model_dt.is_xi_req, results)
         catch e
@@ -89,7 +97,7 @@ function run_all()
             log_instance(outputfile, 
                          "<s>" * file * "</s>", 
                          '-', '-', model_dt.is_xi_req,
-                         ntuple(v->'-', 11))
+                         ntuple(v->'-', 12))
         end
     end
 end

@@ -55,12 +55,26 @@ function read_data(filename, rng)
     i += 2
     D = Dict{Int, Float64}()
     G = Dict{Int, Float64}()
-    # update I here?
+    # Update I here?
+    sumG = 0.0
+    sumD = 0.0
+    # The demand is increased according to mult_load
     for j in i:i+nb_dem_gen-1
         v = split(s[j])
         bus = parse(Int, v[1])
-        G[bus] = mult_gen_load * parse(Float64, v[2])
-        D[bus] = mult_gen_load * parse(Float64, v[3])
+        G[bus] = parse(Float64, v[2])
+        D[bus] = mult_load * parse(Float64, v[3])
+
+        sumG += G[bus]
+        sumD += D[bus]
+    end
+    # The generation is increased according to the amount required to meet the
+    # new demand with a given random slack between 0.05 and mult
+    mult_gen = ((1.0 + gen_slack_percent) +
+                rand(rng) * gen_max_add_slack_percent) * (sumD / sumG)
+    @show sumD, sumG, sumD / sumG
+    for (bus, g) in G
+        G[bus] = mult_gen * g
     end
     # @show G
     # @show D

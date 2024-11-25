@@ -7,6 +7,7 @@ struct ModelData
     x
     f
     theta
+    dem_gen_ratio
     is_xi_req
 end
 
@@ -57,16 +58,18 @@ function build_model(data,
         end
     end
 
-    rhs_sum = 0.0
+    dem_sum = 0.0
+    gen_sum = 0.0
     for i in data.I
         # some buses may not have load or generation
         d = i in keys(data.D) ? data.D[i] : 0.0
         g = i in keys(data.G) ? data.G[i] : 0.0
 
-        rhs_sum += g - d
+        dem_sum += d
+        gen_sum += g
     end
-    is_xi_req = isl(rhs_sum, 0.0)
-    @info rhs_sum, is_xi_req
+    is_xi_req = isl(gen_sum - dem_sum, 0.0)
+    @info dem_sum, gen_sum, is_xi_req
 
     # first Kirccohff law
     xi_vars = AffExpr(0.0)
@@ -140,7 +143,7 @@ function build_model(data,
         @objective(md, Min, e)
     end
 
-    return ModelData(md, x, f, theta, is_xi_req)
+    return ModelData(md, x, f, theta, dem_sum / gen_sum, is_xi_req)
 end
 
 function solve!(model_data, data, is_mip_en=true)

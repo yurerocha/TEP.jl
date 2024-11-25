@@ -138,10 +138,10 @@ end
 
 function log_header(outputfile)
     outstr = "| Instance | N | L | L/N |"
-    outstr *= " Build (s) | D > G | Solve (s) | Incumbent (s) | Status |" *
-              " Rt solve (s) | Rt best bound | Best bound | Objective | " * 
-              " Gap (%) | Heur (s) | VR (%) | IR (%) | \n"
-    outstr *= "|:---"^17 * "| \n"
+    outstr *= " Build (s) | D > G | D / G | Solve (s) | Incumbent (s) |" * 
+              " Status | Rt solve (s) | Rt best bound | Best bound |" *
+              " Objective | Gap (%) | Heur (s) | VR (%) | IR (%) | \n"
+    outstr *= "|:---"^18 * "| \n"
     log(outputfile, outstr)
 end
 
