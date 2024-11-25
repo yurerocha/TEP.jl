@@ -190,7 +190,7 @@ function solve!(model_data, data, is_mip_en=true)
         if is_mip_en
             best_bound = dual_objective_value(model)
             obj = objective_value(model)
-            gap = relative_gap(model)
+            gap = 100.0 * relative_gap(model)
         end
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts

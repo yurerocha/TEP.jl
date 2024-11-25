@@ -2,7 +2,7 @@
 const mult_gen_load = 2.0
 const nb_candidates = 2
 const max_rand = 100
-const solver_time_limit = 600
+const solver_time_limit = 60
 const debugging_level = 1
 
 function run(instance)
@@ -70,17 +70,18 @@ function run_all()
         # model_dt = build_compact(dt)
         try
             dt = read_data(inputfile, rng)
-            build_time = 
-            @elapsed (model_dt = build_model(dt, true, logfile, is_mip_en))
+            build_time = @elapsed (model_dt = 
+                                      build_model(dt, true, logfile, is_mip_en))
             
-            inserted_candidates, viol_ratio, insertion_ratio = 
-                                                          add_circuits_heur!(dt)
+            heur_time = @elapsed((inserted_candidates, 
+                                  viol_ratio, 
+                                  ins_ratio) = add_circuits_heur!(dt))
             for k in inserted_candidates
                 set_start_value(model_dt.x[k], 1)
             end
 
             results = solve!(model_dt, dt, true)
-            results = (results..., viol_ratio, insertion_ratio)
+            results = (results..., heur_time, viol_ratio, ins_ratio)
             log_instance(outputfile, file, dt, build_time, 
                          model_dt.is_xi_req, results)
         catch e
@@ -88,7 +89,7 @@ function run_all()
             log_instance(outputfile, 
                          "<s>" * file * "</s>", 
                          '-', '-', model_dt.is_xi_req,
-                         ntuple(v->'-', 10))
+                         ntuple(v->'-', 11))
         end
     end
 end
