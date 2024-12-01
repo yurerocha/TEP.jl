@@ -18,5 +18,6 @@ include("data.jl")
 include("model.jl")
 include("main.jl")
 include("compact_model.jl")
+include("heuristic.jl")
 
 end

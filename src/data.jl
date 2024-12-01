@@ -70,8 +70,9 @@ function read_data(filename, rng)
     end
     # The generation is increased according to the amount required to meet the
     # new demand with a given random slack between 0.05 and mult
-    mult_gen = ((1.0 + gen_slack_percent) +
-                rand(rng) * gen_max_add_slack_percent) * (sumD / sumG)
+    # mult_gen = ((1.0 + gen_slack_percent) +
+    #             rand(rng) * gen_max_add_slack_percent) * (sumD / sumG)
+    mult_gen = ceil((1.0 + gen_slack_percent) * (sumD / sumG))
     @show sumD, sumG, sumD / sumG
     for (bus, g) in G
         G[bus] = mult_gen * g

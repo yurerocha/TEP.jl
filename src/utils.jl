@@ -1,4 +1,4 @@
-const eps = 1e-6
+const eps = 1e-5
 const penalty = 1e6
 # const bigM = 1e10
 
@@ -140,7 +140,7 @@ function log_header(outputfile)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D > G | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Objective | Gap (%) | Heur (s) | VR (%) | IR (%) | \n"
+              " Objective | Gap (%) | Heur (s) | R1 (%) | R2 (%) | \n"
     outstr *= "|:---"^18 * "| \n"
     log(outputfile, outstr)
 end
@@ -316,7 +316,7 @@ Draw the graph of a solution.
 Each edge is labeled with the flow value and each vertex is labeled with
 "generation - demand".
 """
-function draw_solution(dt, md, f, viols, filename="solution")
+function draw_solution(dt, md, f, viols=[], filename="solution")
     flows = Dict{Circuit, Float64}()
     for l in 1:dt.nb_J + dt.nb_K
         c = get_circuit(dt, l)
@@ -335,7 +335,7 @@ function draw_solution(dt, md, f, viols, filename="solution")
     unique!(elist)
 
     g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
-    edgestrokecolors = [colorant"grey10" for _ in elist]
+    edgestrokecolors = [colorant"grey" for _ in elist]
     for (i, e) in enumerate(edges(g))
         for v in viols
             c = get_circuit(dt, v[1])
@@ -345,7 +345,7 @@ function draw_solution(dt, md, f, viols, filename="solution")
         end
     end
 
-    delta = [round(Int, value(md.g[i]) - (i in keys(dt.D) ? dt.D[i] : 0.0))
+    delta = [round(Int, (i in keys(md.g) ? value(md.g[i]) : 0.0) - (i in keys(dt.D) ? dt.D[i] : 0.0))
              for i in 1:dt.nb_I]
     edgelabels = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
     # Generate n maximally distinguishable colors in LCHab space.
@@ -358,7 +358,9 @@ function draw_solution(dt, md, f, viols, filename="solution")
     vertexshapesizes = []
     for i in eachindex(delta)
         d = delta[i]
-        vertices[i] = "$(I[i]):$d"
+        # t = round(theta[i], digits=2)
+        # vertices[i] = "$(I[i]) $d $t"
+        vertices[i] = "$(I[i]) $d"
         if d < 0 
             vertexfillc[i] = colorant"red"
         elseif d > 0
@@ -369,25 +371,28 @@ function draw_solution(dt, md, f, viols, filename="solution")
         push!(vertexshapesizes, 10 * log10(abs(d)))
     end
     @svg begin
-        background("grey10")
+        background("white")
         # background("white")
-        fontsize(7)
-        sethue("white")
+        fontsize(6)
+        sethue("black")
+        text(filename, boxbottomcenter() + (0, -50), halign=:center)
         println("Drawing first layer")
         @layer begin
             drawgraph(g,
+                    #   edgecurvature = 5,
                       layout = stress, 
                       vertexlabels = vertices,
-                      edgegaps = 12,
-                      edgestrokeweights = 5,
+                      edgegaps = 15,
+                      edgestrokeweights = 1,
                       edgelabels = edgelabels,
                       edgestrokecolors = edgestrokecolors,
                       vertexfillcolors = vertexfillc,
-                      vertexshapesizes = vertexshapesizes
+                      vertexshapesizes = vertexshapesizes,
+                      vertexlabeltextcolors = colorant"black"
                       # vertexfillcolors = 
                       #     [RGB(rand(3)/2...) 
                       #        for i in 1:nv(g)]
             )
         end
-    end 6000 6000 filename * ".svg"
+    end 3000 3000 filename * ".svg"
 end

@@ -6,7 +6,9 @@ struct ModelData
     model
     x
     f
+    g
     theta
+    Delta_theta
     dem_gen_ratio
     is_xi_req
 end
@@ -34,6 +36,8 @@ function build_model(data,
     if is_mip_en
         for k in data.nb_J+1:data.nb_J+data.nb_K
             x[k] = @variable(md, binary=true, base_name="x")
+            # Forcing every candidate to be built
+            # set_lower_bound(x[k], 1.0)
         end
     end
 
@@ -143,7 +147,7 @@ function build_model(data,
         @objective(md, Min, e)
     end
 
-    return ModelData(md, x, f, theta, dem_sum / gen_sum, is_xi_req)
+    return ModelData(md, x, f, gen, theta, Delta_theta, dem_sum / gen_sum, is_xi_req)
 end
 
 function solve!(model_data, data, is_mip_en=true)

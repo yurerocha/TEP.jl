@@ -334,6 +334,9 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
         if it == 1
             viol_init = viol
             best_viol = viol
+            if iseq(viol_init, 0.0)
+                break
+            end
         elseif isl(viol, best_viol)
             best_viol = viol
             inserted_candidates = union(inserted_candidates, Set(circuits))
@@ -545,7 +548,7 @@ function comp_viols(dt, md, beta, bus_inj)
     viols = Array{Tuple{Int, Float64}}(undef, 0)
     for l in 1:md.m
         v = abs(f[l]) - dt.f_bar[l]
-        if isg(v, 0.0)
+        if isg(v, 0.1)
             push!(viols, (l, v))
         end
     end
