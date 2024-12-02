@@ -155,20 +155,30 @@ function flow_cons(dt, md, m, f, is_slack_en = false)
     f_lower_cons = Array{ConstraintRef}(undef, m)
     f_upper_cons = Array{ConstraintRef}(undef, m)
 
+    if is_slack_en
+        s = Array{VariableRef}(undef, m)
+    end
+
+    e = AffExpr(0.0)
     for l in 1:m
         if is_slack_en
             # v >= f[l] - dt.f_bar[l]
             # v >= -f[l] - dt.f_bar[l]
             # v >= 0.0
-            s = @variable(md, obj = penalty, 
-                          lower_bound = 0.0, 
-                          base_name = "s$l")
-            f_lower_cons = @constraint(md, s[l] >= f[l] - dt.f_bar[l])
-            f_upper_cons = @constraint(md, s[l] >= -f[l] - dt.f_bar[l])
+            s[l] = @variable(md, lower_bound = 0.0, base_name = "s$l")
+            add_to_expression!(e, penalty, s[l])
+            f_lower_cons[l] = @constraint(md, s[l] >= f[l] - dt.f_bar[l])
+            f_upper_cons[l] = @constraint(md, s[l] >= -f[l] - dt.f_bar[l])
         else
             f_lower_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l])
             f_upper_cons[l] = @constraint(md, f[l] <= dt.f_bar[l])
         end
+    end
+
+    if is_slack_en
+        @objective(md, Min, e)
+    else
+        @objective(md, Min, 0)
     end
 
     return f_lower_cons, f_upper_cons, s
@@ -344,12 +354,14 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
     r2 = 0.0
     lambda = 1.0
     best_beta = beta
-    cycles, buses_per_cycle = detect_cycles(dt, md, false)
+    # cycles, buses_per_cycle = detect_cycles(dt, md, false)
+    is_bus_inj_updated = false
     for it in 1:50
         print("---------- It ", it)
         println(" ----------")
 
         viols = comp_viols(dt, md, beta, bus_inj)
+        # @warn viols
         viol = sum([abs(v[2]) for v in viols])
         if it == 1
             viol_init = viol
@@ -363,6 +375,8 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
             best_beta = beta
             @warn "Best violation updated:", best_viol
             acc_add += length(circuits)
+            r1 = viol / viol_init
+            r2 = acc_add / dt.nb_K
         else
             # If the violation is increasing, then we have to remove the last 
             # inserted circuits and decrease λ
@@ -370,6 +384,11 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
             rm_circuits(md, circuits, gamma_star)
             # TODO: O que fazer quando lambda = 0?
             lambda = max(0.0, lambda - 0.25)
+        end
+
+        if iseq(viol, 0.0)
+            @warn "All viol removed!"
+            break
         end
 
         circuits = select_circuits(dt, candidates, viols, lambda)
@@ -383,17 +402,36 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
         # print(" nb_circ:", length(circuits))
         print(" acc_add:", acc_add)
         print(" total:", dt.nb_K)
-        r2 = acc_add / dt.nb_K
         println(" add_ratio:", r2)
         # println(" circuits:", circuits)
 
         if length(circuits) == 0
-            circuits = repair_cycles(dt, cycles, buses_per_cycle, 
-                                     candidates, viols)
-            if length(circuits) == 0
-                g = update_g(dt, md, beta, bus_inj)
+            # circuits = repair_cycles(dt, cycles, buses_per_cycle, 
+            #                          candidates, viols)
+            # if length(circuits) == 0
+                # TODO: Colocar a solução encontrada como restrições
+                # Lembrar de desfazer
+                # rm = Set{Int}()
+                # for v in viols
+                #     println(v[1], v[1] in inserted_candidates)
+                #     if v[1] in inserted_candidates
+                #         delete!(inserted_candidates, v[1])
+                #         push!(rm, v[1])
+                #     end
+                # end
+                # beta = rm_circuits(md, rm)
+                # candidates = union(candidates, rm)
+            if is_bus_inj_updated
+                # We limit the number of updates of bus injections to 1
+                break
+            else
+                # Update bus injections 
+                # @warn g
+                g = update_g(dt, md, beta, xi)
+                # @warn g
                 bus_inj = comp_bus_injections(md.d, g, md.is_xi_req, xi)
-                readline()
+                continue
+            end
                 # break
                 # circuits = repair_nodes(dt, candidates, 0.75)
                 # @info viols
@@ -416,7 +454,7 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
                 #     @info viols
                 #     break
                 # end
-            end
+            # end
         end
 
         beta = add_circuits(dt, md, circuits)
@@ -439,25 +477,31 @@ end
     update_g(dt, md, beta, bus_inj)
 Compute g allowing penalized slack flows in the lines.
 """
-function update_g(dt, md, beta, bus_inj)
+function update_g(dt, md, beta, xi)
     delete(md.model, md.f_lower_cons)
     delete(md.model, md.f_upper_cons)
+
+    # circuits = [l for l in dt.nb_J + 1:dt.nb_J + dt.nb_K]
+    # rm_circuits(md, circuits)
+    # beta = add_circuits(dt, md, inserted_candidates)
+
+    bus_inj = comp_bus_injections(md.d, md.g, md.is_xi_req, xi)
 
     md.f[:] = beta * bus_inj
 
     # Add flow constraints with slacks
-    fl_cons, fp_cons, s = flow_cons(dt, md.model, md.m, md.f, true)
+    md.f_lower_cons[:], md.f_upper_cons[:], s = 
+                                       flow_cons(dt, md.model, md.m, md.f, true)
 
     optimize!(md.model)
-    status = termination_status(md.model)
-    println("Status optimize line slack: ", status)
+    println("Status optimize line slack: ", termination_status(md.model))
     # detect_cycles(dt, md, true)
 
     # Extract and fix the generation
     g = value.(md.g)
 
-    delete(md.model, fl_cons)
-    delete(md.model, fp_cons)
+    delete(md.model, md.f_lower_cons)
+    delete(md.model, md.f_upper_cons)
     delete(md.model, s)
 
     # Add flow constraints without slacks

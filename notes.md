@@ -14,6 +14,8 @@ que essas consigam escoar as cargas com folga
 - exp1: tempo para encontrar uma solução inicial
 - exp2: tempo para encontrar solução inicial com heurística de inserção
 - exp3: tempo para encontrar solução inicial com heurística de remoção
+- exp4: tempo para encontrar solução inicial com heurística de inserção + 
+        atualização das gerações
 
 ┌ Warning: The addition operator has been used on JuMP expressions a
  large number of times. This warning is safe to ignore but may indic
@@ -38,8 +40,8 @@ Algoritmo:
 4. Volta ao passo 2.
 5. Quando o algoritmo não conseguir mais remover, calcular a geração e rm todos
 os candidatos.
-6. Aplicar a outra heurística de rm todos e tentar inserir
-7. Quando houver violação em poucos circuitos, tentar removê-los e observar o que acontece
+1. Aplicar a outra heurística de rm todos e tentar inserir
+2. Quando houver violação em poucos circuitos, tentar removê-los e observar o que acontece
 
 Talvez haja alguma função que descreva o grau de impacto no nó em função da sua 
 distância do nó modificado e da relação existente entre eles
