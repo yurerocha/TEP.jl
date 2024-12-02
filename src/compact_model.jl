@@ -12,7 +12,8 @@ struct CompactModel
     B_inv # n x n inverse of matrix B
     beta # m x m matrix, where β = ΓSB⁻¹
     f # m x 1 vector of line flows
-    f_cons # m x 1 vector of line flow constraints
+    f_lower_cons # m x 1 vector of line flow constraints
+    f_upper_cons # m x 1 vector of line flow constraints
 end
 
 """
@@ -26,8 +27,8 @@ generation is a parameter. In our version, we have added the generation as a
 variable. Furthermore, we also have added slack variables ξ_i when the demand 
 exceeds what the generators can provide.
 """
-function build_compact(data, free_buses=[], 
-                       gamma_star=1e-8, logfile="log_compact.txt")
+function build_compact(data, free_buses = [], 
+                       gamma_star = 1e-8, logfile = "log_compact.txt")
     md = Model(Gurobi.Optimizer)
     set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
     set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
@@ -58,18 +59,18 @@ function build_compact(data, free_buses=[],
             # If xi slack variables are required, then the generation is bounded
             # to its maximum
             if is_xi_req
-                g[i] = @variable(md, lower_bound=g_max, upper_bound=g_max, 
-                                 base_name="g$i")
+                g[i] = @variable(md, lower_bound = g_max, upper_bound = g_max, 
+                                 base_name = "g$i")
             else
-                g[i] = @variable(md, lower_bound=0, upper_bound=g_max,
-                                 base_name="g$i")
+                g[i] = @variable(md, lower_bound = 0, upper_bound = g_max,
+                                 base_name = "g$i")
             end
         else
-            g[i] = @variable(md, lower_bound=0, upper_bound=0, 
-                             base_name="g$i")
+            g[i] = @variable(md, lower_bound = 0, upper_bound = 0, 
+                             base_name = "g$i")
         end
         if is_xi_req
-            xi[i] = @variable(md, lower_bound=0, base_name="xi$i")
+            xi[i] = @variable(md, lower_bound = 0, base_name = "xi$i")
         end
     end
     S = zeros(data.nb_J + data.nb_K, data.nb_I)
@@ -128,30 +129,49 @@ function build_compact(data, free_buses=[],
     f = beta * bus_inj
 
     # Flow lower and upper bounds constra_ints
-    f_cons = flow_cons(data, md, data.nb_J + data.nb_K, f)
+    f_lower_cons, f_upper_cons, _ = flow_cons(data, md, 
+                                              data.nb_J + data.nb_K, 
+                                              f)
 
     # Load balance constra_ints
     e_t = ones(data.nb_I)'
     gl_lhs = comp_gen_balance(g, is_xi_req, xi)
-    @constraint(md, e_t * gl_lhs == e_t * d, base_name="load_balance")
+    @constraint(md, e_t * gl_lhs == e_t * d, base_name = "load_balance")
 
-    return CompactModel(md, data.nb_J + data.nb_K, data.nb_I, S, Gamma, d, g, 
-                        is_xi_req, xi, B, B_inv, beta, f, f_cons)
+    return CompactModel(md, data.nb_J + data.nb_K, 
+                        data.nb_I, S, Gamma, d, g, 
+                        is_xi_req, xi, B, B_inv, beta, 
+                        f, f_lower_cons, f_upper_cons)
 end
 
 """
     flow_cons(data, model, nb_lines, flows)
 Lower and upper bounds on flows.
+
+Slacks in the line allow for the capacity to be exceeded with penalization.
 """
-function flow_cons(dt, md, m, f)
-    f_cons = Array{ConstraintRef}(undef, dt.nb_J + dt.nb_K)
+function flow_cons(dt, md, m, f, is_slack_en = false)
+    s = Array{VariableRef}(undef, 0)
+    f_lower_cons = Array{ConstraintRef}(undef, m)
+    f_upper_cons = Array{ConstraintRef}(undef, m)
+
     for l in 1:m
-        # f_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l], base_name="fle$l")
-        # f_cons[l] = @constraint(md, f[l] <= dt.f_bar[l], base_name="fge$l")
-        f_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l])
-        f_cons[l] = @constraint(md, f[l] <= dt.f_bar[l])
+        if is_slack_en
+            # v >= f[l] - dt.f_bar[l]
+            # v >= -f[l] - dt.f_bar[l]
+            # v >= 0.0
+            s = @variable(md, obj = penalty, 
+                          lower_bound = 0.0, 
+                          base_name = "s$l")
+            f_lower_cons = @constraint(md, s[l] >= f[l] - dt.f_bar[l])
+            f_upper_cons = @constraint(md, s[l] >= -f[l] - dt.f_bar[l])
+        else
+            f_lower_cons[l] = @constraint(md, -dt.f_bar[l] <= f[l])
+            f_upper_cons[l] = @constraint(md, f[l] <= dt.f_bar[l])
+        end
     end
-    return f_cons
+
+    return f_lower_cons, f_upper_cons, s
 end
 
 """
@@ -371,7 +391,10 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
             circuits = repair_cycles(dt, cycles, buses_per_cycle, 
                                      candidates, viols)
             if length(circuits) == 0
-                break
+                g = update_g(dt, md, beta, bus_inj)
+                bus_inj = comp_bus_injections(md.d, g, md.is_xi_req, xi)
+                readline()
+                # break
                 # circuits = repair_nodes(dt, candidates, 0.75)
                 # @info viols
                 # f = best_beta * bus_inj
@@ -398,18 +421,50 @@ function add_circuits_heur!(dt, gamma_star = 1e-8)
 
         beta = add_circuits(dt, md, circuits)
     end
-    model_dt = build_model(dt)
-    for k in inserted_candidates
-        set_start_value(model_dt.x[k], 1)
-    end
-    optimize!(model_dt.model)
-    status = termination_status(model_dt.model)
-    println("Status: ", status)
+    # model_dt = build_model(dt)
+    # for k in inserted_candidates
+    #     set_start_value(model_dt.x[k], 1)
+    # end
+    # optimize!(model_dt.model)
+    # status = termination_status(model_dt.model)
+    # println("Status: ", status)
 
     # f = md.beta * comp_bus_injections(md.d, g, md.is_xi_req, xi)
     # println("f: ", f)
     # draw_solution(dt, md, f)
     return inserted_candidates, 100.0 - 100.0 * r1, 100.0 * r2
+end
+
+"""
+    update_g(dt, md, beta, bus_inj)
+Compute g allowing penalized slack flows in the lines.
+"""
+function update_g(dt, md, beta, bus_inj)
+    delete(md.model, md.f_lower_cons)
+    delete(md.model, md.f_upper_cons)
+
+    md.f[:] = beta * bus_inj
+
+    # Add flow constraints with slacks
+    fl_cons, fp_cons, s = flow_cons(dt, md.model, md.m, md.f, true)
+
+    optimize!(md.model)
+    status = termination_status(md.model)
+    println("Status optimize line slack: ", status)
+    # detect_cycles(dt, md, true)
+
+    # Extract and fix the generation
+    g = value.(md.g)
+
+    delete(md.model, fl_cons)
+    delete(md.model, fp_cons)
+    delete(md.model, s)
+
+    # Add flow constraints without slacks
+    md.f_lower_cons[:], md.f_upper_cons[:], _ = 
+                                             flow_cons(dt, md.model, md.m, md.f)
+
+    return g
 end
 
 """

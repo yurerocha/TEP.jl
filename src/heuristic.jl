@@ -105,10 +105,12 @@ function rm_circuits_heur!(dt, gamma_star = 1e-8)
 end
 
 function update_flow_constrs(dt, md, beta, bus_inj)
-    delete(md.model, md.f_cons)
+    delete(md.model, md.f_lower_cons)
+    delete(md.model, md.f_upper_cons)
 
     md.f[:] = beta * bus_inj
 
     # Flow lower and upper bounds constra_ints
-    md.f_cons[:] = flow_cons(dt, md.model, dt.nb_J + dt.nb_K, md.f)
+    md.f_lower_cons[:], md.f_upper_cons[:], _ = flow_cons(dt, md.model, 
+                                                          md.m, md.f)
 end

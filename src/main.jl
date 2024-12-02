@@ -126,9 +126,10 @@ Where:
     init_sol_heur = 2 for heuristic that removes candidates;
     init_sol_heur = 3, otherwise.
 """
-function run_all(init_sol_heur=1)
+function run_all(init_sol_heur = 1)
     dir = "TransExpanProblem.jl"
-    outputfile = "$dir/tep.md"
+    dir_log = "log"
+    outputfile = "$dir/$dir_log/log.md"
     
     # nb of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
@@ -137,7 +138,7 @@ function run_all(init_sol_heur=1)
 
     log_header(outputfile)
 
-    files = readdir("$dir/input")
+    files = readdir("$dir/input3")
     # sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
     # skip = ["pglib_opf_case793_goc.txt", "pglib_opf_case1803_snem.txt"]
@@ -156,15 +157,15 @@ function run_all(init_sol_heur=1)
     #     "pglib_opf_case13659_pegase.txt",
     #     "pglib_opf_case30000_goc.txt"
     # ]
-    for file in files[1:10]
+    for file in files[12:12]
         if file in skip
             println("Skipping instance $file")
             continue
         end
         println("Processing $file")
 
-        inputfile = "$dir/input2/$file"
-        logfile = "$dir/log/$file"
+        inputfile = "$dir/input3/$file"
+        logfile = "$dir/$dir_log/$file"
         dt = read_data(inputfile, rng)
         model_dt = nothing
         build_time = 0.0
