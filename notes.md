@@ -62,3 +62,9 @@ Difíceis
 Inviável (investigar melhor)
 162
 793
+
+Padronizar os = em chamadas de funções  
+
+Para o mipstart, também setar os valores das variáveis de geração e os fluxos
+
+O modelo compacto consome muita memória.

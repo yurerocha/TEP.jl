@@ -15,11 +15,20 @@ function run2(instance)
 
     dt = read_data(instance, rng)
 
-    # model_dt = build_compact(dt)
+    # md = build_compact(dt)
 
-    # rm_circuits_heur!(dt)
+    build_time = @elapsed (model_dt = build_model(dt, true, logfile))
+    @warn "Build time $build_time"
 
-    add_circuits_heur!(dt)
+    @warn "Add circuits heuristic"
+    start, ratio1, ratio2 = add_circuits!(dt)
+    @warn "Ratios: $ratio1 $ratio2"
+
+    @warn "Mip starting the model"
+    mip_start!(dt, model_dt, start)
+
+    @warn "Solving the model"
+    solve!(model_dt, true)
 end
 
 function update_bounds_g(dt, model_dt, is_fix_en)
@@ -120,13 +129,8 @@ end
     run_all(init_sol_heur=1)
 
 Execute all instances.
-
-Where:
-    init_sol_heur = 1 for heuristic that inserts candidates;
-    init_sol_heur = 2 for heuristic that removes candidates;
-    init_sol_heur = 3, otherwise.
 """
-function run_all(init_sol_heur = 1)
+function run_all()
     dir = "TransExpanProblem.jl"
     dir_log = "log"
     outputfile = "$dir/$dir_log/log.md"
@@ -142,21 +146,15 @@ function run_all(init_sol_heur = 1)
     # sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
     # skip = ["pglib_opf_case793_goc.txt", "pglib_opf_case1803_snem.txt"]
-    skip = ["pglib_opf_case1803_snem.txt"]
+    # skip = ["pglib_opf_case1803_snem.txt"]
     # run the solver with binary decision variables
     is_mip_en = true
-    # files = [
-    #     "pglib_opf_case588_sdet.txt",
-    #     "pglib_opf_case1354_pegase.txt",
-    #     "pglib_opf_case2848_rte.txt",
-    #     "pglib_opf_case2853_sdet.txt",
-    #     "pglib_opf_case2869_pegase.txt",
-    #     "pglib_opf_case3022_goc.txt",
-    #     "pglib_opf_case4917_goc.txt",
-    #     "pglib_opf_case10000_goc.txt",
-    #     "pglib_opf_case13659_pegase.txt",
-    #     "pglib_opf_case30000_goc.txt"
-    # ]
+    skip = [
+        "pglib_opf_case162_ieee_dtc.txt", # Compact model infeasible
+        "pglib_opf_case1803_snem.txt", # Zero reactance
+        "pglib_opf_case3375wp_k.txt" # Singular exception
+        # Memory problems
+    ]
     for file in files
         if file in skip
             println("Skipping instance $file")
@@ -169,44 +167,32 @@ function run_all(init_sol_heur = 1)
         dt = read_data(inputfile, rng)
         model_dt = nothing
         build_time = 0.0
-        # try
-        build_time = @elapsed (model_dt = 
-                                    build_model(dt, true, logfile, is_mip_en))
-        
-        heur_time = 0.0
-        ratio1 = 0.0
-        ratio2 = 0.0
 
-        sel_candidates = []
+        try
+            build_time = @elapsed (model_dt = 
+                                        build_model(dt, true, logfile, is_mip_en))
+            
+            heur_time = 0.0
+            ratio1 = 0.0
+            ratio2 = 0.0
 
-        start_val = 0.0
-        if init_sol_heur == 1
-            heur_time = @elapsed((sel_candidates, 
-                                  ratio1, 
-                                  ratio2) = add_circuits_heur!(dt))
-            start_val = 1.0
-        elseif init_sol_heur == 2
-            heur_time = @elapsed((sel_candidates, 
-                                  ratio1, 
-                                  ratio2) = rm_circuits_heur!(dt))
-            start_val = 0.0
+            heur_time = @elapsed((start, 
+                                ratio1, 
+                                ratio2) = add_circuits!(dt))
+            println("Mip starting the model")
+            mip_start!(dt, model_dt, start)
+
+            results = solve!(model_dt, true)
+            results = (model_dt.dem_gen_ratio, results..., 
+                        heur_time, ratio1, ratio2)
+            log_instance(outputfile, file, dt, build_time, 
+                            model_dt.is_xi_req, results)
+        catch e
+            @warn e
+            log_instance(outputfile, 
+                         "<s>" * file * "</s>", 
+                         dt, build_time, model_dt.is_xi_req,
+                         ntuple(v->'-', 12))
         end
-        for k in sel_candidates
-            set_start_value(model_dt.x[k], start_val)
-        end
-
-
-        results = solve!(model_dt, dt, true)
-        results = (model_dt.dem_gen_ratio, results..., 
-                    heur_time, ratio1, ratio2)
-        log_instance(outputfile, file, dt, build_time, 
-                        model_dt.is_xi_req, results)
-        # catch e
-        #     @warn e
-        #     log_instance(outputfile, 
-        #                  "<s>" * file * "</s>", 
-        #                  dt, build_time, model_dt.is_xi_req,
-        #                  ntuple(v->'-', 12))
-        # end
     end
 end

@@ -150,7 +150,7 @@ function build_model(data,
     return ModelData(md, x, f, gen, theta, Delta_theta, dem_sum / gen_sum, is_xi_req)
 end
 
-function solve!(model_data, data, is_mip_en=true)
+function solve!(model_data, is_mip_en=true)
     model = model_data.model
 
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
