@@ -1,9 +1,39 @@
+# ------------------------ Compact model data structures -----------------------
+struct CompactModel
+    model::GenericModel
+    m::Int64 # Number of lines
+    n::Int64 # Number of buses
+    S::Matrix{Float64} # m x n adjacency matrix
+    Gamma::Matrix{Float64} # m x m matrix of susceptances
+    d::Vector{Float64} # n vector of demands
+    g::Vector{VariableRef} # n vector of generation variables
+    is_xi_req::Bool # Boolean indicating if slack variables are required
+    xi::Vector{VariableRef} # n vector of slack variables for when demand 
+                            # exceeds generation
+    B::Matrix{Float64} # n x n matrix, where B = S'ΓS
+    B_inv::Matrix{Float64} # n x n inverse of matrix B
+    beta::Matrix{Float64} # m x m matrix, where β = ΓSB⁻¹
+    f::Vector{AffExpr} # m x 1 vector of line flows
+    f_lower_cons::Vector{ConstraintRef} # m x 1 vector of line flow constraints
+    f_upper_cons::Vector{ConstraintRef} # m x 1 vector of line flow constraints
+end
+
+const FloatVarRef = Union{Float64, VariableRef}
+
+# -------------------------- Heuristic data structures -------------------------
+struct Start
+    built_candidates::Set{Int}
+    g::Vector{Float64}
+    f::Vector{Float64}
+end
+
+# -------------------------- Instance data structures --------------------------
 struct Circuit
     fr::Int # "from" bus
     to::Int # "to" bus
 end
 
-struct Data
+struct Instance
     I::Set{Int} # buses
     gamma::Array{Float64} # susceptance of circuits
     f_bar::Array{Float64} # capacity of circuits
@@ -17,74 +47,14 @@ struct Data
     nb_K::Int # nb of candidate circuits
 end
 
-function read_data(filename, rng)
-    s = open(filename) do f
-        readlines(f)
-    end
-    I = Set{Int}()
-    i = 1
-    nb_I = get_nb(s, i)
-    i += 2
-
-    J = Array{Circuit}(undef, 0)
-    gamma = Array{Float64}(undef, 0)
-    f_bar = Array{Float64}(undef, 0)
-    cost = Array{Float64}(undef, 0)
-    nb_ex_circs = get_nb(s, i)
-    i += 2
-    try 
-        populate_circuits(I, J, gamma, f_bar, cost, s, i, nb_ex_circs)
-    catch e
-        throw(e)
-    end
-
-    i += nb_ex_circs + 1
-
-    K = Array{Circuit}(undef, 0)
-    nb_ca_circs = get_nb(s, i)
-    i += 2
-    try
-        populate_circuits(I, K, gamma, f_bar, cost, 
-                          s, i, nb_ca_circs, true, rng)
-    catch e
-        throw(e)
-    end
-    i += nb_ca_circs + 1
-
-    nb_dem_gen = get_nb(s, i)
-    i += 2
-    D = Dict{Int, Float64}()
-    G = Dict{Int, Float64}()
-    # Update I here?
-    sumG = 0.0
-    sumD = 0.0
-    # The demand is increased according to mult_load
-    for j in i:i+nb_dem_gen-1
-        v = split(s[j])
-        bus = parse(Int, v[1])
-        G[bus] = parse(Float64, v[2])
-        D[bus] = mult_load * parse(Float64, v[3])
-
-        sumG += G[bus]
-        sumD += D[bus]
-    end
-    # The generation is increased according to the amount required to meet the
-    # new demand with a given random slack between 0.05 and mult
-    # mult_gen = ((1.0 + gen_slack_percent) +
-    #             rand(rng) * gen_max_add_slack_percent) * (sumD / sumG)
-    mult_gen = ceil((1.0 + gen_slack_percent) * (sumD / sumG))
-    @show sumD, sumG, sumD / sumG
-    for (bus, g) in G
-        G[bus] = mult_gen * g
-    end
-    # @show G
-    # @show D
-    # @show I
-    # @show J
-    # @show K
-    # @show gamma
-    # @show f_bar
-    # @show cost
-    
-    return Data(I, gamma, f_bar, cost, J, K, D, G, nb_I, length(J), length(K))
+# ---------------------------- Model data structures ---------------------------
+struct ModelData 
+    model::GenericModel
+    x::Dict{Int64, JuMP.VariableRef}
+    f::Vector{VariableRef}
+    g::Dict{Int, VariableRef}
+    theta::Vector{VariableRef}
+    Delta_theta::Vector{VariableRef}
+    dem_gen_ratio::Float64
+    is_xi_req::Bool
 end

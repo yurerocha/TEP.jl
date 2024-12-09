@@ -1,15 +1,9 @@
-struct Start
-    built_candidates::Set{Int}
-    g::Vector{Float64}
-    f::Vector{Float64}
-end
-
 """
-    add_circuits!(data, gamma_star = 1e-8)
+    build_solution!(data, gamma_star = 1e-8)
 """
-function add_circuits!(dt, gamma_star = 1e-8)
-    # detect_cycles(dt, false)
-    md = build_compact(dt)
+function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
+    # detect_cycles(inst, false)
+    md = build_compact(inst)
 
     # Solve the LP model
     # TODO: Corrigir instâncias input2, mapeando corretamente os ids de geração
@@ -37,23 +31,18 @@ function add_circuits!(dt, gamma_star = 1e-8)
     #         print(iis_model)
     #     end
     # end
-    # detect_cycles(dt, md, true)
+    # detect_cycles(inst, md, true)
 
     # Extract and fix the generation
     g = value.(md.g)
-    xi = md.is_xi_req ? value.(md.xi) : 0
+    xi = md.is_xi_req ? value.(md.xi) : [0.0 for i in 1:inst.nb_I]
 
-    # At the first it, all candidate circuits are removed
-    circuits = [l for l in dt.nb_J + 1:dt.nb_J + dt.nb_K]
-    # circuits = []
-    # for l in dt.nb_J + 1:dt.nb_J + dt.nb_K
-    #     if rand() < 0.25
-    #         push!(circuits, l)
-    #     end
-    # end
-    beta = rm_circuits(md, circuits, gamma_star)
-    # All removed circuits are candidates for reinsertion
-    candidates = Set(circuits)
+    # At the first it, all candidate lines are removed
+    lines = [l for l in inst.nb_J + 1:inst.nb_J + inst.nb_K]
+
+    beta = rm_lines(md, lines, gamma_star)
+    # All removed lines are candidates for reinsertion
+    candidates = Set(lines)
     inserted_candidates = Set{Int}()
     bus_inj = comp_bus_injections(md.d, g, md.is_xi_req, xi)
 
@@ -64,12 +53,12 @@ function add_circuits!(dt, gamma_star = 1e-8)
     r2 = 0.0
     lambda = 1.0
     best_beta = beta
-    # cycles, buses_per_cycle = detect_cycles(dt, md, false)
+    # cycles, buses_per_cycle = detect_cycles(inst, md, false)
     is_bus_inj_updated = false
     for it in 1:50
         println("---------- It $it ----------")
 
-        viols = comp_viols(dt, md, beta, bus_inj)
+        viols = comp_viols(inst, md, beta, bus_inj)
         # @warn viols
         viol = sum([abs(v[2]) for v in viols])
         if it == 1
@@ -80,17 +69,17 @@ function add_circuits!(dt, gamma_star = 1e-8)
             end
         elseif isl(viol, best_viol)
             best_viol = viol
-            inserted_candidates = union(inserted_candidates, Set(circuits))
+            inserted_candidates = union(inserted_candidates, Set(lines))
             best_beta = beta
             @warn "Best violation updated:", best_viol
-            acc_add += length(circuits)
+            acc_add += length(lines)
             r1 = viol / viol_init
-            r2 = acc_add / dt.nb_K
+            r2 = acc_add / inst.nb_K
         else
             # If the violation is increasing, then we have to remove the last 
-            # inserted circuits and decrease λ
-            println("Removing circuits and decreasing λ")
-            rm_circuits(md, circuits, gamma_star)
+            # inserted lines and decrease λ
+            println("Removing lines and decreasing λ")
+            rm_lines(md, lines, gamma_star)
             # TODO: O que fazer quando lambda = 0?
             lambda = max(0.0, lambda - 0.25)
         end
@@ -100,7 +89,7 @@ function add_circuits!(dt, gamma_star = 1e-8)
             break
         end
 
-        circuits = select_circuits(dt, candidates, viols, lambda)
+        lines = select_lines(inst, candidates, viols, lambda)
 
         # print(" nb_cand:", length(candidates))
         # print(" nb_viol:", length(viols))
@@ -110,12 +99,12 @@ function add_circuits!(dt, gamma_star = 1e-8)
         println(" sum_viol_ratio:", r1)
         # print(" nb_circ:", length(circuits))
         print(" acc_add:", acc_add)
-        print(" total:", dt.nb_K)
+        print(" total:", inst.nb_K)
         println(" add_ratio:", r2)
         # println(" circuits:", circuits)
 
-        if length(circuits) == 0
-            # circuits = repair_cycles(dt, cycles, buses_per_cycle, 
+        if length(lines) == 0
+            # circuits = repair_cycles(inst, cycles, buses_per_cycle, 
             #                          candidates, viols)
             # if length(circuits) == 0
                 # TODO: Colocar a solução encontrada como restrições
@@ -128,7 +117,7 @@ function add_circuits!(dt, gamma_star = 1e-8)
                 #         push!(rm, v[1])
                 #     end
                 # end
-                # beta = rm_circuits(md, rm)
+                # beta = rm_lines(md, rm)
                 # candidates = union(candidates, rm)
             if is_bus_inj_updated
                 # We limit the number of updates of bus injections to 1
@@ -136,23 +125,23 @@ function add_circuits!(dt, gamma_star = 1e-8)
             else
                 # Update bus injections 
                 # @warn g
-                g = update_g(dt, md, beta, xi)
+                g = update_g(inst, md, beta, xi)
                 # @warn g
                 bus_inj = comp_bus_injections(md.d, g, md.is_xi_req, xi)
                 continue
             end
                 # break
-                # circuits = repair_nodes(dt, candidates, 0.75)
+                # circuits = repair_nodes(inst, candidates, 0.75)
                 # @info viols
                 # f = best_beta * bus_inj
-                # draw_solution(dt, md, f, viols)
+                # draw_solution(inst, md, f, viols)
                 # println("Reoptimize!")
                 # Update flows in the compact model and recompute g and xi
                 # delete(md.model, md.f_cons)
                 # for fc in md.f_cons
                 #     println(is_valid(md.model, fc))
                 # end
-                # md.f_cons[:] = flow_cons(dt, md.model, md.m, f)
+                # md.f_cons[:] = flow_cons(inst, md.model, md.m, f)
                 # for k in inserted_candidates
                 #     set_start_value(md.f[k], f[k])
                 # end
@@ -166,26 +155,26 @@ function add_circuits!(dt, gamma_star = 1e-8)
             # end
         end
 
-        beta = add_circuits(dt, md, circuits)
+        beta = add_lines(inst, md, lines)
     end
 
     return Start(inserted_candidates, g, beta * bus_inj), 
-           100.0 - 100.0 * r1, 100.0 * r2
+                 100.0 - 100.0 * r1, 100.0 * r2
 end
 
 """
-    mip_start(dt::Data, md::ModelData, start::Start)
+    mip_start(inst::Instance, md::ModelData, start::Start)
 Mip start the model with the lines, generation, and flows of the start struct.
 """
-function mip_start!(dt::Data, md::ModelData, start::Start)
+function mip_start!(inst::Instance, md::ModelData, start::Start)
     for k in start.built_candidates
         set_start_value(md.x[k], 1.0)
         set_start_value(md.f[k], start.f[k])
     end
 
-    for i in dt.I
+    for i in inst.I
         # Some buses may not have load or generation
-        if i in keys(dt.G)
+        if i in keys(inst.G)
             set_start_value(md.g[i], start.g[i])
         end
     end
@@ -195,13 +184,16 @@ end
     update_g(data, compact_model, beta, bus_inj)
 Compute g allowing penalized slack flows in the lines.
 """
-function update_g(dt, md, beta, xi)
+function update_g(inst::Instance, 
+                  md::CompactModel, 
+                  beta::Matrix{Float64}, 
+                  xi::Vector{<:FloatVarRef})
     delete(md.model, md.f_lower_cons)
     delete(md.model, md.f_upper_cons)
 
-    # circuits = [l for l in dt.nb_J + 1:dt.nb_J + dt.nb_K]
-    # rm_circuits(md, circuits)
-    # beta = add_circuits(dt, md, inserted_candidates)
+    # circuits = [l for l in inst.nb_J + 1:inst.nb_J + inst.nb_K]
+    # rm_lines(md, circuits)
+    # beta = add_lines(inst, md, inserted_candidates)
 
     bus_inj = comp_bus_injections(md.d, md.g, md.is_xi_req, xi)
 
@@ -209,11 +201,11 @@ function update_g(dt, md, beta, xi)
 
     # Add flow constraints with slacks
     md.f_lower_cons[:], md.f_upper_cons[:], s = 
-                                       flow_cons(dt, md.model, md.m, md.f, true)
+                                       flow_cons(inst, md.model, md.m, md.f, true)
 
     optimize!(md.model)
     println("Status optimize line slack: ", termination_status(md.model))
-    # detect_cycles(dt, md, true)
+    # detect_cycles(inst, md, true)
 
     # Extract and fix the generation
     g = value.(md.g)
@@ -224,112 +216,22 @@ function update_g(dt, md, beta, xi)
 
     # Add flow constraints without slacks
     md.f_lower_cons[:], md.f_upper_cons[:], _ = 
-                                             flow_cons(dt, md.model, md.m, md.f)
+                                             flow_cons(inst, md.model, md.m, md.f)
 
     return g
 end
 
 """
-    repair_cycles(data, model, cycles, buses_per_cycle, candidates, violations)
-Build candidate lines involved in a cycle that violates the flow.
-"""
-function repair_cycles(dt, cycles, buses_per_cycle, candidates, viols)
-    @info "Repairing cycles"
-    circuits = []
-    # Sort in non-increasing order of violation
-    sort!(viols, by=x->x[2], rev=true)
-    for v in viols
-        c = get_circuit(dt, v[1])
-        is_cycle_infeas = false
-        # Find cycles with violation
-        # indices = []
-        i = 1
-        for b in buses_per_cycle
-            if c.fr in b && c.to in b
-                is_cycle_infeas = true
-                # push!(indices, i)
-                break
-            end
-            i += 1
-        end
-        if !is_cycle_infeas
-            continue
-        end
-        # Add all candidate circuits involved in the infeasible cycles
-        for l in dt.nb_J + 1:dt.nb_J + dt.nb_K
-            if !(l in candidates)
-                continue
-            end
-            c = get_circuit(dt, l)
-            for j in 1:length(cycles[i]) - 1
-                if (c.fr == cycles[i][j] && c.to == cycles[i][j + 1]) ||
-                   (c.to == cycles[i][j] && c.fr == cycles[i][j + 1])
-                    push!(circuits, l)
-                    delete!(candidates, l)
-                    break
-                end
-            end
-        end
-        if length(circuits) > 0
-            break
-        end
-    end
-    @info length(circuits)
-    return circuits
-end
-
-function repair_nodes(dt, candidates, threashold)
-    @info "Repairing nodes", threashold
-    acc_d = 0.0
-    acc_g = 0.0
-    for i in dt.I
-        # some buses may not have load or generation
-        d = i in keys(dt.D) ? dt.D[i] : 0.0
-        acc_d += d
-
-        g = i in keys(dt.G) ? dt.G[i] : 0.0
-        acc_g += g
-    end
-    avg_d = threashold * acc_d / dt.nb_I
-    avg_g = threashold * acc_g / dt.nb_I
-
-    circuits = []
-    for l in dt.nb_J + 1:dt.nb_J + dt.nb_K
-        if !(l in candidates)
-            continue
-        end
-        c = get_circuit(dt, l)
-        d_fr = c.fr in keys(dt.D) ? dt.D[c.fr] : 0.0
-        d_to = c.to in keys(dt.D) ? dt.D[c.to] : 0.0
-        g_fr = c.fr in keys(dt.G) ? dt.G[c.fr] : 0.0
-        g_to = c.to in keys(dt.G) ? dt.G[c.to] : 0.0
-        if isg(d_fr, avg_d) || isg(d_to, avg_d) || 
-           isg(g_fr, avg_g) || isg(g_to, avg_g)
-            # @show "Rl node ", l
-            push!(circuits, l)
-            delete!(candidates, l)
-        end
-    end
-    @info length(circuits)
-    return circuits
-end
-
-# Algorithm:
-# 1. Build the compact model
-# 2. Solve the compact model with all candidate circuits to obtain g
-# 3. Remove all candidate circuits and solve the linear system
-# 4. Add the λ% circuits that violate the most the flow
-#   4.1. Keep track of the circuits included
-
-"""
-    rm_circuits(model, indices, gamma_star = 1e-8)
-Remove circuits from the model by setting the diagonal terms of the susceptance
-to a small value.
+    rm_lines(model, lines, gamma_star = 1e-8)
+Remove lines from the model by setting the diagonal terms of the susceptance to 
+a small value.
 
 Returns the new β matrix.
 """
-function rm_circuits(md, circuits, gamma_star = 1e-8)
-    for l in circuits
+function rm_lines(md::CompactModel,  
+                  lines::Vector{Int64}, 
+                  gamma_star::Float64 = 1e-8)
+    for l in lines
         md.Gamma[l, l] = gamma_star
     end
 
@@ -340,12 +242,14 @@ function rm_circuits(md, circuits, gamma_star = 1e-8)
 end
 
 """
-    add_circuits(data, model, indices)
-Insert circuits in the model by setting the diagonal terms of the susceptance.
+    add_lines(data, model, lines)
+Insert lines in the model by setting the diagonal terms of the susceptance.
 """
-function add_circuits(dt, md, indices)
-    for l in indices
-        md.Gamma[l, l] = dt.gamma[l]
+function add_lines(inst::Instance, 
+                   md::CompactModel, 
+                   lines::Vector{Int64})
+    for l in lines
+        md.Gamma[l, l] = inst.gamma[l]
     end
 
     B = md.S' * md.Gamma * md.S
@@ -355,16 +259,19 @@ function add_circuits(dt, md, indices)
 end
 
 """
-    comp_viols(dt, md, bus_inj)
+    comp_viols(inst, md, bus_inj)
 Compute the violations of the flow constraints.
 
 Returns a sorted list of tuples with the line index and the violation.
 """
-function comp_viols(dt, md, beta, bus_inj)
+function comp_viols(inst::Instance, 
+                    md::CompactModel, 
+                    beta::Matrix{Float64}, 
+                    bus_inj::Vector{<:FloatVarRef})
     f = beta * bus_inj
-    viols = Array{Tuple{Int, Float64}}(undef, 0)
+    viols = Vector{Tuple{Int64, Float64}}(undef, 0)
     for l in 1:md.m
-        v = abs(f[l]) - dt.f_bar[l]
+        v = abs(f[l]) - inst.f_bar[l]
         if isg(v, 0.1)
             push!(viols, (l, v))
         end
@@ -374,31 +281,34 @@ function comp_viols(dt, md, beta, bus_inj)
 end
 
 """
-    select_circuits(data, viols, candidates)
-Choose the λ circuits to add to the model, considering the available candidates.
+    select_lines(data, viols, candidates)
+Choose the λ lines to add to the model, considering the available candidates.
 """
-function select_circuits(dt, candidates, viols, lambda)
+function select_lines(inst::Instance, 
+                      candidates::Set{Int}, 
+                      viols::Vector{Tuple{Int64, Float64}}, 
+                      lambda::Float64)
     if !iseq(lambda, 1.0)
         sort!(viols, by=x->x[2], rev=true)
-        nb_circuits = round(Int, lambda * length(viols))
+        nb_lines = round(Int, lambda * length(viols))
     else
-        nb_circuits = length(viols)
+        nb_lines = length(viols)
     end
     # print("max_nb_circ:", nb_circuits)
-    circuits = []
-    for i in 1:nb_circuits
+    lines = []
+    for i in 1:nb_lines
         l = viols[i][1]
-        if l <= dt.nb_J
+        if l <= inst.nb_J
             # Shift to the candidates in case l is an existing circuit
-            l = dt.nb_J + 1 + nb_candidates * (l - 1)
+            l = inst.nb_J + 1 + nb_candidates * (l - 1)
             for k in l:l + nb_candidates - 1
                 if k in candidates
-                    push!(circuits, k)
+                    push!(lines, k)
                     delete!(candidates, k)
                     break # Add a single candidate at a time
                 end
             end
         end
     end
-    return circuits
+    return lines
 end

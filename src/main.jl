@@ -1,48 +1,39 @@
-# experiments
-const gen_max_add_slack_percent = 0.15
-const gen_slack_percent = 0.1
-const mult_load = 2.0
-const nb_candidates = 2
-const max_rand = 100
-const solver_time_limit = 600
-const debugging_level = 1
-
 function run2(instance)
     dir = "TransExpanProblem.jl"
     logfile = "$dir/log.txt"
 
     rng = Random.MersenneTwister(123)
 
-    dt = read_data(instance, rng)
+    inst = read_instance(instance, rng)
 
-    # md = build_compact(dt)
+    # md = build_compact(inst)
 
-    build_time = @elapsed (model_dt = build_model(dt, true, logfile))
+    build_time = @elapsed (model_dt = build_model(inst, true, logfile))
     @warn "Build time $build_time"
 
     @warn "Add circuits heuristic"
-    start, ratio1, ratio2 = add_circuits!(dt)
+    start, ratio1, ratio2 = build_solution!(inst)
     @warn "Ratios: $ratio1 $ratio2"
 
     @warn "Mip starting the model"
-    mip_start!(dt, model_dt, start)
+    mip_start!(inst, model_dt, start)
 
     @warn "Solving the model"
     solve!(model_dt, true)
 end
 
-function update_bounds_g(dt, model_dt, is_fix_en)
+function update_bounds_g(inst, model_dt, is_fix_en)
     # Fixing the generation to observe the changes in the angles, only
     g = Dict{Int, Any}()
-    for i in dt.I
-        if i in keys(dt.G)
+    for i in inst.I
+        if i in keys(inst.G)
             g[i] = value(model_dt.g[i])
         end
     end
-    for i in dt.I
-        if i in keys(dt.G)
+    for i in inst.I
+        if i in keys(inst.G)
             new_lb = 0.0
-            new_ub = dt.G[i]
+            new_ub = inst.G[i]
             if is_fix_en
                 new_lb = g[i]
                 new_ub = g[i]
@@ -59,9 +50,9 @@ function run(instance)
 
     rng = Random.MersenneTwister(123)
 
-    dt = read_data(instance, rng)
+    inst = read_instance(instance, rng)
 
-    model_dt = build_model(dt, true, logfile, true)
+    model_dt = build_model(inst, true, logfile, true)
 
     # Generate first solution
     optimize!(model_dt.model)
@@ -69,23 +60,23 @@ function run(instance)
     theta = value.(model_dt.theta)
 
     # Fix the bounds to g
-    update_bounds_g(dt, model_dt, true)
+    update_bounds_g(inst, model_dt, true)
     # For the changes to take effect
     optimize!(model_dt.model)
 
     # for j in 1:dt.nb_J+dt.nb_K
-    #     circ = get_circuit(dt, j)
+    #     circ = get_circuit(inst, j)
     #     println("$(j) $(circ) $(value(model_dt.Delta_theta[j]))")
     # end
 
-    draw_solution(dt, model_dt, f, theta, [], "sol0")
+    draw_solution(inst, model_dt, f, theta, [], "sol0")
 
     rm = []
     counter = 0
     while true
         println("Candidates:")
-        for k in dt.nb_J+1:dt.nb_J+dt.nb_K
-            c = get_circuit(dt, k)
+        for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+            c = get_circuit(inst, k)
             println(k, '-', c.fr, ':', c.to)
         end
         println("Rm:", rm)
@@ -100,13 +91,13 @@ function run(instance)
         elseif k == -1
             println("Compute new values for g")
             # Release the bounds
-            update_bounds_g(dt, model_dt, false)
+            update_bounds_g(inst, model_dt, false)
             optimize!(model_dt.model)
             f = value.(model_dt.f)
             theta = value.(model_dt.theta)
-            draw_solution(dt, model_dt, f, theta, [], "sol_opt$(counter)")
+            draw_solution(inst, model_dt, f, theta, [], "sol_opt$(counter)")
             # Fix the generation bounds to the new values
-            update_bounds_g(dt, model_dt, true)
+            update_bounds_g(inst, model_dt, true)
             continue
         end
 
@@ -121,7 +112,7 @@ function run(instance)
         theta = value.(model_dt.theta)
 
         counter += 1
-        draw_solution(dt, model_dt, f, theta, [], "sol$(counter)")
+        draw_solution(inst, model_dt, f, theta, [], "sol$(counter)")
     end
 end
 
@@ -152,10 +143,11 @@ function run_all()
     skip = [
         "pglib_opf_case162_ieee_dtc.txt", # Compact model infeasible
         "pglib_opf_case1803_snem.txt", # Zero reactance
-        "pglib_opf_case3375wp_k.txt" # Singular exception
-        # Memory problems
+        "pglib_opf_case3375wp_k.txt", # Singular exception
+        "pglib_opf_case4661_sdet.txt" # Compact model infeasible
+        # Memory consumption problems
     ]
-    for file in files
+    for file in files[1:1]
         if file in skip
             println("Skipping instance $file")
             continue
@@ -164,35 +156,35 @@ function run_all()
 
         inputfile = "$dir/input3/$file"
         logfile = "$dir/$dir_log/$file"
-        dt = read_data(inputfile, rng)
+        inst = read_instance(inputfile, rng)
         model_dt = nothing
         build_time = 0.0
 
-        try
-            build_time = @elapsed (model_dt = 
-                                        build_model(dt, true, logfile, is_mip_en))
-            
-            heur_time = 0.0
-            ratio1 = 0.0
-            ratio2 = 0.0
+        # try
+        build_time = @elapsed (model_dt = 
+                                    build_model(inst, true, logfile, is_mip_en))
+        
+        heur_time = 0.0
+        ratio1 = 0.0
+        ratio2 = 0.0
 
-            heur_time = @elapsed((start, 
-                                ratio1, 
-                                ratio2) = add_circuits!(dt))
-            println("Mip starting the model")
-            mip_start!(dt, model_dt, start)
+        heur_time = @elapsed((start, 
+                              ratio1, 
+                              ratio2) = build_solution!(inst))
+        println("Mip starting the model")
+        mip_start!(inst, model_dt, start)
 
-            results = solve!(model_dt, true)
-            results = (model_dt.dem_gen_ratio, results..., 
-                        heur_time, ratio1, ratio2)
-            log_instance(outputfile, file, dt, build_time, 
-                            model_dt.is_xi_req, results)
-        catch e
-            @warn e
-            log_instance(outputfile, 
-                         "<s>" * file * "</s>", 
-                         dt, build_time, model_dt.is_xi_req,
-                         ntuple(v->'-', 12))
-        end
+        results = solve!(model_dt, true)
+        results = (model_dt.dem_gen_ratio, results..., 
+                   heur_time, ratio1, ratio2)
+        log_instance(outputfile, file, inst, build_time, 
+                     model_dt.is_xi_req, results)
+        # catch e
+        #     @warn e
+        #     log_instance(outputfile, 
+        #                  "<s>" * file * "</s>", 
+        #                  inst, build_time, model_dt.is_xi_req,
+        #                  ntuple(v->'-', 12))
+        # end
     end
 end

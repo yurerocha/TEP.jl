@@ -1,21 +1,6 @@
-# Gurobi MAXINT value
-const MAXINT = 2_000_000_000
-const inf = 1e6
-
-struct ModelData 
-    model
-    x
-    f
-    g
-    theta
-    Delta_theta
-    dem_gen_ratio
-    is_xi_req
-end
-
 """
     build_model(
-        data,
+        inst,
         is_skl_en, # enable second kirchhoff law
         logfile, # gurobi log file
         is_mip_en # enable mip version (with binary decision variables)
@@ -23,10 +8,10 @@ end
 
 Build model.
 """
-function build_model(data,
-                     is_skl_en=true, 
-                     logfile="TransExpanProblem.jl/log/log.txt",
-                     is_mip_en=true)
+function build_model(inst::Instance,
+                     is_skl_en::Bool = true, 
+                     logfile::String = "TransExpanProblem.jl/log/log.txt",
+                     is_mip_en::Bool = true)
     md = Model(Gurobi.Optimizer)
     set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
     set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
@@ -34,40 +19,40 @@ function build_model(data,
     
     x = Dict{Int, VariableRef}()
     if is_mip_en
-        for k in data.nb_J+1:data.nb_J+data.nb_K
-            x[k] = @variable(md, binary=true, base_name="x")
+        for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+            x[k] = @variable(md, binary = true, base_name = "x")
             # Forcing every candidate to be built
             # set_lower_bound(x[k], 1.0)
         end
     end
 
     # flow variables
-    f = @variable(md, f[l=1:(data.nb_J + data.nb_K)], base_name="f")
+    f = @variable(md, f[l = 1:(inst.nb_J + inst.nb_K)], base_name = "f")
 
     # angle variables
-    theta = @variable(md, theta[i=data.I], base_name="theta")
-    Delta_theta = @variable(md, Delta_theta[l=1:data.nb_J+data.nb_K], 
-                            base_name="Delta_theta")
-    gen = Dict{Int, Any}()
-    for i in data.I
+    theta = @variable(md, theta[i = inst.I], base_name = "theta")
+    Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
+                            base_name = "Delta_theta")
+    gen = Dict{Int, VariableRef}()
+    for i in inst.I
         # some buses may not have load or generation
-        if i in keys(data.G)
-            g_max =  data.G[i]
+        if i in keys(inst.G)
+            g_max = inst.G[i]
             if isl(g_max, 0.0)
                 @show g_max, i
             end
-            gen[i] = @variable(md, lower_bound=0, 
-                               upper_bound=g_max, 
-                               base_name="gen")
+            gen[i] = @variable(md, lower_bound = 0, 
+                               upper_bound = g_max, 
+                               base_name = "gen")
         end
     end
 
     dem_sum = 0.0
     gen_sum = 0.0
-    for i in data.I
+    for i in inst.I
         # some buses may not have load or generation
-        d = i in keys(data.D) ? data.D[i] : 0.0
-        g = i in keys(data.G) ? data.G[i] : 0.0
+        d = i in keys(inst.D) ? inst.D[i] : 0.0
+        g = i in keys(inst.G) ? inst.G[i] : 0.0
 
         dem_sum += d
         gen_sum += g
@@ -77,80 +62,84 @@ function build_model(data,
 
     # first Kirccohff law
     xi_vars = AffExpr(0.0)
-    for i in data.I
+    for i in inst.I
         # incidence matrix
-        e = comp_incidence_matrix(data, f, i)
+        e = comp_incidence_matrix(inst, f, i)
         # some buses may not have load or generation
-        d = i in keys(data.D) ? data.D[i] : 0.0
-        g = i in keys(data.G) ? gen[i] : 0.0
+        d = i in keys(inst.D) ? inst.D[i] : 0.0
+        g = i in keys(inst.G) ? gen[i] : 0.0
 
         xi = 0
         # there is more demand than the generators can provide
         if is_xi_req
-            xi = @variable(md, lower_bound=0, base_name="xi$i")
+            xi = @variable(md, lower_bound = 0, base_name = "xi$i")
             # y_vars -= penalty*y
             # modifies xi_vars in place
             add_to_expression!(xi_vars, penalty, xi)
         end
-        @constraint(md, e + g + xi == d, base_name="fkl$i")
+        @constraint(md, e + g + xi == d, base_name = "fkl$i")
     end
 
     if is_skl_en
         # second Kirchhoff law
         # existing circuits
-        for j in 1:data.nb_J
+        for j in 1:inst.nb_J
             @constraint(md, Delta_theta[j] == 
-                        theta[data.J[j].fr] - theta[data.J[j].to])
-            @constraint(md, f[j] == data.gamma[j] * Delta_theta[j],
-                        base_name="ol$j")
-            # @constraint(md, f[t, j] == data.gamma[j] * 
-            #             (theta[t, data.J[j].fr] - theta[t, data.J[j].to]))
+                        theta[inst.J[j].fr] - theta[inst.J[j].to])
+            @constraint(md, f[j] == inst.gamma[j] * Delta_theta[j],
+                        base_name = "ol$j")
+            # @constraint(md, f[t, j] == inst.gamma[j] * 
+            #             (theta[t, inst.J[j].fr] - theta[t, inst.J[j].to]))
         end
         if is_mip_en
             # candidate circuits
-            for k in data.nb_J+1:data.nb_J+data.nb_K
+            for k in inst.nb_J+1:inst.nb_J+inst.nb_K
                 @constraint(md, Delta_theta[k] == 
-                            theta[data.K[k - data.nb_J].fr] - 
-                            theta[data.K[k - data.nb_J].to])
-                y = f[k] - data.gamma[k] * Delta_theta[k]
-                # y = f[t, k] - data.gamma[k] * 
-                #     (theta[t, data.K[k - data.nb_J].fr] - 
-                #     theta[t, data.K[k - data.nb_J].to])
-                bigM = comp_bigM(data, k)
+                            theta[inst.K[k - inst.nb_J].fr] - 
+                            theta[inst.K[k - inst.nb_J].to])
+                y = f[k] - inst.gamma[k] * Delta_theta[k]
+                # y = f[t, k] - inst.gamma[k] * 
+                #     (theta[t, inst.K[k - inst.nb_J].fr] - 
+                #     theta[t, inst.K[k - inst.nb_J].to])
+                bigM = comp_bigM(inst, k)
 
-                @constraint(md, y <= bigM * (1 - x[k]), base_name="ol$k")
-                @constraint(md, -y <= bigM * (1 - x[k]), base_name="ol$k")
+                @constraint(md, y <= bigM * (1 - x[k]), base_name = "ol$k")
+                @constraint(md, -y <= bigM * (1 - x[k]), base_name = "ol$k")
             end
         end
     end
 
     # flow limits
     # existing circuits
-    for j in 1:data.nb_J
-        @constraint(md, f[j] <= data.f_bar[j])
-        @constraint(md, -f[j] <= data.f_bar[j])
+    for j in 1:inst.nb_J
+        @constraint(md, f[j] <= inst.f_bar[j])
+        @constraint(md, -f[j] <= inst.f_bar[j])
     end
     if is_mip_en
         # candidate circuits
-        for k in data.nb_J+1:data.nb_J+data.nb_K
-            @constraint(md, f[k] <= data.f_bar[k] * x[k])
-            @constraint(md, -f[k] <= data.f_bar[k] * x[k])
+        for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+            @constraint(md, f[k] <= inst.f_bar[k] * x[k])
+            @constraint(md, -f[k] <= inst.f_bar[k] * x[k])
         end
     end
 
     if is_mip_en
         # objective function
         e = xi_vars
-        for k in data.nb_J+1:data.nb_J+data.nb_K
-            e += data.cost[k] * x[k]
+        for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+            e += inst.cost[k] * x[k]
         end
         @objective(md, Min, e)
     end
 
-    return ModelData(md, x, f, gen, theta, Delta_theta, dem_sum / gen_sum, is_xi_req)
+    return ModelData(md, x, f, 
+                     gen, theta, 
+                     Delta_theta, 
+                     dem_sum / gen_sum, 
+                     is_xi_req)
 end
 
-function solve!(model_data, is_mip_en=true)
+function solve!(model_data::ModelData, is_mip_en::Bool = true)
     model = model_data.model
 
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
@@ -219,14 +208,14 @@ function solve!(model_data, is_mip_en=true)
 end
 
 """
-    mipstart(data, model, x)
+    mipstart(inst, model, x)
 Mip starts all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
 """
-function mipstart!(data, model_data)
+function mipstart!(inst::Instance, model_data::ModelData)
     model = model_data.model
     x = model_data.x
     @warn "MIP start"
-    for k in data.nb_J+1:data.nb_J+data.nb_K
+    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         set_start_value(x[k], 1)
     end
     # Limits the number of feasible MIP solutions found. Optimization returns 
@@ -238,98 +227,4 @@ function mipstart!(data, model_data)
 
     # set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
     return termination_status(model)
-end
-
-"""
-    heuristic(data, model, x)
-"""
-function heuristic!(data, model, x)
-    @warn "Heuristic"
-    cost = Array{Tuple{Int, Int, Float64}}(undef, data.nb_K)
-    i = 1
-    for k in data.nb_J+1:data.nb_J+data.nb_K
-        cost[i] = (k, data.cost[k])
-        i += 1
-    end
-    set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
-
-    # sort the candidate circuits in non-ascending order by cost
-    sort!(cost, by=x->x[2], rev=true)
-    for c in cost
-        # rm candidate circuit from solution
-        t, k = c[1], c[2]
-        @warn "Rm candidate circuit c($t, $k)"
-        set_lower_bound(x[t, k], 0)
-        set_upper_bound(x[t, k], 0)
-        optimize!(model)
-        status = termination_status(model)
-        # optimize and check the feasibility
-        # if not feasible, add the candidate circuit back to the solution
-        if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
-            set_lower_bound(x[t, k], 0)
-            set_upper_bound(x[t, k], 1)
-            @warn "Fail to rm candidate circuit c($t, $k)"
-        end
-    end
-    set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
-end
-
-"""
-
-Testar: pglib_opf_case60_c.txt
-"""
-function check_idle_candidate_circuits!(data, model_data, free_buses)
-    x = model_data.x
-    f = Array{Float64}(undef, data.nb_K)
-    k = data.nb_J + 1
-    while k <= data.nb_J + data.nb_K
-        for _ in 1:nb_candidates
-            f[k - data.nb_J] = value(model_data.f[k])
-            k += 1
-        end
-    end
-
-    k = data.nb_J + 1
-    while k <= data.nb_J + data.nb_K
-        acc = 0.0
-        for l in k:k + nb_candidates - 1
-            acc += f[l - data.nb_J]
-        end
-
-        if iseq(acc, 0.0)
-            # all candidate circuits are idle and can be removed
-            @info "acc = 0"
-            for l in k:k + nb_candidates - 1
-                println("\trm ", l)
-                set_lower_bound(x[l], 0)
-                set_upper_bound(x[l], 0)
-            end
-        else
-            l_fit = 0
-            for l in k:k + nb_candidates - 1
-                # the flow fits in a single candidate circuit
-                c = data.K[l - data.nb_J]
-                if isl(abs(acc), data.f_bar[l]) && 
-                    (c.fr in free_buses || c.to in free_buses)
-                    l_fit = l
-                    break
-                end
-            end
-
-            if l_fit > 0
-                # the flow fits in a single candidate circuit
-                @info "fit", l_fit - data.nb_J, acc, data.f_bar[l_fit]
-                for l in k:k + nb_candidates - 1
-                    if l != l_fit
-                        c = data.K[l - data.nb_J]
-                        println("\trm ", l, " ", c.fr, ":", c.to) 
-                        set_lower_bound(x[l], 0)
-                        set_upper_bound(x[l], 0)
-                    end
-                end
-            end
-        end
-        k += nb_candidates
-    end
-    @show data.nb_J, data.nb_K
 end

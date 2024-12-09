@@ -1,16 +1,27 @@
-const eps = 1e-5
-const penalty = 1e6
-# const bigM = 1e10
+"""
+    isl(a::Float64, b::Float64)
 
-function isl(a, b)
+Compute if a is less than b.
+"""
+function isl(a::Float64, b::Float64)
     return a < b - eps
 end
 
-function isg(a, b)
+"""
+    isg(a::Float64, b::Float64)
+
+Compute if a is greater than b.
+"""
+function isg(a::Float64, b::Float64)
     return a > b + eps
 end
 
-function iseq(a, b)
+"""
+    isg(a::Float64, b::Float64)
+
+Compute if a is equal to b.
+"""
+function iseq(a::Float64, b::Float64)
     return abs(a - b) < eps
 end
 
@@ -19,11 +30,11 @@ end
 
 Return true if matrices A and B are equal.
 """
-function iseq(A::Matrix, B::Matrix)
+function iseq(A::Matrix{Float64}, B::Matrix{Float64})
     return norm(A - B) < eps
 end
 
-function get_nb(s, i)
+function get_nb(s::Vector{String}, i::Int64)
     return parse(Int, split(s[i], ":")[2])
 end
 
@@ -32,7 +43,7 @@ end
 
 Return the filename without the path and the extension.
 """
-function get_filename(input)
+function get_filename(input::String)
     e = split(input, "/")[end]
     return split(e, ".")[1]
 end
@@ -42,60 +53,67 @@ end
 
 Compute the susceptance of a circuit.
 """
-function comp_gamma(x, r=0.0)
+function comp_gamma(x::Float64, r::Float64 = 0.0)
     return x / (x^2 + r^2)
 end
 
 """
-    get_circuit(data,
-                l)
+    get_circuit(inst, l)
 
 Return the circuit at position l.
 """
-function get_circuit(dt, l)
-    if l <= dt.nb_J
-        return dt.J[l]
+function get_circuit(inst::Instance, l::Int64)
+    if l <= inst.nb_J
+        return inst.J[l]
     else
-        return dt.K[l - dt.nb_J]
+        return inst.K[l - inst.nb_J]
     end
 end
 
-function get_cand(dt, l)
-    for i in 1:dt.nb_K
-        if dt.K[i].fr == l.fr && dt.K[i].to == l.to
+function get_cand(inst::Instance, l::Int64)
+    for i in 1:inst.nb_K
+        if inst.K[i].fr == l.fr && inst.K[i].to == l.to
             return i
         end
     end
 end
 
 """
-    comp_incidence_matrix(data, f, t, i)
+    comp_incidence_matrix(inst, f, t, i)
 
 Compute incidence matrix with existing and candidate circuits.
 """
-function comp_incidence_matrix(data, f, i)
+function comp_incidence_matrix(inst::Instance, f::Vector{VariableRef}, i::Int64)
     e = 0
-    for j in 1:data.nb_J
-        circ = data.J[j]
+    for j in 1:inst.nb_J
+        circ = inst.J[j]
         if circ.to == i
             e += f[j]
         elseif circ.fr == i
             e -= f[j]
         end
     end
-    for k in 1:data.nb_K
-        circ = data.K[k]
+    for k in 1:inst.nb_K
+        circ = inst.K[k]
         if circ.to == i
-            e += f[data.nb_J + k]
+            e += f[inst.nb_J + k]
         elseif circ.fr == i
-            e -= f[data.nb_J + k]
+            e -= f[inst.nb_J + k]
         end
     end
     return e
 end
 
-function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line, 
-                           nb_circs, is_cand_en=false, rng=Random.default_rng())
+function populate_circuits(I::Set{Int}, 
+                           circuits::Vector{Circuit}, 
+                           gamma::Vector{Float64}, 
+                           f_bar::Vector{Float64}, 
+                           cost::Vector{Float64}, 
+                           s::Vector{String}, 
+                           nb_line::Int64, 
+                           nb_circs::Int64, 
+                           is_cand_en::Bool = false, 
+                           rng = Random.default_rng())
     for i in nb_line:nb_line+nb_circs-1
         d = split(s[i])
         circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
@@ -130,13 +148,13 @@ function populate_circuits(I, circuits, gamma, f_bar, cost, s, nb_line,
     end
 end
 
-function log(outputfile, str)
+function log(outputfile::String, str::String)
     open(outputfile, "a") do f
         write(f, str)
     end
 end
 
-function log_header(outputfile)
+function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D > G | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
@@ -146,12 +164,17 @@ function log_header(outputfile)
 end
 
 """
-    log_instance(outputfile, instance, data, build_time, is_xi_req, results)
+    log_instance(outputfile, instance, inst, build_time, is_xi_req, results)
 """
-function log_instance(outputfile, inst, dt, build_time, is_xi_req, results)
-    N = dt.nb_I
-    L = (dt.nb_K + dt.nb_J)
-    s = "| $inst | $N | $L | $(round(L / N, digits=2)) |" * 
+function log_instance(outputfile::String, 
+                      inst_name::String, 
+                      inst::Instance, 
+                      build_time::Float64, 
+                      is_xi_req::Bool, 
+                      results::Tuple)
+    N = inst.nb_I
+    L = (inst.nb_K + inst.nb_J)
+    s = "| $inst_name | $N | $L | $(round(L / N, digits=2)) |" * 
         " $(round(build_time, digits=2)) | $(Int(is_xi_req)) |"
     for r in results
         if typeof(r) == Float64
@@ -167,7 +190,7 @@ function log_instance(outputfile, inst, dt, build_time, is_xi_req, results)
 end
 
 """
-    comp_bigM(data)
+    comp_bigM(inst)
 
 Compute the big-M value for the model. 
 
@@ -175,13 +198,13 @@ Compute the big-M value for the model.
 The big-M is computed as discussed in Ghita's thesis, as there is at least one
 existing line conecting every two buses.
 """
-function comp_bigM(data, k)
+function comp_bigM(inst::Instance, k::Int64)
     bigM = 1000000
-    for (j, circuit) in enumerate(data.J)
-        if circuit.fr == data.K[k - data.nb_J].fr && 
-           circuit.to == data.K[k - data.nb_J].to
-            tmp = data.gamma[k] * 
-                  (data.f_bar[j] / data.gamma[j])
+    for (j, circuit) in enumerate(inst.J)
+        if circuit.fr == inst.K[k - inst.nb_J].fr && 
+           circuit.to == inst.K[k - inst.nb_J].to
+            tmp = inst.gamma[k] * 
+                  (inst.f_bar[j] / inst.gamma[j])
             bigM = min(bigM, tmp)
         end
     end
@@ -194,7 +217,7 @@ end
 
 Check if the matrix is the identity matrix.
 """
-function is_one(I)
+function is_one(I::Matrix{Float64})
     _, n = size(I)
     for i in 1:n, j in 1:n
         if i == j
@@ -209,15 +232,18 @@ function is_one(I)
 end
 
 """
-    detect_cycles(data, model, is_drawing_en, filename="graph")
+    detect_cycles(inst, model, is_drawing_en, filename="graph")
 
 Detect cycles in the graph and return the free buses (those outside cycles).
 """
-function detect_cycles(dt, md, is_drawing_en=true, filename="graph")
+function detect_cycles(inst::Instance, 
+                       md::ModelData, 
+                       is_drawing_en::Bool = true, 
+                       filename::String = "graph")
     # TODO: Add "demand - generation" to the vertices.
     @info "Detect cycles"
     elist = []
-    for c in dt.J
+    for c in inst.J
         push!(elist, (c.fr, c.to))
     end
     unique!(elist)
@@ -232,7 +258,7 @@ function detect_cycles(dt, md, is_drawing_en=true, filename="graph")
     # c = simplecycles_limited_length(g, 10, 10)
 
     if is_drawing_en
-        # vertices = collect(dt.I)
+        # vertices = collect(inst.I)
         # sort!(vertices)
         draw_cycles(dt, md, elist, cycles, filename)
         @info "Done drawing graph"
@@ -246,18 +272,22 @@ function detect_cycles(dt, md, is_drawing_en=true, filename="graph")
         end
     end
 
-    # free_buses = setdiff(dt.I, busy_buses)
+    # free_buses = setdiff(inst.I, busy_buses)
     # @info "Free buses: ", free_buses
     return cycles, buses_per_cycle
 end
 
 """
-    draw_cycles(data, model, graph, cycles, filename)
+    draw_cycles(inst, model, graph, cycles, filename)
 """
-function draw_cycles(dt, md, elist, cycles, filename)
+function draw_cycles(inst::Instance, 
+                     md::ModelData, 
+                     elist::Vector{Tuple{Int64, Int64}}, 
+                     cycles::Vector{Vector{Int64}}, 
+                     filename::String)
     g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
     flows = Dict{Circuit, Float64}()
-    for l in 1:dt.nb_J+dt.nb_K
+    for l in 1:inst.nb_J+inst.nb_K
         c = get_circuit(dt, l)
         if c in keys(flows)
             flows[c] += value(md.f[l])
@@ -265,8 +295,8 @@ function draw_cycles(dt, md, elist, cycles, filename)
             flows[c] = value(md.f[l])
         end
     end
-    vertices = [round(Int, value(md.g[i]) - (i in keys(dt.D) ? dt.D[i] : 0.0))
-                for i in 1:dt.nb_I]
+    vertices = [round(Int, value(md.g[i]) - 
+                (i in keys(inst.D) ? inst.D[i] : 0.0)) for i in 1:inst.nb_I]
     edgeweights = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
     # Generate n maximally distinguishable colors in LCHab space.
     vertexfillc = distinguishable_colors(nv(g), colorant"blue")
@@ -309,16 +339,20 @@ function draw_cycles(dt, md, elist, cycles, filename)
 end
 
 """
-    draw_solution(data, model, flows, violations, filename="solution")
+    draw_solution(inst, model, flows, violations, filename="solution")
 
 Draw the graph of a solution.
 
 Each edge is labeled with the flow value and each vertex is labeled with
 "generation - demand".
 """
-function draw_solution(dt, md, f, viols=[], filename="solution")
+function draw_solution(inst::Instance, 
+                       md::ModelData, 
+                       f::Vector{Float64}, 
+                       viols::Vector{Float64} = [], 
+                       filename::String = "solution")
     flows = Dict{Circuit, Float64}()
-    for l in 1:dt.nb_J + dt.nb_K
+    for l in 1:inst.nb_J + inst.nb_K
         c = get_circuit(dt, l)
         if c in keys(flows)
             flows[c] += value(f[l])
@@ -327,7 +361,7 @@ function draw_solution(dt, md, f, viols=[], filename="solution")
         end
     end
     elist = []
-    for l in 1:dt.nb_J + dt.nb_K
+    for l in 1:inst.nb_J + inst.nb_K
         c = get_circuit(dt, l)
         push!(elist, (c.fr, c.to))
     end
@@ -345,15 +379,15 @@ function draw_solution(dt, md, f, viols=[], filename="solution")
         end
     end
 
-    delta = [round(Int, (i in keys(md.g) ? value(md.g[i]) : 0.0) - (i in keys(dt.D) ? dt.D[i] : 0.0))
-             for i in 1:dt.nb_I]
+    delta = [round(Int, (i in keys(md.g) ? value(md.g[i]) : 0.0) - 
+             (i in keys(inst.D) ? inst.D[i] : 0.0)) for i in 1:inst.nb_I]
     edgelabels = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
     # Generate n maximally distinguishable colors in LCHab space.
     # vertexfillc = distinguishable_colors(nv(g), colorant"blue")
 
     vertexfillc = Array{Colorant}(undef, nv(g))
     vertices = Array{String}(undef, nv(g))
-    I = sort(collect(dt.I))
+    I = sort(collect(inst.I))
     @show length(I), length(delta)
     vertexshapesizes = []
     for i in eachindex(delta)
