@@ -178,7 +178,8 @@ Compute the nodal injections.
 function comp_bus_injections(d::Vector{Float64}, 
                              g::Vector{T}, 
                              is_xi_req::Bool, 
-                             xi::Vector{T}) where T <: FloatVarRef
+                             xi::Vector{S}) where 
+                                            {T <: FloatVarRef, S <: FloatVarRef}
     if is_xi_req
         return d - g - xi
     else

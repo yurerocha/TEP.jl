@@ -147,12 +147,14 @@ function run_all()
         "pglib_opf_case4661_sdet.txt" # Compact model infeasible
         # Memory consumption problems
     ]
-    for file in files[1:1]
+    counter = 0
+    for file in files
+        counter += 1
         if file in skip
-            println("Skipping instance $file")
+            println("Skipping instance $file nb $counter")
             continue
         end
-        println("Processing $file")
+        println("Processing $file nb $counter")
 
         inputfile = "$dir/input3/$file"
         logfile = "$dir/$dir_log/$file"

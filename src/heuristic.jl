@@ -295,7 +295,7 @@ function select_lines(inst::Instance,
         nb_lines = length(viols)
     end
     # print("max_nb_circ:", nb_circuits)
-    lines = []
+    lines = Vector{Int64}(undef, 0)
     for i in 1:nb_lines
         l = viols[i][1]
         if l <= inst.nb_J
