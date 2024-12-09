@@ -164,6 +164,7 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
 
     return Start(inserted_candidates, g, beta * bus_inj), 
            nb_inserted_first, 
+           length(inserted_candidates),
            100.0 - 100.0 * r1, 
            100.0 * r2
 end

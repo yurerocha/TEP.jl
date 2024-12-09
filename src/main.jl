@@ -148,7 +148,7 @@ function run_all()
         # Memory consumption problems
     ]
     counter = 0
-    for file in files
+    for file in files[1:30]
         counter += 1
         if file in skip
             println("Skipping instance $file nb $counter")
@@ -168,11 +168,13 @@ function run_all()
             
             heur_time = 0.0
             nb_inserted_first = 0
+            nb_inserted = 0
             ratio1 = 0.0
             ratio2 = 0.0
 
             heur_time = @elapsed((start, 
                                   nb_inserted_first,
+                                  nb_inserted,
                                   ratio1, 
                                   ratio2) = build_solution!(inst))
             println("Mip starting the model")
@@ -180,7 +182,7 @@ function run_all()
 
             results = solve!(model_dt, true)
             results = (model_dt.dem_gen_ratio, results..., 
-                       heur_time, nb_inserted_first, ratio1, ratio2)
+                       heur_time, nb_inserted_first, nb_inserted, ratio1, ratio2)
             log_instance(outputfile, file, inst, build_time, 
                          model_dt.is_xi_req, results)
         catch e
@@ -188,7 +190,7 @@ function run_all()
             log_instance(outputfile, 
                          "<s>" * file * "</s>", 
                          inst, build_time, model_dt.is_xi_req,
-                         ntuple(v->'-', 13))
+                         ntuple(v->'-', 14))
         end
     end
 end

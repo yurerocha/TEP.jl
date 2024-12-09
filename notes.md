@@ -68,3 +68,5 @@ Padronizar os = em chamadas de funções
 Para o mipstart, também setar os valores das variáveis de geração e os fluxos
 
 O modelo compacto consome muita memória.
+
+Também fornecer os thetas no mip start.

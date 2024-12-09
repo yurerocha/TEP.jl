@@ -158,8 +158,9 @@ function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D > G | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Objective | Gap (%) | Heur (s) | L it 1 | R1 (%) | R2 (%) | \n"
-    outstr *= "|:---"^19 * "| \n"
+              " Objective | Gap (%) | Heur (s) | Ins it 1 | Ins |" *
+              " R1 (%) | R2 (%) | \n"
+    outstr *= "|:---"^20 * "| \n"
     log(outputfile, outstr)
 end
 
