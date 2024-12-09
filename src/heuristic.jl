@@ -55,6 +55,7 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
     best_beta = beta
     # cycles, buses_per_cycle = detect_cycles(inst, md, false)
     is_bus_inj_updated = false
+    nb_inserted_first = 0
     for it in 1:50
         println("---------- It $it ----------")
 
@@ -75,6 +76,9 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
             acc_add += length(lines)
             r1 = viol / viol_init
             r2 = acc_add / inst.nb_K
+            if nb_inserted_first == 0
+                nb_inserted_first = length(lines)
+            end
         else
             # If the violation is increasing, then we have to remove the last 
             # inserted lines and decrease λ
@@ -159,7 +163,9 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
     end
 
     return Start(inserted_candidates, g, beta * bus_inj), 
-                 100.0 - 100.0 * r1, 100.0 * r2
+           nb_inserted_first, 
+           100.0 - 100.0 * r1, 
+           100.0 * r2
 end
 
 """

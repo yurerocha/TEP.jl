@@ -158,8 +158,8 @@ function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D > G | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Objective | Gap (%) | Heur (s) | R1 (%) | R2 (%) | \n"
-    outstr *= "|:---"^18 * "| \n"
+              " Objective | Gap (%) | Heur (s) | L it 1 | R1 (%) | R2 (%) | \n"
+    outstr *= "|:---"^19 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -193,7 +193,6 @@ end
     comp_bigM(inst)
 
 Compute the big-M value for the model. 
-
 
 The big-M is computed as discussed in Ghita's thesis, as there is at least one
 existing line conecting every two buses.
