@@ -59,4 +59,6 @@ struct ModelData
     Delta_theta::Vector{VariableRef}
     dem_gen_ratio::Float64
     is_xi_req::Bool
+    # lines_slack::Vector{VariableRef} # m x 1 vector of slack variables for 
+                                       # line flows
 end

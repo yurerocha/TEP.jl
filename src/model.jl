@@ -109,6 +109,12 @@ function build_model(inst::Instance,
         end
     end
 
+    # lines_slack = 
+    #              @variable(md, 
+    #                        lines_slack[k = inst.nb_J + 1:inst.nb_J + inst.nb_K], 
+    #                        lower_bound = 0.0,
+    #                        base_name = "lines_slack")
+
     # flow limits
     # existing circuits
     for j in 1:inst.nb_J
@@ -118,11 +124,36 @@ function build_model(inst::Instance,
     if is_mip_en
         # candidate circuits
         for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+            # @constraint(md, f[k] - inst.f_bar[k] * x[k] <= lines_slack[k])
+            # @constraint(md, -f[k] - inst.f_bar[k] * x[k] <= lines_slack[k])
             @constraint(md, f[k] <= inst.f_bar[k] * x[k])
             @constraint(md, -f[k] <= inst.f_bar[k] * x[k])
         end
     end
 
+    # The initial objective function is to minimize the slack variables
+    # @objective(md, Min, 
+    #            sum([lines_slack[k] 
+    #                 for k in inst.nb_J + 1:inst.nb_J + inst.nb_K]))
+    set_obj(inst, md, x, xi_vars, is_mip_en)
+
+    return ModelData(md, x, f, 
+                     gen, theta, 
+                     Delta_theta, 
+                     dem_sum / gen_sum, 
+                     is_xi_req)
+end
+
+"""
+    set_obj(inst, md, is_mip_en)
+
+Set the objective to minimize the costs of expanding the network.
+"""
+function set_obj(inst::Instance, 
+                 md::GenericModel,
+                 x::Dict{Int64, JuMP.VariableRef},
+                 xi_vars::AffExpr, 
+                 is_mip_en::Bool)
     if is_mip_en
         # objective function
         e = xi_vars
@@ -131,12 +162,6 @@ function build_model(inst::Instance,
         end
         @objective(md, Min, e)
     end
-
-    return ModelData(md, x, f, 
-                     gen, theta, 
-                     Delta_theta, 
-                     dem_sum / gen_sum, 
-                     is_xi_req)
 end
 
 function solve!(model_data::ModelData, is_mip_en::Bool = true)

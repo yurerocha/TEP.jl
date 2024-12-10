@@ -148,7 +148,7 @@ function run_all()
         # Memory consumption problems
     ]
     counter = 0
-    f = 21 # 22
+    f = 22 # 22
     for file in files[f:f]
         counter += 1
         if file in skip

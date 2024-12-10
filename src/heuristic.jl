@@ -55,7 +55,7 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
     lambda = 1.0
     best_beta = beta
     # cycles, buses_per_cycle = detect_cycles(inst, md, false)
-    is_bus_inj_updated = false
+    is_bus_inj_updated = true
     nb_inserted_first = 0
     for it in 1:50
         println("---------- It $it ----------")
@@ -178,17 +178,26 @@ end
 Mip start the model with the lines, generation, and flows of the start struct.
 """
 function mip_start!(inst::Instance, md::ModelData, start::Start)
-    for k in start.built_candidates
-        set_start_value(md.x[k], 1.0)
-        set_start_value(md.f[k], start.f[k])
-    end
-
-    for i in inst.I
-        # Some buses may not have load or generation
-        if i in keys(inst.G)
-            set_start_value(md.g[i], start.g[i])
+    # for k in start.built_candidates
+    #     set_start_value(md.x[k], 1.0)
+    #     set_start_value(md.f[k], start.f[k])
+    # end
+    set_attribute(md.model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
+    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+        if k in start.built_candidates
+            fix(md.x[k], 1.0)
+            # set_start_value(md.f[k], start.f[k])
+        else
+            fix(md.x[k], 0.0)
         end
     end
+
+    # for i in inst.I
+    #     # Some buses may not have load or generation
+    #     if i in keys(inst.G)
+    #         set_start_value(md.g[i], start.g[i])
+    #     end
+    # end
 end
 
 """
