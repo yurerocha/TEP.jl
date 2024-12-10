@@ -70,3 +70,7 @@ Para o mipstart, também setar os valores das variáveis de geração e os fluxo
 O modelo compacto consome muita memória.
 
 Também fornecer os thetas no mip start.
+
+Será que vale a tentar remover as restrições de fluxo inferior e superior,
+adicionando uma vriável?
+-Isso para a versão resolvida pelo Gurobi.

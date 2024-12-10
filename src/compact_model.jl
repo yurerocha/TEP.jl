@@ -212,11 +212,13 @@ function update_flow_constrs!(inst::Instance,
     # -s[l] - beta * g <= inst.f_bar[l] - beta * d
     
     for l in 1:md.m
-        for i in 1:md.n
+        # for i in 1:md.n
             # Update the lhs g coefficients
-            set_normalized_coefficient(md.f_lower_cons[l], md.g[i], beta[l, i])
-            set_normalized_coefficient(md.f_upper_cons[l], md.g[i], -beta[l, i])
-        end
+            set_normalized_coefficient([md.f_lower_cons[l] for i in 1:md.n], 
+                                       md.g, beta[l, :])
+            set_normalized_coefficient([md.f_upper_cons[l] for i in 1:md.n], 
+                                       md.g, -beta[l, :])
+        # end
         # Update the rhs
         set_normalized_rhs(md.f_lower_cons[l], 
                            inst.f_bar[l] + beta[l, :]' * md.d)
