@@ -14,6 +14,8 @@ struct CompactModel
     B_inv::Matrix{Float64} # n x n inverse of matrix B
     beta::Matrix{Float64} # m x m matrix, where β = ΓSB⁻¹
     f::Vector{AffExpr} # m x 1 vector of line flows
+    lines_slack::Vector{VariableRef} # m x 1 vector of slack variables for line 
+                                     # flows
     f_lower_cons::Vector{ConstraintRef} # m x 1 vector of line flow constraints
     f_upper_cons::Vector{ConstraintRef} # m x 1 vector of line flow constraints
 end

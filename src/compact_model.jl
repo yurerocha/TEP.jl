@@ -111,19 +111,23 @@ function build_compact(inst::Instance, logfile::String = "log_compact.txt")
     f = beta * bus_inj
 
     # Flow lower and upper bounds constra_ints
-    f_lower_cons, f_upper_cons, _ = flow_cons(inst, md, 
-                                              inst.nb_J + inst.nb_K, 
-                                              f)
+    line_slacks, e, f_lower_cons, f_upper_cons = 
+                                   flow_cons(inst, md, inst.nb_J + inst.nb_K, f)
 
     # Load balance constraints
     e_t = ones(inst.nb_I)'
     gl_lhs = comp_gen_balance(g, is_xi_req, xi)
     @constraint(md, e_t * gl_lhs == e_t * d, base_name = "load_balance")
 
+    # The objective is to minize slacks in the line flows
+    # By constrolling the bounds on the slacks, we can simulate a model with and
+    # without them
+    @objective(md, Min, e)
+
     return CompactModel(md, inst.nb_J + inst.nb_K, 
                         inst.nb_I, S, Gamma, d, g, 
                         is_xi_req, xi, B, B_inv, beta, 
-                        f, f_lower_cons, f_upper_cons)
+                        f, line_slacks, f_lower_cons, f_upper_cons)
 end
 
 """
@@ -135,39 +139,90 @@ Slacks in the line allow for the capacity to be exceeded with penalization.
 function flow_cons(inst::Instance, 
                    md::GenericModel, 
                    m::Int64, 
-                   f::Vector{AffExpr}, 
-                   is_slack_en::Bool = false)
-    s = Array{VariableRef}(undef, 0)
-    f_lower_cons = Array{ConstraintRef}(undef, m)
-    f_upper_cons = Array{ConstraintRef}(undef, m)
-
-    if is_slack_en
-        s = Array{VariableRef}(undef, m)
-    end
+                   f::Vector{AffExpr})
+    s = Vector{VariableRef}(undef, m)
+    # s = @variable(md, 
+    #               lines_slack[l = 1:m], 
+    #               lower_bound = 0.0, 
+    #               upper_bound = 0.0)
+    f_lower_cons = Vector{ConstraintRef}(undef, m)
+    f_upper_cons = Vector{ConstraintRef}(undef, m)
+    # f_lower_cons = @constraint(md, f_lower_cons[l = 1:m])
+    # f_upper_cons = @constraint(md, f_lower_cons[l = 1:m])
+    
+    # f_lower_cons = @constraint(md, f_lower_cons, f - inst.f_bar .<= s)
+    # f_upper_cons = @constraint(md, f_upper_cons, -f - inst.f_bar .<= s)
 
     e = AffExpr(0.0)
     for l in 1:m
-        if is_slack_en
-            # v >= f[l] - inst.f_bar[l]
-            # v >= -f[l] - inst.f_bar[l]
-            # v >= 0.0
-            s[l] = @variable(md, lower_bound = 0.0, base_name = "s$l")
-            add_to_expression!(e, penalty, s[l])
-            f_lower_cons[l] = @constraint(md, s[l] >= f[l] - inst.f_bar[l])
-            f_upper_cons[l] = @constraint(md, s[l] >= -f[l] - inst.f_bar[l])
+        # Initially, the model does not have slacks on the lines
+        s[l] = @variable(md, 
+                         lower_bound = 0.0, 
+                         upper_bound = 0.0,
+                         base_name = "s$l")
+        add_to_expression!(e, penalty, s[l])
+        f_lower_cons[l] = @constraint(md, -f[l] - inst.f_bar[l] <= s[l])
+        f_upper_cons[l] = @constraint(md, f[l] - inst.f_bar[l] <= s[l])
+        # When s[l] is zero, the constraints above are equivalent to the
+        # following constraints
+        # f_lower_cons[l] = @constraint(md, -inst.f_bar[l] <= f[l])
+        # f_upper_cons[l] = @constraint(md, f[l] <= inst.f_bar[l])
+    end
+
+    return s, e, f_lower_cons, f_upper_cons
+end
+
+"""
+    update_upper_bounds_lines_slack!(md, upper_bound)
+
+Update upper bounds on the slack variables for the line flows.
+
+is_fix: true for fixing the upper bound to zero or false to delete an upper
+bound previously set.
+"""
+function update_upper_bounds_lines_slack!(md::CompactModel, 
+                                          is_fix::Bool)
+    for l in 1:md.m
+        if is_fix
+            set_upper_bound(md.lines_slack[l], 0.0)
         else
-            f_lower_cons[l] = @constraint(md, -inst.f_bar[l] <= f[l])
-            f_upper_cons[l] = @constraint(md, f[l] <= inst.f_bar[l])
+            delete_upper_bound(md.lines_slack[l])
         end
     end
+end
 
-    if is_slack_en
-        @objective(md, Min, e)
-    else
-        @objective(md, Min, 0)
+"""
+    update_flow_constrs(md, beta)
+
+Update the flow constraints in the compact model.
+"""
+function update_flow_constrs!(inst::Instance, 
+                              md::CompactModel, 
+                              beta::Matrix{Float64})
+    
+    # f[l] = beta * d - beta * g
+
+    # -f[l] - inst.f_bar[l] <= s[l]
+    # -(beta * d - beta * g) - inst.f_bar[l] <= s[l]
+    # -beta * d + beta * g - inst.f_bar[l] <= s[l]
+    # -s[l] + beta * g <= inst.f_bar[l] + beta * d
+
+    # f[l] - inst.f_bar[l] <= s[l]
+    # beta * d - beta * g - inst.f_bar[l] <= s[l]
+    # -s[l] - beta * g <= inst.f_bar[l] - beta * d
+    
+    for l in 1:md.m
+        for i in 1:md.n
+            # Update the lhs g coefficients
+            set_normalized_coefficient(md.f_lower_cons[l], md.g[i], beta[l, i])
+            set_normalized_coefficient(md.f_upper_cons[l], md.g[i], -beta[l, i])
+        end
+        # Update the rhs
+        set_normalized_rhs(md.f_lower_cons[l], 
+                           inst.f_bar[l] + beta[l, :]' * md.d)
+        set_normalized_rhs(md.f_upper_cons[l], 
+                           inst.f_bar[l] - beta[l, :]' * md.d)
     end
-
-    return f_lower_cons, f_upper_cons, s
 end
 
 """

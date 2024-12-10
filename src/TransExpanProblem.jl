@@ -10,6 +10,7 @@ using Karnak
 using LinearAlgebra
 using LinearSolve
 using Printf
+using ProfileView
 using Random
 using SimpleWeightedGraphs
 

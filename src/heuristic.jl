@@ -41,6 +41,7 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
     lines = [l for l in inst.nb_J + 1:inst.nb_J + inst.nb_K]
 
     beta = rm_lines(md, lines, gamma_star)
+    # beta = md.beta
     # All removed lines are candidates for reinsertion
     candidates = Set(lines)
     inserted_candidates = Set{Int}()
@@ -58,6 +59,9 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
     nb_inserted_first = 0
     for it in 1:50
         println("---------- It $it ----------")
+
+        # g = update_g(inst, md, beta, xi)
+        # readline()
 
         viols = comp_viols(inst, md, beta, bus_inj)
         # @warn viols
@@ -195,35 +199,54 @@ function update_g(inst::Instance,
                   md::CompactModel, 
                   beta::Matrix{Float64}, 
                   xi::Vector{<:FloatVarRef})
-    delete(md.model, md.f_lower_cons)
-    delete(md.model, md.f_upper_cons)
+    @warn "Updating g"
+    # delete(md.model, md.f_lower_cons)
+    # delete(md.model, md.f_upper_cons)
 
     # circuits = [l for l in inst.nb_J + 1:inst.nb_J + inst.nb_K]
     # rm_lines(md, circuits)
     # beta = add_lines(inst, md, inserted_candidates)
 
-    bus_inj = comp_bus_injections(md.d, md.g, md.is_xi_req, xi)
+    # bus_inj = comp_bus_injections(md.d, md.g, md.is_xi_req, xi)
+    # beta são os coeficientes e bus_inj as variáveis
+    # o que preciso atualizar são os coeficientes (betas)
+    # mas e quanto às demandas (s)?
 
-    md.f[:] = beta * bus_inj
+    # md.f[:] = beta * bus_inj
 
     # Add flow constraints with slacks
-    md.f_lower_cons[:], md.f_upper_cons[:], s = 
-                                       flow_cons(inst, md.model, md.m, md.f, true)
+    # md.f_lower_cons[:], md.f_upper_cons[:], s = 
+    #                                  flow_cons(inst, md.model, md.m, md.f, true)
+
+    # optimize!(md.model)
+    # println("Status optimize line slack: ", termination_status(md.model))
+    # # detect_cycles(inst, md, true)
+
+    # # Extract and fix the generation
+    # g = value.(md.g)
+
+    # delete(md.model, md.f_lower_cons)
+    # delete(md.model, md.f_upper_cons)
+    # delete(md.model, s)
+
+    # # Add flow constraints without slacks
+    # md.f_lower_cons[:], md.f_upper_cons[:], _ = 
+    #                                        flow_cons(inst, md.model, md.m, md.f)
+
+    # Delete upper bounds previously set for the slack variables on the line 
+    # flows
+    update_upper_bounds_lines_slack!(md, false)
+
+    update_flow_constrs!(inst, md, beta)
 
     optimize!(md.model)
     println("Status optimize line slack: ", termination_status(md.model))
-    # detect_cycles(inst, md, true)
 
-    # Extract and fix the generation
+    # Extract the generation
     g = value.(md.g)
 
-    delete(md.model, md.f_lower_cons)
-    delete(md.model, md.f_upper_cons)
-    delete(md.model, s)
-
-    # Add flow constraints without slacks
-    md.f_lower_cons[:], md.f_upper_cons[:], _ = 
-                                             flow_cons(inst, md.model, md.m, md.f)
+    # Set upper bounds to zero
+    update_upper_bounds_lines_slack!(md, true)
 
     return g
 end
