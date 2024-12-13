@@ -9,7 +9,7 @@ function build_solution!(inst::Instance,
     # At the first it, all candidate lines are removed
     lines = [l for l in inst.nb_J + 1:inst.nb_J + inst.nb_K]
 
-    beta = rm_lines(cmp_sys, lines, gamma_star)
+    beta = rm_lines(inst, cmp_sys, lines, gamma_star)
     # All removed lines are candidates for reinsertion
     candidates = Set(lines)
     inserted_candidates = Set{Int}()
@@ -52,7 +52,7 @@ function build_solution!(inst::Instance,
             # If the violation is increasing, then we have to remove the last 
             # inserted lines and decrease λ
             println("Removing lines and decreasing λ")
-            rm_lines(cmp_sys, lines, gamma_star)
+            rm_lines(inst, cmp_sys, lines, gamma_star)
             # TODO: O que fazer quando lambda = 0?
             lambda = max(0.0, lambda - 0.25)
         end
@@ -196,25 +196,29 @@ function update_g(inst::Instance,
 end
 
 """
-    rm_lines(model, lines, gamma_star = 1e-8)
+    rm_lines(inst, model, lines, gamma_star = 1e-8)
 
 Remove lines from the model by setting the diagonal terms of the susceptance to 
 a small value.
 
 Returns the new β matrix.
 """
-function rm_lines(cmp_sys::CompactSystem,  
+function rm_lines(inst::Instance,
+                  cmp_sys::CompactSystem,  
                   lines::Vector{Int64}, 
                   gamma_star::Float64 = 1e-8)
     for l in lines
-        cmp_sys.Gamma[l, l] = gamma_star
+        update_beta!(inst, cmp_sys, l)
     end
+    # for l in lines
+    #     cmp_sys.Gamma[l, l] = gamma_star
+    # end
 
-    B = cmp_sys.S' * cmp_sys.Gamma * cmp_sys.S
-    B_inv = comp_inverse!(B)
-    beta = cmp_sys.Gamma * cmp_sys.S * B_inv
+    # B = cmp_sys.S' * cmp_sys.Gamma * cmp_sys.S
+    # B_inv = comp_inverse!(B)
+    # beta = cmp_sys.Gamma * cmp_sys.S * B_inv
 
-    return beta
+    return cmp_sys.beta
 end
 
 """

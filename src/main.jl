@@ -149,9 +149,9 @@ function run_all()
     ]
     counter = 0
     # f = length(files) - 1
-    f = 30
+    f = 20
     # for file in files[f - 14:f]
-    for file in files[f:f]
+    for file in files[1:f]
         counter += 1
         if file in skip
             println("Skipping instance $file nb $counter")

@@ -303,17 +303,18 @@ Update the beta matrix through a rank-1 update after removing a circuit from the
 model.
 """
 function update_beta!(inst::Instance, 
-                      md::CompactModel, 
+                      md::T, 
                       i::Int64, 
-                      gamma_star::Float64 = 1e-8)
+                      gamma_star::Float64 = 1e-8) where T <: Union{CompactModel, 
+                                                                  CompactSystem}
     gamma_i = inst.gamma[i]
     # gamma_star = inst.gamma[i]
-    @show "Update β", gamma_star, gamma_i
+    # @show "Update β", gamma_star, gamma_i
     
     # Update β
     a_i = md.S[i, :]
     beta_i = md.beta[i, :]'
-    beta_i = gamma_i * a_i' * md.B_inv
+    # beta_i = gamma_i * a_i' * md.B_inv
     den = gamma_i / (gamma_star - gamma_i) + beta_i * a_i
     for j in 1:inst.nb_J + inst.nb_K
         if j == i
@@ -321,8 +322,8 @@ function update_beta!(inst::Instance,
         end
 
         beta_j = md.beta[j, :]'
-        a_j = md.S[j, :]
-        beta_j = inst.gamma[j] * a_j' * md.B_inv
+        # a_j = md.S[j, :]
+        # beta_j = inst.gamma[j] * a_j' * md.B_inv
 
         md.beta[j, :] = beta_j - (beta_j * a_i * beta_i) / den
     end
@@ -332,12 +333,12 @@ function update_beta!(inst::Instance,
     # Update B⁻¹
     num = md.B_inv * a_i * a_i' * md.B_inv
     den = 1.0 / (gamma_star - gamma_i) + a_i' * md.B_inv * a_i
-    @show md.B_inv, -num / den
+    # @show md.B_inv, -num / den
     md.B_inv[:,:] -= num / den
     
     md.Gamma[i, i] *= gamma_star / gamma_i
     # Computing the new B⁻¹ and β matrices from scratch
-    if debugging_level == 1
+    if debugging_level == 5
         # GammaC = copy(md.Gamma)
         # GammaC[i, i] = md.Gamma[i, i] * gamma_star / inst.gamma[i]
         BC = md.S' * md.Gamma * md.S
