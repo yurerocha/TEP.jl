@@ -20,22 +20,22 @@ function build_model(inst::Instance,
     x = Dict{Int, VariableRef}()
     if is_mip_en
         for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+            # Forcing to build candidates
             x[k] = @variable(md, binary = true, base_name = "x")
-            # Forcing every candidate to be built
-            # set_lower_bound(x[k], 1.0)
+            fix(x[k], 1.0)
         end
     end
 
-    # flow variables
+    # Flow variables
     f = @variable(md, f[l = 1:(inst.nb_J + inst.nb_K)], base_name = "f")
 
-    # angle variables
+    # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
     Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
                             base_name = "Delta_theta")
     gen = Dict{Int, VariableRef}()
     for i in inst.I
-        # some buses may not have load or generation
+        # Some buses may not have load or generation
         if i in keys(inst.G)
             g_max = inst.G[i]
             if isl(g_max, 0.0)
@@ -213,13 +213,14 @@ function solve!(model_data::ModelData, is_mip_en::Bool = true)
             obj = objective_value(model)
             gap = 100.0 * relative_gap(model)
         end
-    elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
-        # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
-        compute_conflict!(model)
-        if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-            iis_model, _ = copy_conflict(model)
-            print(iis_model)
-        end
+    else
+        # if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
+        # # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
+        # compute_conflict!(model)
+        # if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
+        #     iis_model, _ = copy_conflict(model)
+        #     print(iis_model)
+        # end
     end
 
     return solve_time(model), 
@@ -234,6 +235,7 @@ end
 
 """
     mipstart(inst, model, x)
+
 Mip starts all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
 """
 function mipstart!(inst::Instance, model_data::ModelData)
@@ -252,4 +254,19 @@ function mipstart!(inst::Instance, model_data::ModelData)
 
     # set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
     return termination_status(model)
+end
+
+"""
+    get_g(inst, model_dt)
+
+Get g values fro mthe model.
+"""
+function get_g(inst::Instance, model_dt::ModelData)
+    g = zeros(inst.nb_I)
+    for i in inst.I
+        if i in keys(inst.G)
+            g[i] = value(model_dt.g[i])
+        end
+    end
+    return g
 end

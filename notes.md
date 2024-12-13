@@ -16,6 +16,10 @@ que essas consigam escoar as cargas com folga
 - exp3: tempo para encontrar solução inicial com heurística de remoção
 - exp4: tempo para encontrar solução inicial com heurística de inserção + 
         atualização das gerações
+- exp5: tempo para encontrar solução inicial com heurística de inserção + 
+        atualização das gerações com modelo completo
+- exp6: tempo para encontrar solução inicial com heurística de inserção + 
+        com cálculos da geração com modelo completo
 
 ┌ Warning: The addition operator has been used on JuMP expressions a
  large number of times. This warning is safe to ignore but may indic
@@ -74,3 +78,7 @@ Também fornecer os thetas no mip start.
 Será que vale a tentar remover as restrições de fluxo inferior e superior,
 adicionando uma vriável?
 -Isso para a versão resolvida pelo Gurobi.
+
+A partir de uma porcentagem de redução, já recalcular a geração com o modelo 
+completo
+-Se viabilizar, encerrar

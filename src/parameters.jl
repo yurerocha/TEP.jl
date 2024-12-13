@@ -4,7 +4,7 @@ const gen_slack_percent = 0.1
 const mult_load = 2.0
 const nb_candidates = 2
 const max_rand = 100
-const solver_time_limit = 10.0
+const solver_time_limit = 600.0
 const debugging_level = 1
 
 # Gurobi MAXINT value

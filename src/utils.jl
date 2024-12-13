@@ -159,8 +159,8 @@ function log_header(outputfile::String)
     outstr *= " Build (s) | D > G | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
               " Objective | Gap (%) | Heur (s) | Ins it 1 | Ins |" *
-              " R1 (%) | R2 (%) | \n"
-    outstr *= "|:---"^20 * "| \n"
+              " R1 (%) | R2 (%) | Start (s) | \n"
+    outstr *= "|:---"^21 * "| \n"
     log(outputfile, outstr)
 end
 

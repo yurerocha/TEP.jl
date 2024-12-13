@@ -34,7 +34,8 @@ function read_instance(filename::String, rng::MersenneTwister)
 
     nb_dem_gen = get_nb(s, i)
     i += 2
-    D = Dict{Int, Float64}()
+    # D = Dict{Int, Float64}()
+    D = zeros(nb_I)
     G = Dict{Int, Float64}()
     # Update I here?
     sumG = 0.0

@@ -14,89 +14,11 @@ function build_compact(inst::Instance, logfile::String = "log_compact.txt")
     set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
     set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
 
-    rhs_sum = 0.0
-    for i in inst.I
-        # Some buses may not have load or generation
-        d = i in keys(inst.D) ? inst.D[i] : 0.0
-        g = i in keys(inst.G) ? inst.G[i] : 0.0
+    d, g, is_xi_req, xi = build_bus_injections(inst)
 
-        rhs_sum += d - g
-    end
-    is_xi_req = isg(rhs_sum, 0.0)
-    @show rhs_sum, is_xi_req
+    S = build_incidence_matrix(inst)
 
-    d = zeros(inst.nb_I)
-    g = Array{VariableRef}(undef, inst.nb_I)
-    xi = Array{VariableRef}(undef, inst.nb_I)
-    for i in inst.I
-        # Some buses may not have load or generation
-        if i in keys(inst.D)
-            d[i] = inst.D[i]
-        end
-        if i in keys(inst.G)
-            g_max = inst.G[i]
-            if isl(g_max, 0.0)
-                @show g_max, t, i
-            end
-            # If xi slack variables are required, then the generation is bounded
-            # to its maximum
-            if is_xi_req
-                g[i] = @variable(md, lower_bound = g_max, upper_bound = g_max, 
-                                 base_name = "g$i")
-            else
-                g[i] = @variable(md, lower_bound = 0, upper_bound = g_max,
-                                 base_name = "g$i")
-            end
-        else
-            g[i] = @variable(md, lower_bound = 0, upper_bound = 0, 
-                             base_name = "g$i")
-        end
-        if is_xi_req
-            xi[i] = @variable(md, lower_bound = 0, base_name = "xi$i")
-        end
-    end
-    S = zeros(inst.nb_J + inst.nb_K, inst.nb_I)
-
-    for i in inst.I
-        for j in 1:inst.nb_J
-            c = inst.J[j]
-            if c.to == i
-                S[j, i] = 1
-            elseif c.fr == i
-                S[j, i] = -1
-            end
-        end
-        for l in 1:inst.nb_K
-            k = l + inst.nb_J
-            c = inst.K[l]
-            if c.to == i
-                S[k, i] = 1
-            elseif c.fr == i
-                S[k, i] = -1
-            end
-        end
-    end
-
-    Gamma = zeros(inst.nb_J + inst.nb_K, inst.nb_J + inst.nb_K)
-    # # Do not insert candidate circuits involving free buses
-    # circ = get_circuit(data, l)
-    # if l > inst.nb_J && (circ.fr in free_buses || circ.to in free_buses)
-    #     # Simulates inactive candidate circuits
-    #     # TODO: Colocar só a condição que faz Gamma[l, l] = inst.gamma[l]
-    #     # TODO: Garantir que a não inserção do circuito não adiciona gargalos
-    #     # na geração de um nó (ver debug_log_inst60.txt). Isso tem que ser
-    #     # feito de forma iterativa a partir das folhas.
-    #     Gamma[l, l] = gamma_star
-    # else
-    #     Gamma[l, l] = inst.gamma[l]
-    # end
-    for l in 1:inst.nb_J + inst.nb_K
-        Gamma[l, l] = inst.gamma[l]
-    end
-    # for l in inst.nb_J + 1:inst.nb_J + inst.nb_K:2
-    #     # Insert half the candidate lines
-    #     Gamma[l, l] = gamma_star
-    # end
+    Gamma = build_susceptance_matrix(inst)
 
     # @show d
     # @show g
@@ -124,14 +46,124 @@ function build_compact(inst::Instance, logfile::String = "log_compact.txt")
     # without them
     @objective(md, Min, e)
 
-    return CompactModel(md, inst.nb_J + inst.nb_K, 
-                        inst.nb_I, S, Gamma, d, g, 
-                        is_xi_req, xi, B, B_inv, beta, 
-                        f, line_slacks, f_lower_cons, f_upper_cons)
+    return CompactModel(md, S, Gamma, d, g, is_xi_req, xi, B, B_inv, 
+                        beta, f, line_slacks, f_lower_cons, f_upper_cons)
+end
+
+function build_compact_system(inst::Instance, 
+                              d::Vector{Float64}, 
+                              g::Vector{Float64})
+    S = build_incidence_matrix(inst)
+
+    Gamma = build_susceptance_matrix(inst)
+
+    B = S' * Gamma * S
+    B_inv = comp_inverse!(B)
+    beta = Gamma * S * B_inv
+
+    f = beta * (d - g)
+
+    return CompactSystem(S, Gamma, d, g, B, B_inv, beta, f)
+end
+
+"""
+    build_bus_injections(inst::Instance)
+
+Build generation g and slack xi injections for every bus in the network.
+"""
+function build_bus_injections(inst::Instance)
+    rhs_sum = 0.0
+    for i in inst.I
+        # Some buses may not have load or generation
+        d = i in keys(inst.D) ? inst.D[i] : 0.0
+        g = i in keys(inst.G) ? inst.G[i] : 0.0
+
+        rhs_sum += d - g
+    end
+    is_xi_req = isg(rhs_sum, 0.0)
+    # @show rhs_sum, is_xi_req
+
+    g = Vector{VariableRef}(undef, inst.nb_I)
+    xi = Array{VariableRef}(undef, inst.nb_I)
+    for i in inst.I
+        # Some buses may not have generation
+        if i in keys(inst.G)
+            g_max = inst.G[i]
+            if isl(g_max, 0.0)
+                @show g_max, t, i
+            end
+            # If xi slack variables are required, then the generation is bounded
+            # to its maximum
+            if is_xi_req
+                g[i] = @variable(md, lower_bound = g_max, upper_bound = g_max, 
+                                 base_name = "g$i")
+            else
+                g[i] = @variable(md, lower_bound = 0, upper_bound = g_max,
+                                 base_name = "g$i")
+            end
+        else
+            g[i] = @variable(md, lower_bound = 0, upper_bound = 0, 
+                             base_name = "g$i")
+        end
+        if is_xi_req
+            xi[i] = @variable(md, lower_bound = 0, base_name = "xi$i")
+        end
+    end
+
+    return g, is_xi_req, xi
+end
+
+"""
+    build_incidence_matrix(inst::Instance)
+
+Build incidence matrix.
+
+Where incoming and outgoing lines are represented by 1 and -1, respectively.
+"""
+function build_incidence_matrix(inst::Instance)
+    S = zeros(inst.nb_J + inst.nb_K, inst.nb_I)
+
+    for i in inst.I
+        for j in 1:inst.nb_J
+            c = inst.J[j]
+            if c.to == i
+                S[j, i] = 1
+            elseif c.fr == i
+                S[j, i] = -1
+            end
+        end
+        for l in 1:inst.nb_K
+            k = l + inst.nb_J
+            c = inst.K[l]
+            if c.to == i
+                S[k, i] = 1
+            elseif c.fr == i
+                S[k, i] = -1
+            end
+        end
+    end
+
+    return S
+end
+
+"""
+    build_susceptance_matrix(inst::Instance)
+
+Build the diagonal matrix of susceptances.
+"""
+function build_susceptance_matrix(inst::Instance)
+    Gamma = zeros(inst.nb_J + inst.nb_K, inst.nb_J + inst.nb_K)
+
+    for l in 1:inst.nb_J + inst.nb_K
+        Gamma[l, l] = inst.gamma[l]
+    end
+
+    return Gamma
 end
 
 """
     flow_cons(data, model, nb_lines, flows)
+
 Lower and upper bounds on flows.
 
 Slacks in the line allow for the capacity to be exceeded with penalization.

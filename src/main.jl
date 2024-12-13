@@ -148,7 +148,9 @@ function run_all()
         # Memory consumption problems
     ]
     counter = 0
-    f = 22 # 22
+    # f = length(files) - 1
+    f = 30
+    # for file in files[f - 14:f]
     for file in files[f:f]
         counter += 1
         if file in skip
@@ -166,6 +168,10 @@ function run_all()
         # try
         build_time = @elapsed (model_dt = 
                                 build_model(inst, true, logfile, is_mip_en))
+        t = @elapsed optimize!(model_dt.model)
+        println("Time to obtain initial g:", t)
+        # Obtain g
+        g = get_g(inst, model_dt)
         
         heur_time = 0.0
         nb_inserted_first = 0
@@ -174,16 +180,17 @@ function run_all()
         ratio2 = 0.0
 
         heur_time = @elapsed((start, 
-                                nb_inserted_first,
-                                nb_inserted,
-                                ratio1, 
-                                ratio2) = build_solution!(inst))
-        println("Mip starting the model")
-        mip_start!(inst, model_dt, start)
+                              nb_inserted_first,
+                              nb_inserted,
+                              ratio1, 
+                              ratio2) = build_solution!(inst, g))
+        @warn "Mip starting the model"
+        start_time = @elapsed mip_start!(inst, model_dt, start)
 
         results = solve!(model_dt, true)
         results = (model_dt.dem_gen_ratio, results..., 
-                    heur_time, nb_inserted_first, nb_inserted, ratio1, ratio2)
+                   heur_time, nb_inserted_first, nb_inserted, 
+                   ratio1, ratio2, start_time)
         log_instance(outputfile, file, inst, build_time, 
                         model_dt.is_xi_req, results)
         # catch e

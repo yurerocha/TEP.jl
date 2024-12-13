@@ -1,51 +1,19 @@
 """
-    build_solution!(data, gamma_star = 1e-8)
+    build_solution!(inst, g, gamma_star = 1e-8)
 """
-function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
-    # detect_cycles(inst, false)
-    md = build_compact(inst)
-
-    # Solve the LP model
-    # TODO: Corrigir instâncias input2, mapeando corretamente os ids de geração
-    # e demanda para os novos ids
-    # TODO: Do not add candidates outside radial lines
-    # TODO: Add only one candidate per existing line
-    # TODO: 
-    # 1. Construir todos os candidatos, ou pelo menos metade deles, para obter g
-    # 2. Remover todos os candidatos e calcular as k violações de f
-    # 3. Fazer tipo uma busca binária na qual adicionamos os k / 2 circuitos 
-    # cujos fluxos foram mais violados
-    # 4. Recalcular g resolvendo o modelo compacto
-    # TODO: Verificar o erro ao remover circuitos
-    # TODO: Será que seria possível fazer a busca binária por ciclos?
-    # TODO: Printar as soluções com fluxo, geração e demanda (muito importante)
-    optimize!(md.model)
-    status = termination_status(md.model)
-    println("Status: ", status)
-    # model = md.model
-    # if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
-    #     # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
-    #     compute_conflict!(model)
-    #     if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-    #         iis_model, _ = copy_conflict(model)
-    #         print(iis_model)
-    #     end
-    # end
-    # detect_cycles(inst, md, true)
-
-    # Extract and fix the generation
-    g = value.(md.g)
-    xi = md.is_xi_req ? value.(md.xi) : [0.0 for i in 1:inst.nb_I]
+function build_solution!(inst::Instance,
+                         g::Vector{Float64}, 
+                         gamma_star::Float64 = 1e-8)
+    cmp_sys = build_compact_system(inst, inst.D, g)
 
     # At the first it, all candidate lines are removed
     lines = [l for l in inst.nb_J + 1:inst.nb_J + inst.nb_K]
 
-    beta = rm_lines(md, lines, gamma_star)
-    # beta = md.beta
+    beta = rm_lines(cmp_sys, lines, gamma_star)
     # All removed lines are candidates for reinsertion
     candidates = Set(lines)
     inserted_candidates = Set{Int}()
-    bus_inj = comp_bus_injections(md.d, g, md.is_xi_req, xi)
+    bus_inj = inst.D - g
 
     acc_add = 0
     viol_init = 0.0
@@ -60,10 +28,7 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
     for it in 1:50
         println("---------- It $it ----------")
 
-        # g = update_g(inst, md, beta, xi)
-        # readline()
-
-        viols = comp_viols(inst, md, beta, bus_inj)
+        viols = comp_viols(inst, beta, bus_inj)
         # @warn viols
         viol = sum([abs(v[2]) for v in viols])
         if it == 1
@@ -87,7 +52,7 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
             # If the violation is increasing, then we have to remove the last 
             # inserted lines and decrease λ
             println("Removing lines and decreasing λ")
-            rm_lines(md, lines, gamma_star)
+            rm_lines(cmp_sys, lines, gamma_star)
             # TODO: O que fazer quando lambda = 0?
             lambda = max(0.0, lambda - 0.25)
         end
@@ -163,7 +128,7 @@ function build_solution!(inst::Instance, gamma_star::Float64 = 1e-8)
             # end
         end
 
-        beta = add_lines(inst, md, lines)
+        beta = add_lines(inst, cmp_sys, lines)
     end
 
     return Start(inserted_candidates, g, beta * bus_inj), 
@@ -175,6 +140,7 @@ end
 
 """
     mip_start(inst::Instance, md::ModelData, start::Start)
+
 Mip start the model with the lines, generation, and flows of the start struct.
 """
 function mip_start!(inst::Instance, md::ModelData, start::Start)
@@ -198,6 +164,7 @@ function mip_start!(inst::Instance, md::ModelData, start::Start)
     #         set_start_value(md.g[i], start.g[i])
     #     end
     # end
+    optimize!(md.model)
 end
 
 """
@@ -209,38 +176,6 @@ function update_g(inst::Instance,
                   beta::Matrix{Float64}, 
                   xi::Vector{<:FloatVarRef})
     @warn "Updating g"
-    # delete(md.model, md.f_lower_cons)
-    # delete(md.model, md.f_upper_cons)
-
-    # circuits = [l for l in inst.nb_J + 1:inst.nb_J + inst.nb_K]
-    # rm_lines(md, circuits)
-    # beta = add_lines(inst, md, inserted_candidates)
-
-    # bus_inj = comp_bus_injections(md.d, md.g, md.is_xi_req, xi)
-    # beta são os coeficientes e bus_inj as variáveis
-    # o que preciso atualizar são os coeficientes (betas)
-    # mas e quanto às demandas (s)?
-
-    # md.f[:] = beta * bus_inj
-
-    # Add flow constraints with slacks
-    # md.f_lower_cons[:], md.f_upper_cons[:], s = 
-    #                                  flow_cons(inst, md.model, md.m, md.f, true)
-
-    # optimize!(md.model)
-    # println("Status optimize line slack: ", termination_status(md.model))
-    # # detect_cycles(inst, md, true)
-
-    # # Extract and fix the generation
-    # g = value.(md.g)
-
-    # delete(md.model, md.f_lower_cons)
-    # delete(md.model, md.f_upper_cons)
-    # delete(md.model, s)
-
-    # # Add flow constraints without slacks
-    # md.f_lower_cons[:], md.f_upper_cons[:], _ = 
-    #                                        flow_cons(inst, md.model, md.m, md.f)
 
     # Delete upper bounds previously set for the slack variables on the line 
     # flows
@@ -262,54 +197,58 @@ end
 
 """
     rm_lines(model, lines, gamma_star = 1e-8)
+
 Remove lines from the model by setting the diagonal terms of the susceptance to 
 a small value.
 
 Returns the new β matrix.
 """
-function rm_lines(md::CompactModel,  
+function rm_lines(cmp_sys::CompactSystem,  
                   lines::Vector{Int64}, 
                   gamma_star::Float64 = 1e-8)
     for l in lines
-        md.Gamma[l, l] = gamma_star
+        cmp_sys.Gamma[l, l] = gamma_star
     end
 
-    B = md.S' * md.Gamma * md.S
+    B = cmp_sys.S' * cmp_sys.Gamma * cmp_sys.S
     B_inv = comp_inverse!(B)
-    beta = md.Gamma * md.S * B_inv
+    beta = cmp_sys.Gamma * cmp_sys.S * B_inv
+
     return beta
 end
 
 """
     add_lines(data, model, lines)
+
 Insert lines in the model by setting the diagonal terms of the susceptance.
 """
 function add_lines(inst::Instance, 
-                   md::CompactModel, 
+                   cmp_sys::CompactSystem, 
                    lines::Vector{Int64})
     for l in lines
-        md.Gamma[l, l] = inst.gamma[l]
+        cmp_sys.Gamma[l, l] = inst.gamma[l]
     end
 
-    B = md.S' * md.Gamma * md.S
+    B = cmp_sys.S' * cmp_sys.Gamma * cmp_sys.S
     B_inv = comp_inverse!(B)
-    beta = md.Gamma * md.S * B_inv
+    beta = cmp_sys.Gamma * cmp_sys.S * B_inv
+
     return beta
 end
 
 """
-    comp_viols(inst, md, bus_inj)
+    comp_viols(inst, beta, bus_inj)
+
 Compute the violations of the flow constraints.
 
 Returns a sorted list of tuples with the line index and the violation.
 """
 function comp_viols(inst::Instance, 
-                    md::CompactModel, 
                     beta::Matrix{Float64}, 
                     bus_inj::Vector{<:FloatVarRef})
     f = beta * bus_inj
     viols = Vector{Tuple{Int64, Float64}}(undef, 0)
-    for l in 1:md.m
+    for l in 1:inst.nb_J + inst.nb_K
         v = abs(f[l]) - inst.f_bar[l]
         if isg(v, 0.1)
             push!(viols, (l, v))
@@ -321,6 +260,7 @@ end
 
 """
     select_lines(data, viols, candidates)
+
 Choose the λ lines to add to the model, considering the available candidates.
 """
 function select_lines(inst::Instance, 
