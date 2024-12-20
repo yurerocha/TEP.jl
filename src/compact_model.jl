@@ -295,8 +295,7 @@ end
     update_beta(
         data,
         compact_model,
-        line_outage,
-        new_susceptance
+        line_outage
     )
 
 Update the beta matrix through a rank-1 update after removing a circuit from the 
@@ -304,9 +303,7 @@ model.
 """
 function update_beta!(inst::Instance, 
                       md::T, 
-                      i::Int64, 
-                      gamma_star::Float64 = 1e-8) where T <: Union{CompactModel, 
-                                                                  CompactSystem}
+                      i::Int64) where T <: Union{CompactModel, CompactSystem}
     gamma_i = inst.gamma[i]
     # gamma_star = inst.gamma[i]
     # @show "Update β", gamma_star, gamma_i
@@ -331,10 +328,10 @@ function update_beta!(inst::Instance,
                       ((1 - (beta_i * a_i) / den) * gamma_star / gamma_i)
 
     # Update B⁻¹
-    num = md.B_inv * a_i * a_i' * md.B_inv
-    den = 1.0 / (gamma_star - gamma_i) + a_i' * md.B_inv * a_i
+    # num = md.B_inv * a_i * a_i' * md.B_inv
+    # den = 1.0 / (gamma_star - gamma_i) + a_i' * md.B_inv * a_i
     # @show md.B_inv, -num / den
-    md.B_inv[:,:] -= num / den
+    # md.B_inv[:,:] -= num / den
     
     md.Gamma[i, i] *= gamma_star / gamma_i
     # Computing the new B⁻¹ and β matrices from scratch

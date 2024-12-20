@@ -20,6 +20,9 @@ que essas consigam escoar as cargas com folga
         atualização das gerações com modelo completo
 - exp6: tempo para encontrar solução inicial com heurística de inserção + 
         com cálculos da geração com modelo completo
+- exp9: break at first insertion (Add a single candidate at a time)
+- exp10: do not breat at first insertion (Add a single candidate at a time)
+- exp13: break + insert only when required
 
 ┌ Warning: The addition operator has been used on JuMP expressions a
  large number of times. This warning is safe to ignore but may indic
@@ -82,3 +85,9 @@ adicionando uma vriável?
 A partir de uma porcentagem de redução, já recalcular a geração com o modelo 
 completo
 -Se viabilizar, encerrar
+
+Fixar s não construído em 0
+
+Colocar gamma_star como parâmetro
+
+Use the array-form of the @variable and @constraint macros for efficiency

@@ -141,17 +141,18 @@ function run_all()
     # run the solver with binary decision variables
     is_mip_en = true
     skip = [
-        "pglib_opf_case162_ieee_dtc.txt", # Compact model infeasible
-        "pglib_opf_case1803_snem.txt", # Zero reactance
-        "pglib_opf_case3375wp_k.txt", # Singular exception
-        "pglib_opf_case4661_sdet.txt" # Compact model infeasible
+        # "pglib_opf_case162_ieee_dtc.txt", # Compact model infeasible
+        "pglib_opf_case1803_snem.txt" # Zero reactance
+        # "pglib_opf_case3375wp_k.txt", # Singular exception
+        # "pglib_opf_case4661_sdet.txt" # Compact model infeasible
         # Memory consumption problems
     ]
     counter = 0
-    # f = length(files) - 1
-    f = 20
+    f = length(files)
+    # f = 30
     # for file in files[f - 14:f]
-    for file in files[1:f]
+    for file in files[1:20]
+    # for file in files[1:f]
         counter += 1
         if file in skip
             println("Skipping instance $file nb $counter")
@@ -162,37 +163,37 @@ function run_all()
         inputfile = "$dir/input3/$file"
         logfile = "$dir/$dir_log/$file"
         inst = read_instance(inputfile, rng)
-        model_dt = nothing
+        model = nothing
         build_time = 0.0
-
-        # try
-        build_time = @elapsed (model_dt = 
-                                build_model(inst, true, logfile, is_mip_en))
-        t = @elapsed optimize!(model_dt.model)
-        println("Time to obtain initial g:", t)
-        # Obtain g
-        g = get_g(inst, model_dt)
-        
         heur_time = 0.0
         nb_inserted_first = 0
         nb_inserted = 0
         ratio1 = 0.0
         ratio2 = 0.0
 
-        heur_time = @elapsed((start, 
+        # try
+        
+        @warn "Build heuristic solution"
+        heur_time = @elapsed((inserted_candidates, 
                               nb_inserted_first,
                               nb_inserted,
                               ratio1, 
-                              ratio2) = build_solution!(inst, g))
-        @warn "Mip starting the model"
-        start_time = @elapsed mip_start!(inst, model_dt, start)
+                              ratio2) = build_solution(inst, logfile))
 
-        results = solve!(model_dt, true)
-        results = (model_dt.dem_gen_ratio, results..., 
+        @warn "Build full model"
+        build_time = @elapsed (model = build_model(inst, logfile))
+        # readline()
+
+        @warn "Mip starting the model"
+        start_time = @elapsed mip_start!(inst, model, inserted_candidates)
+        # readline()
+
+        results = solve!(model, true)
+        # readline()
+        results = (model.dem_gen_ratio, results..., 
                    heur_time, nb_inserted_first, nb_inserted, 
                    ratio1, ratio2, start_time)
-        log_instance(outputfile, file, inst, build_time, 
-                        model_dt.is_xi_req, results)
+        log_instance(outputfile, file, inst, build_time, results)
         # catch e
         #     @warn e
         #     log_instance(outputfile, 

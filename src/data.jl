@@ -9,15 +9,10 @@ struct CompactModel
     Gamma::Matrix{Float64} # m x m matrix of susceptances
     d::Vector{Float64} # n vector of demands
     g::Vector{VariableRef} # n vector of generation variables
-    is_xi_req::Bool # Boolean indicating if slack variables are required
-    xi::Vector{VariableRef} # n vector of slack variables for when demand 
-                            # exceeds generation
     B::Matrix{Float64} # n x n matrix, where B = S'ΓS
     B_inv::Matrix{Float64} # n x n inverse of matrix B
     beta::Matrix{Float64} # m x m matrix, where β = ΓSB⁻¹
     f::Vector{AffExpr} # m x 1 vector of line flows
-    lines_slack::Vector{VariableRef} # m x 1 vector of slack variables for line 
-                                     # flows
     f_lower_cons::Vector{ConstraintRef} # m x 1 vector of line flow constraints
     f_upper_cons::Vector{ConstraintRef} # m x 1 vector of line flow constraints
 end
@@ -37,7 +32,6 @@ end
 struct Start
     built_candidates::Set{Int}
     g::Vector{Float64}
-    f::Vector{Float64}
 end
 
 # -------------------------- Instance data structures --------------------------
@@ -61,7 +55,7 @@ struct Instance
 end
 
 # ---------------------------- Model data structures ---------------------------
-struct ModelData 
+struct FullModel
     model::GenericModel
     x::Dict{Int64, JuMP.VariableRef}
     f::Vector{VariableRef}
@@ -69,7 +63,16 @@ struct ModelData
     theta::Vector{VariableRef}
     Delta_theta::Vector{VariableRef}
     dem_gen_ratio::Float64
-    is_xi_req::Bool
-    # lines_slack::Vector{VariableRef} # m x 1 vector of slack variables for 
-                                       # line flows
+end
+
+struct FullLPModel
+    model::GenericModel
+    f::Vector{VariableRef}
+    g::Dict{Int, VariableRef}
+    theta::Vector{VariableRef}
+    Delta_theta::Vector{VariableRef}
+    dem_gen_ratio::Float64
+    s::Vector{VariableRef}
+    f_cons::Vector{ConstraintRef}
+    fkl_cons::Vector{ConstraintRef}
 end

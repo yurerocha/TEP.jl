@@ -79,8 +79,6 @@ function get_cand(inst::Instance, l::Int64)
 end
 
 """
-    comp_incidence_matrix(inst, f, t, i)
-
 Compute incidence matrix with existing and candidate circuits.
 """
 function comp_incidence_matrix(inst::Instance, f::Vector{VariableRef}, i::Int64)
@@ -102,6 +100,125 @@ function comp_incidence_matrix(inst::Instance, f::Vector{VariableRef}, i::Int64)
         end
     end
     return e
+end
+
+"""
+    comp_incidence_matrix(inst, f, t, i)
+
+Compute incidence matrix with existing and candidate circuits.
+"""
+function comp_incidence_matrix(inst::Instance,
+                               md::GenericModel, 
+                               f::Vector{VariableRef}, 
+                               i::Int64, 
+                               is_add_constrs::Bool,
+                               is_cand_en::Bool,
+                               lines::Vector{Int64})
+    e = 0
+    # Candidate lines
+    is_constr_update_req = false
+    if is_cand_en
+        for l in lines
+            circ = inst.K[l - inst.nb_J]
+
+            # l = inst.nb_J + k
+
+            if (circ.to == i || circ.fr == i) && !isdefined(f, l)
+                is_constr_update_req = true
+                f[l] = @variable(md, base_name = "f")
+            end
+
+            if circ.to == i
+                e += f[l]
+            elseif circ.fr == i
+                e -= f[l]
+            end
+        end
+    end
+
+    # Existing lines
+    if is_add_constrs || is_constr_update_req
+        for j in 1:inst.nb_J
+            circ = inst.J[j]
+            if circ.to == i
+                e += f[j]
+            elseif circ.fr == i
+                e -= f[j]
+            end
+        end
+    end
+
+    return e, is_constr_update_req
+end
+
+"""
+    comp_existing_incident_flows(inst::Instance,
+                                 md::GenericModel, 
+                                 f::Vector{VariableRef}, 
+                                 i::Int64)
+
+Compute the incident flow in node i for the existing lines.
+"""
+function comp_existing_incident_flows(inst::Instance,
+                                      f::Vector{VariableRef}, 
+                                      i::Int64)
+    e = AffExpr(0.0)
+    for j in 1:inst.nb_J
+        circ = inst.J[j]
+        if circ.to == i
+            e += f[j]
+        elseif circ.fr == i
+            e -= f[j]
+        end
+    end
+    return e
+end
+
+"""
+    comp_candidate_incident_flows(inst::Instance,
+                                  md::GenericModel, 
+                                  f::Vector{VariableRef}, 
+                                  i::Int64,
+                                  is_res_list_en::Bool,
+                                  res_list::Vector{Int64})
+
+Compute the incident flow in node i for the candidate lines.
+
+The restricted list can be used to restrict the lines to be evaluated.
+"""
+function comp_candidate_incident_flows(inst::Instance,
+                                       md::GenericModel, 
+                                       f::Vector{VariableRef}, 
+                                       i::Int64,
+                                       is_res_list_en::Bool,
+                                       res_list::Vector{Int64})
+    lines = is_res_list_en ? 
+                         res_list : collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
+    
+    is_constr_update_req = false
+    e = AffExpr(0.0)
+    for l in lines
+        circ = inst.K[l - inst.nb_J]
+
+        # if (circ.to == i || circ.fr == i) && !isdefined(f, l)
+        #     is_constr_update_req = true
+        #     f[l] = @variable(md)
+        # end
+
+        if is_res_list_en && !isassigned(f, l)
+            f[l] = @variable(md, base_name = "f")
+        end
+
+        if circ.to == i
+            is_constr_update_req = true
+            e += f[l]
+        elseif circ.fr == i
+            is_constr_update_req = true
+            e -= f[l]
+        end
+    end
+
+    return e, is_constr_update_req
 end
 
 function populate_circuits(I::Set{Int}, 
@@ -156,27 +273,26 @@ end
 
 function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
-    outstr *= " Build (s) | D > G | D / G | Solve (s) | Incumbent (s) |" * 
+    outstr *= " Build (s) | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
               " Objective | Gap (%) | Heur (s) | Ins it 1 | Ins |" *
               " R1 (%) | R2 (%) | Start (s) | \n"
-    outstr *= "|:---"^21 * "| \n"
+    outstr *= "|:---"^20 * "| \n"
     log(outputfile, outstr)
 end
 
 """
-    log_instance(outputfile, instance, inst, build_time, is_xi_req, results)
+    log_instance(outputfile, instance, inst, build_time, results)
 """
 function log_instance(outputfile::String, 
                       inst_name::String, 
                       inst::Instance, 
                       build_time::Float64, 
-                      is_xi_req::Bool, 
                       results::Tuple)
     N = inst.nb_I
     L = (inst.nb_K + inst.nb_J)
     s = "| $inst_name | $N | $L | $(round(L / N, digits=2)) |" * 
-        " $(round(build_time, digits=2)) | $(Int(is_xi_req)) |"
+        " $(round(build_time, digits=2)) |"
     for r in results
         if typeof(r) == Float64
             # s *= @sprintf(" %.2f |", r)
@@ -237,7 +353,7 @@ end
 Detect cycles in the graph and return the free buses (those outside cycles).
 """
 function detect_cycles(inst::Instance, 
-                       md::ModelData, 
+                       md::FullModel, 
                        is_drawing_en::Bool = true, 
                        filename::String = "graph")
     # TODO: Add "demand - generation" to the vertices.
@@ -281,7 +397,7 @@ end
     draw_cycles(inst, model, graph, cycles, filename)
 """
 function draw_cycles(inst::Instance, 
-                     md::ModelData, 
+                     md::FullModel, 
                      elist::Vector{Tuple{Int64, Int64}}, 
                      cycles::Vector{Vector{Int64}}, 
                      filename::String)
@@ -347,7 +463,7 @@ Each edge is labeled with the flow value and each vertex is labeled with
 "generation - demand".
 """
 function draw_solution(inst::Instance, 
-                       md::ModelData, 
+                       md::FullModel, 
                        f::Vector{Float64}, 
                        viols::Vector{Float64} = [], 
                        filename::String = "solution")
