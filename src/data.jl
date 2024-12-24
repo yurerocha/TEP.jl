@@ -1,5 +1,6 @@
 # ------------------------ Compact model data structures -----------------------
 const FloatVarRef = Union{Float64, VariableRef}
+const VectorSet = Union{Vector{Int64}, Set{Int64}}
 
 struct CompactModel
     model # ::GenericModel
@@ -30,28 +31,28 @@ end
 
 # -------------------------- Heuristic data structures -------------------------
 struct Start
-    built_candidates::Set{Int}
+    built_candidates::Set{Int64}
     g::Vector{Float64}
 end
 
 # -------------------------- Instance data structures --------------------------
 struct Circuit
-    fr::Int # "from" bus
-    to::Int # "to" bus
+    fr::Int64 # "from" bus
+    to::Int64 # "to" bus
 end
 
 struct Instance
-    I::Set{Int} # buses
+    I::Set{Int64} # buses
     gamma::Vector{Float64} # susceptance of circuits
     f_bar::Vector{Float64} # capacity of circuits
     cost::Vector{Float64}
     J::Vector{Circuit} # existing circuits
     K::Vector{Circuit} # candidate circuits
     D::Vector{Float64} # load
-    G::Dict{Int, Float64} # generation
-    nb_I::Int # nb of buses
-    nb_J::Int # nb of existing circuits
-    nb_K::Int # nb of candidate circuits
+    G::Dict{Int64, Float64} # generation
+    nb_I::Int64 # nb of buses
+    nb_J::Int64 # nb of existing circuits
+    nb_K::Int64 # nb of candidate circuits
 end
 
 # ---------------------------- Model data structures ---------------------------
@@ -68,7 +69,7 @@ end
 struct FullLPModel
     model::GenericModel
     f::Vector{VariableRef}
-    g::Dict{Int, VariableRef}
+    g::Dict{Int64, VariableRef}
     theta::Vector{VariableRef}
     Delta_theta::Vector{VariableRef}
     dem_gen_ratio::Float64

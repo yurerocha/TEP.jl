@@ -24,6 +24,8 @@ que essas consigam escoar as cargas com folga
 - exp10: do not breat at first insertion (Add a single candidate at a time)
 - exp13: break + insert only when required
 
+- exp16: mip start fix código atualizado
+
 ┌ Warning: The addition operator has been used on JuMP expressions a
  large number of times. This warning is safe to ignore but may indic
 ate that model generation is slower than necessary. For performance 
@@ -91,3 +93,19 @@ Fixar s não construído em 0
 Colocar gamma_star como parâmetro
 
 Use the array-form of the @variable and @constraint macros for efficiency
+
+Add heuristic gap
+
+Add outra estratégia para quando a solução heurística dá inviável
+-Nb 13 inst 162
+
+Implementar soluçãao para sols iniciais inviáveis
+-Depois de rodar a heurística, verificar os circuitos existentes, próximos às 
+ violações, que estejam sobrecarregados
+-Adicionar os candidatos correspondentes
+
+GRBmsg
+https://docs.gurobi.com/projects/optimizer/en/current/reference/c/logging.html
+
+É possível terminar o callback
+https://jump.dev/JuMP.jl/stable/packages/Gurobi/#Accessing-Gurobi-specific-attributes

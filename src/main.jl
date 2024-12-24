@@ -149,10 +149,7 @@ function run_all()
     ]
     counter = 0
     f = length(files)
-    # f = 30
-    # for file in files[f - 14:f]
-    for file in files[1:20]
-    # for file in files[1:f]
+    for file in files[1:f]
         counter += 1
         if file in skip
             println("Skipping instance $file nb $counter")
@@ -170,6 +167,7 @@ function run_all()
         nb_inserted = 0
         ratio1 = 0.0
         ratio2 = 0.0
+        ms_gap = 0.0
 
         # try
         
@@ -185,15 +183,18 @@ function run_all()
         # readline()
 
         @warn "Mip starting the model"
-        start_time = @elapsed mip_start!(inst, model, inserted_candidates)
+        start_time = @elapsed (is_feas = 
+                                   mip_start!(inst, model, inserted_candidates))
         # readline()
 
         results = solve!(model, true)
-        # readline()
+        ms_gap = results[length(results)]
+        results = results[1:length(results) - 1]
+        
         results = (model.dem_gen_ratio, results..., 
                    heur_time, nb_inserted_first, nb_inserted, 
                    ratio1, ratio2, start_time)
-        log_instance(outputfile, file, inst, build_time, results)
+        log_instance(outputfile, file, inst, build_time, results, is_feas)
         # catch e
         #     @warn e
         #     log_instance(outputfile, 

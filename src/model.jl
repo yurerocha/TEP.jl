@@ -8,7 +8,7 @@ function build_model(inst::Instance,
     md = Model(Gurobi.Optimizer)
     set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
     set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-    set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
+    # set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
     
     x = Dict{Int, VariableRef}()
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
@@ -16,56 +16,21 @@ function build_model(inst::Instance,
         x[k] = @variable(md, binary = true, base_name = "x$(k - inst.nb_J)")
     end
 
-    # Angle variables
-    theta = @variable(md, theta[i = inst.I], base_name = "theta")
-    Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
-                            base_name = "Delta_theta")
-    gen = Dict{Int, VariableRef}()
-    for i in inst.I
-        # Some buses may not have load or generation
-        if i in keys(inst.G)
-            g_max = inst.G[i]
-            if isl(g_max, 0.0)
-                @show g_max, i
-            end
-            gen[i] = @variable(md, lower_bound = 0.0, 
-                               upper_bound = g_max, 
-                               base_name = "g$i")
-        end
-    end
-
-    dem_sum = 0.0
-    gen_sum = 0.0
-    for i in inst.I
-        # Some buses may not have load or generation
-        d = inst.D[i]
-        g = i in keys(inst.G) ? inst.G[i] : 0.0
-
-        dem_sum += d
-        gen_sum += g
-    end
-    # is_xi_req = isl(gen_sum - dem_sum, 0.0)
-    # @info dem_sum, gen_sum, is_xi_req
+    gen = add_g_vars(inst, md)
+    sum_d, sum_g = comp_sum_d_sum_g(inst)
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
     # First Kirccohff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering both existing and candidate lines
-    add_fkl_constrs(inst, md, f, gen, fkl_cons, true, false)
+    cands = collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
+    add_fkl_constrs(inst, md, f, gen, fkl_cons, inst.I, cands)
 
-    # for i in inst.I
-    #     # incidence matrix
-    #     e = comp_incidence_matrix(inst, f, i)
-    #     # some buses may not have load or generation
-    #     d = i in keys(inst.D) ? inst.D[i] : 0.0
-    #     g = i in keys(inst.G) ? gen[i] : 0.0
-
-    #     @warn e
-
-    #     @constraint(md, e + g == d, base_name = "fkl$i")
-    # end
-
+    # Angle variables
+    theta = @variable(md, theta[i = inst.I], base_name = "theta")
+    Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
+                            base_name = "Delta_theta")
     # Ohm's law for existing circuits
     for j in 1:inst.nb_J
         c = inst.J[j]
@@ -80,9 +45,7 @@ function build_model(inst::Instance,
                     theta[inst.K[k - inst.nb_J].fr] - 
                     theta[inst.K[k - inst.nb_J].to])
         y = f[k] - inst.gamma[k] * Delta_theta[k]
-        # y = f[t, k] - inst.gamma[k] * 
-        #     (theta[t, inst.K[k - inst.nb_J].fr] - 
-        #     theta[t, inst.K[k - inst.nb_J].to])
+
         bigM = comp_bigM(inst, k)
 
         @constraint(md, y <= bigM * (1 - x[k]), base_name = "ol.p$k")
@@ -103,7 +66,7 @@ function build_model(inst::Instance,
 
     set_obj(inst, md, x)
 
-    return FullModel(md, x, f, gen, theta, Delta_theta, dem_sum / gen_sum)
+    return FullModel(md, x, f, gen, theta, Delta_theta, sum_d / sum_g)
 end
 
 """
@@ -120,49 +83,24 @@ function build_lp_model(inst::Instance,
     set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
     set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
 
-    # Angle variables
-    theta = @variable(md, theta[i = inst.I], base_name = "theta")
-    Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
-                            base_name = "Delta_theta")
-    gen = Dict{Int, VariableRef}()
-    for i in inst.I
-        # Some buses may not have load or generation
-        if i in keys(inst.G)
-            g_max = inst.G[i]
-            if isl(g_max, 0.0)
-                @show g_max, i
-            end
-            gen[i] = @variable(md, lower_bound = 0, 
-                               upper_bound = g_max, 
-                               base_name = "gen")
-        end
-    end
-
-    dem_sum = 0.0
-    gen_sum = 0.0
-    for i in inst.I
-        # Some buses may not have load or generation
-        d = inst.D[i]
-        g = i in keys(inst.G) ? inst.G[i] : 0.0
-
-        dem_sum += d
-        gen_sum += g
-    end
-    # is_xi_req = isl(gen_sum - dem_sum, 0.0)
-    # @info dem_sum, gen_sum, is_xi_req
+    gen = add_g_vars(inst, md)
+    sum_d, sum_g = comp_sum_d_sum_g(inst)
 
     # Flow variables
     f = Vector{VariableRef}(undef, inst.nb_J + inst.nb_K)
-    # for j in 1:inst.nb_J
-    for j in 1:inst.nb_J + inst.nb_K
+    for j in 1:inst.nb_J
+    # for j in 1:inst.nb_J + inst.nb_K
         f[j] = @variable(md, base_name = "f")
     end
     # First Kirccohff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering only existing lines
-    # add_fkl_constrs(inst, md, f, gen, fkl_cons, true, true)
-    add_fkl_constrs(inst, md, f, gen, fkl_cons, true, false)
+    add_fkl_constrs(inst, md, f, gen, fkl_cons, inst.I)
 
+    # Angle variables
+    theta = @variable(md, theta[i = inst.I], base_name = "theta")
+    Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
+                            base_name = "Delta_theta")
     f_cons = Vector{ConstraintRef}(undef, inst.nb_J + inst.nb_K)
     # Ohm's law for existing circuits
     for j in 1:inst.nb_J
@@ -175,15 +113,13 @@ function build_lp_model(inst::Instance,
         # f_cons[j] = @constraint(md, 
         #                         f[j] == inst.gamma[j] * e,
         #                         base_name = "ol$j")
-        # @constraint(md, f[t, j] == inst.gamma[j] * 
-        #             (theta[t, inst.J[j].fr] - theta[t, inst.J[j].to]))
     end
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         c = inst.K[k - inst.nb_J]
         @constraint(md, Delta_theta[k] == theta[c.fr] - theta[c.to])
-        f_cons[k] = @constraint(md, 
-                                f[k] == inst.gamma[k] * Delta_theta[k],
-                                base_name = "ol$k")
+        # f_cons[k] = @constraint(md, 
+        #                         f[k] == inst.gamma[k] * Delta_theta[k],
+        #                         base_name = "ol$k")
     end
 
     # Flow limits
@@ -198,9 +134,8 @@ function build_lp_model(inst::Instance,
     end
     # Candidate circuits
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        # Rm depois
-        @constraint(md, f[k] - inst.f_bar[k] <= s[k])
-        @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
+        # @constraint(md, f[k] - inst.f_bar[k] <= s[k])
+        # @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
         fix(s[k], 0.0; force = true)
     end
 
@@ -211,7 +146,29 @@ function build_lp_model(inst::Instance,
     # set_obj(inst, md, x, xi_vars, is_mip_en)
 
     return FullLPModel(md, f, gen, theta, Delta_theta, 
-                       dem_sum / gen_sum, s, f_cons, fkl_cons)
+                       sum_d / sum_g, s, f_cons, fkl_cons)
+end
+
+"""
+    add_g_vars(inst::Instance, md::GenericModel)
+
+Add generation variables.
+"""
+function add_g_vars(inst::Instance, md::GenericModel)
+    gen = Dict{Int, VariableRef}()
+    for i in inst.I
+        # Some buses may not have load or generation
+        if i in keys(inst.G)
+            g_max = inst.G[i]
+            if isl(g_max, 0.0)
+                @show g_max, i
+            end
+            gen[i] = @variable(md, lower_bound = 0.0, 
+                               upper_bound = g_max, 
+                               base_name = "g$i")
+        end
+    end
+    return gen
 end
 
 """
@@ -239,29 +196,32 @@ function add_fkl_constrs(inst::Instance,
                          f::Vector{VariableRef},
                          gen::Dict{Int, VariableRef},
                          fkl_cons::Vector{ConstraintRef},
-                         is_add_constrs::Bool,
-                         is_res_list_en::Bool,
-                         restricted_list::Vector{Int64} 
-                                                      = Vector{Int64}(undef, 0))
-    for i in inst.I
+                         buses_involved::T,
+                         candidates::F = Vector{Int64}(undef, 0)) where 
+                                                {T <: VectorSet, F <: VectorSet}
+    
+    # is_constr_update_req = false
+    # if !is_add_constrs
+    #     is_constr_update_req = add_flow_variables(md, f, res_list)
+    # end
+
+    # if !is_constr_update_req
+    #     return
+    # end
+
+    for i in buses_involved
+        if isassigned(fkl_cons, i)
+            delete(md, fkl_cons[i])
+        end
+
+        e = comp_candidate_incident_flows(inst, f, i, candidates)
+        e += comp_existing_incident_flows(inst, f, i)
+        
         # Some buses may not have load or generation
         d = inst.D[i]
         g = i in keys(inst.G) ? gen[i] : 0.0
 
-        e, is_constr_update_req = comp_candidate_incident_flows(inst, 
-                                                                md, 
-                                                                f, i, 
-                                                                is_res_list_en,
-                                                                restricted_list)
-
-        if !is_add_constrs && is_constr_update_req
-            delete(md, fkl_cons[i])
-        end
-
-        if is_add_constrs || is_constr_update_req
-            e += comp_existing_incident_flows(inst, f, i)
-            fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl$i")
-        end
+        fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl$i")
     end
 end
 
@@ -284,32 +244,50 @@ function solve!(model_data::FullModel, is_mip_en::Bool = true)
     model = model_data.model
 
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
+    set_attribute(model, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
 
     rt_runtime = 0.0
     incumbent_time = solver_time_limit
     rt_best_bound = 0.0
-    # Callback to get the root node best bound and runtime, and the time to find
-    # the first incumbent solution
-    function root_node_callback(model, cb_where::Cint)
+    mip_start_gap = Inf64
+    # Callback to get the root node best bound and runtime (if), and the time to 
+    # find the first incumbent solution (elseif)
+    function root_node_callback(cb_data, cb_where::Cint)
+        # if cb_where == GRB_CB_MESSAGE
+        #     buff = Vector{Cchar}(undef, 100)
+        #     GRBcbget(cb_data, cb_where, GRB_CB_MSG_STRING, buff)
+        #     buff = [Char(abs(ch)) for ch in buff]
+        #     @warn String(buff)
+        #     readline()
         if cb_where == GRB_CB_MIPNODE
             node_count = Ref{Cdouble}()
-            GRBcbget(model, cb_where, GRB_CB_MIPNODE_NODCNT, node_count)
+            GRBcbget(cb_data, cb_where, GRB_CB_MIPNODE_NODCNT, node_count)
             if iseq(node_count[], 0.0)
                 runtime = Ref{Cdouble}()
                 root_bound = Ref{Cdouble}()
-                GRBcbget(model, cb_where, GRB_CB_RUNTIME, runtime)
-                GRBcbget(model, cb_where, GRB_CB_MIPNODE_OBJBND, root_bound)
+                GRBcbget(cb_data, cb_where, GRB_CB_RUNTIME, runtime)
+                GRBcbget(cb_data, cb_where, GRB_CB_MIPNODE_OBJBND, root_bound)
 
                 rt_runtime = runtime[]
                 rt_best_bound = root_bound[]
             end
         elseif cb_where == GRB_CB_MIPSOL && 
                iseq(incumbent_time, solver_time_limit)
-            # Second condition prevents incumbent_time from being updated after 
-            # the first incumbent solution is found
+            # Prevents incumbent_time from being updated after the first 
+            # incumbent solution is found
             runtime = Ref{Cdouble}()
-            GRBcbget(model, cb_where, GRB_CB_RUNTIME, runtime)
+            GRBcbget(cb_data, cb_where, GRB_CB_RUNTIME, runtime)
             incumbent_time = runtime[]
+            # if isl(runtime[], 0.5)
+            #     obj_bst = Ref{Cdouble}()
+            #     obj_bnd = Ref{Cdouble}()
+            #     GRBcbget(model, cb_where, GRB_CB_MIPSOL_OBJBST, obj_bst)
+            #     GRBcbget(model, cb_where, GRB_CB_MIPSOL_OBJBND, obj_bnd)
+            #     # https://support.gurobi.com/hc/en-us/articles/360025036151-Why-are-there-large-or-increasing-MIP-gap-values
+            #     mip_start_gap = (obj_bnd[] - obj_bst[]) / obj_bst[]
+            #     @warn obj_bnd[], obj_bst[], mip_start_gap
+            #     readline()
+            # end
         end
     end
     set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
@@ -328,7 +306,6 @@ function solve!(model_data::FullModel, is_mip_en::Bool = true)
             best_bound = dual_objective_value(model)
             obj = objective_value(model)
             gap = 100.0 * relative_gap(model)
-            # gap = 0.0
         end
     else
         # if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
@@ -347,7 +324,8 @@ function solve!(model_data::FullModel, is_mip_en::Bool = true)
            rt_best_bound, 
            best_bound, 
            obj, 
-           gap
+           gap,
+           mip_start_gap
 end
 
 """

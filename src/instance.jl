@@ -75,3 +75,22 @@ function read_instance(filename::String, rng::MersenneTwister)
                     length(J), 
                     length(K))
 end
+
+"""
+    comp_sum_d_sum_g(inst::Instance)
+
+Compute summation of demand and summation of generation.
+"""
+function comp_sum_d_sum_g(inst::Instance)
+    sum_d = 0.0
+    sum_g = 0.0
+    for i in inst.I
+        # Some buses may not have load or generation
+        d = inst.D[i]
+        g = i in keys(inst.G) ? inst.G[i] : 0.0
+
+        sum_d += d
+        sum_g += g
+    end
+    return sum_d, sum_g
+end

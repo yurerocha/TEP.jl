@@ -187,41 +187,46 @@ Compute the incident flow in node i for the candidate lines.
 The restricted list can be used to restrict the lines to be evaluated.
 """
 function comp_candidate_incident_flows(inst::Instance,
-                                       md::GenericModel, 
                                        f::Vector{VariableRef}, 
                                        i::Int64,
-                                       is_res_list_en::Bool,
-                                       res_list::Vector{Int64})
-    lines = is_res_list_en ? 
-                         res_list : collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
-    
-    is_constr_update_req = false
+                                       res_list::T) where T <: VectorSet
     e = AffExpr(0.0)
-    for l in lines
-        circ = inst.K[l - inst.nb_J]
-
-        # if (circ.to == i || circ.fr == i) && !isdefined(f, l)
-        #     is_constr_update_req = true
-        #     f[l] = @variable(md)
-        # end
-
-        if is_res_list_en && !isassigned(f, l)
-            f[l] = @variable(md, base_name = "f")
-        end
-
-        if circ.to == i
-            is_constr_update_req = true
-            e += f[l]
-        elseif circ.fr == i
-            is_constr_update_req = true
-            e -= f[l]
+    for k in res_list
+        c = inst.K[k - inst.nb_J]
+        if c.to == i
+            e += f[k]
+        elseif c.fr == i
+            e -= f[k]
         end
     end
-
-    return e, is_constr_update_req
+    return e
 end
 
-function populate_circuits(I::Set{Int}, 
+"""
+    add_flow_variables(md, f, lines)
+
+Add flow variables for circuits in "lines".
+"""
+function add_flow_variables(inst::Instance,
+                            md::GenericModel, 
+                            f::Vector{VariableRef},
+                            lines::Vector{Int64})
+    buses_involved = Vector{Int64}(undef, 0)
+    for k in lines
+        if !isassigned(f, k)
+            f[k] = @variable(md, base_name = "f")
+            for i in inst.I
+                c = inst.K[k - inst.nb_J]
+                if c.fr == i || c.to == i
+                    push!(buses_involved, i)
+                end
+            end
+        end
+    end
+    return buses_involved
+end
+
+function populate_circuits(I::Set{Int64}, 
                            circuits::Vector{Circuit}, 
                            gamma::Vector{Float64}, 
                            f_bar::Vector{Float64}, 
@@ -276,8 +281,8 @@ function log_header(outputfile::String)
     outstr *= " Build (s) | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
               " Objective | Gap (%) | Heur (s) | Ins it 1 | Ins |" *
-              " R1 (%) | R2 (%) | Start (s) | \n"
-    outstr *= "|:---"^20 * "| \n"
+              " R1 (%) | R2 (%) | Start (s) | Feas | \n"
+    outstr *= "|:---"^21 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -288,7 +293,8 @@ function log_instance(outputfile::String,
                       inst_name::String, 
                       inst::Instance, 
                       build_time::Float64, 
-                      results::Tuple)
+                      results::Tuple,
+                      is_mip_start_feas::Bool)
     N = inst.nb_I
     L = (inst.nb_K + inst.nb_J)
     s = "| $inst_name | $N | $L | $(round(L / N, digits=2)) |" * 
@@ -302,7 +308,7 @@ function log_instance(outputfile::String,
             s *= " $r |"
         end
     end
-    s *= "\n"
+    s *= " $is_mip_start_feas | \n"
     log(outputfile, s)
 end
 
