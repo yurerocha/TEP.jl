@@ -1,7 +1,4 @@
 # ------------------------ Compact model data structures -----------------------
-const FloatVarRef = Union{Float64, VariableRef}
-const VectorSet = Union{Vector{Int64}, Set{Int64}}
-
 struct CompactModel
     model # ::GenericModel
     # m::Int64 # Number of lines
@@ -56,7 +53,7 @@ struct Instance
 end
 
 # ---------------------------- Model data structures ---------------------------
-struct FullModel
+struct MIPModel
     model::GenericModel
     x::Dict{Int64, JuMP.VariableRef}
     f::Vector{VariableRef}
@@ -66,7 +63,7 @@ struct FullModel
     dem_gen_ratio::Float64
 end
 
-struct FullLPModel
+struct LPModel
     model::GenericModel
     f::Vector{VariableRef}
     g::Dict{Int64, VariableRef}
@@ -77,3 +74,8 @@ struct FullLPModel
     f_cons::Vector{ConstraintRef}
     fkl_cons::Vector{ConstraintRef}
 end
+
+# ------------------------------ Type declarations -----------------------------
+const FloatVarRef = Union{Float64, VariableRef}
+const VectorSet = Union{Vector{Int64}, Set{Int64}}
+const TepModel = Union{MIPModel, LPModel}

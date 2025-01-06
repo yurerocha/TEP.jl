@@ -40,12 +40,12 @@ function read_instance(filename::String, rng::MersenneTwister)
     # Update I here?
     sumG = 0.0
     sumD = 0.0
-    # The demand is increased according to mult_load
-    for j in i:i+nb_dem_gen-1
+    # The demand is increased according to param_mult_load
+    for j in i:i + nb_dem_gen - 1
         v = split(s[j])
         bus = parse(Int, v[1])
         G[bus] = parse(Float64, v[2])
-        D[bus] = mult_load * parse(Float64, v[3])
+        D[bus] = param_mult_load * parse(Float64, v[3])
 
         sumG += G[bus]
         sumD += D[bus]
@@ -54,19 +54,11 @@ function read_instance(filename::String, rng::MersenneTwister)
     # new demand with a given random slack between 0.05 and mult
     # mult_gen = ((1.0 + gen_slack_percent) +
     #             rand(rng) * gen_max_add_slack_percent) * (sumD / sumG)
-    mult_gen = ceil((1.0 + gen_slack_percent) * (sumD / sumG))
+    mult_gen = ceil((1.0 + param_g_slack_percent) * (sumD / sumG))
     @show sumD, sumG, sumD / sumG
     for (bus, g) in G
         G[bus] = mult_gen * g
     end
-    # @show G
-    # @show D
-    # @show I
-    # @show J
-    # @show K
-    # @show gamma
-    # @show f_bar
-    # @show cost
     
     return Instance(I, gamma, 
                     f_bar, cost, 

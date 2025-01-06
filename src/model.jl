@@ -1,14 +1,11 @@
 """
     build_model(inst:::Instance, solver_logfile::String)
 
-Build model.
+Build mixed-integer linear programming model.
 """
-function build_model(inst::Instance,
-                     logfile::String = "TransExpanProblem.jl/log/log.txt")
+function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
-    set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
-    set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-    # set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
+    config(md, logfile)
     
     x = Dict{Int, VariableRef}()
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
@@ -21,11 +18,10 @@ function build_model(inst::Instance,
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
-    # First Kirccohff law
+    # First Kirchhoff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering both existing and candidate lines
-    cands = collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
-    add_fkl_constrs(inst, md, f, gen, fkl_cons, inst.I, cands)
+    add_fkl_constrs(inst, md, f, gen, fkl_cons, inst.I)
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
@@ -66,7 +62,7 @@ function build_model(inst::Instance,
 
     set_obj(inst, md, x)
 
-    return FullModel(md, x, f, gen, theta, Delta_theta, sum_d / sum_g)
+    return MIPModel(md, x, f, gen, theta, Delta_theta, sum_d / sum_g)
 end
 
 """
@@ -76,12 +72,9 @@ Build linear programming model.
 
 The gamma values can be used to simulate building a candidate line.
 """
-function build_lp_model(inst::Instance,
-                        logfile::String = "TransExpanProblem.jl/log/log.txt")
+function build_lp_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
-    set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
-    set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-    set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
+    config(md, logfile)
 
     gen = add_g_vars(inst, md)
     sum_d, sum_g = comp_sum_d_sum_g(inst)
@@ -90,9 +83,9 @@ function build_lp_model(inst::Instance,
     f = Vector{VariableRef}(undef, inst.nb_J + inst.nb_K)
     for j in 1:inst.nb_J
     # for j in 1:inst.nb_J + inst.nb_K
-        f[j] = @variable(md, base_name = "f")
+        f[j] = @variable(md, base_name = "fe$j")
     end
-    # First Kirccohff law
+    # First Kirchhoff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering only existing lines
     add_fkl_constrs(inst, md, f, gen, fkl_cons, inst.I)
@@ -143,9 +136,8 @@ function build_lp_model(inst::Instance,
     @objective(md, 
                Min, 
                sum([s[l] for l in 1:inst.nb_J + inst.nb_K]))
-    # set_obj(inst, md, x, xi_vars, is_mip_en)
 
-    return FullLPModel(md, f, gen, theta, Delta_theta, 
+    return LPModel(md, f, gen, theta, Delta_theta, 
                        sum_d / sum_g, s, f_cons, fkl_cons)
 end
 
@@ -172,54 +164,62 @@ function add_g_vars(inst::Instance, md::GenericModel)
 end
 
 """
+    add_flow_variables(md, f, lines)
+
+Add flow variables for circuits in "lines".
+"""
+function add_flow_variables(inst::Instance, 
+                            md::GenericModel, 
+                            f::Vector{VariableRef}, 
+                            s::Vector{VariableRef}, 
+                            lines::Vector{Int64})
+    buses_involved = Set{Int64}()
+    # buses_involved = Vector{Int64}()
+    for k in lines
+        if !isassigned(f, k)
+            f[k] = @variable(md, base_name = "fc$k")
+            @constraint(md, f[k] - inst.f_bar[k] <= s[k])
+            @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
+            c = inst.K[k - inst.nb_J]
+            for i in inst.I
+                if c.to == i || c.fr == i
+                    push!(buses_involved, i)
+                end
+            end
+        end
+    end
+    return buses_involved
+end
+
+"""
     add_fkl_constrs(inst::Instance,
                     md::GenericModel, 
                     f::Vector{VariableRef},
                     gen::Dict{Int, VariableRef},
                     fkl_cons::Vector{ConstraintRef},
-                    is_add_constrs::Bool,
-                    is_res_list_en::Bool,
-                    restricted_list::Vector{Int64} = Vector{Int64}(undef, 0))
+                    buses_involved::T)
 
 Add first Kirchhoff law constraints.
 
-Set is_res_list_en true to consider flows due to candidates in the restricted 
-list instead of all candidates.
-
-When is_add_constrs is true, constraints for existing lines will be inserted 
-regardless of the value of is_res_list_en; whereas when is_add_constrs is false, 
-the constraints can possibly be updated (deleted and inserted again) if new flow 
-variables, associated with new candidate lines, are inserted.
+Set the node flow constraints considering the assigned candidate f variables.
 """
 function add_fkl_constrs(inst::Instance,
                          md::GenericModel, 
                          f::Vector{VariableRef},
                          gen::Dict{Int, VariableRef},
                          fkl_cons::Vector{ConstraintRef},
-                         buses_involved::T,
-                         candidates::F = Vector{Int64}(undef, 0)) where 
-                                                {T <: VectorSet, F <: VectorSet}
-    
-    # is_constr_update_req = false
-    # if !is_add_constrs
-    #     is_constr_update_req = add_flow_variables(md, f, res_list)
-    # end
-
-    # if !is_constr_update_req
-    #     return
-    # end
-
+                         buses_involved::T) where T <: VectorSet
     for i in buses_involved
         if isassigned(fkl_cons, i)
             delete(md, fkl_cons[i])
         end
 
-        e = comp_candidate_incident_flows(inst, f, i, candidates)
+        e = comp_candidate_incident_flows(inst, f, i)
         e += comp_existing_incident_flows(inst, f, i)
         
         # Some buses may not have load or generation
         d = inst.D[i]
-        g = i in keys(inst.G) ? gen[i] : 0.0
+        g = i in keys(inst.G) ? gen[i] : AffExpr(0.0)
 
         fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl$i")
     end
@@ -240,14 +240,16 @@ function set_obj(inst::Instance,
     @objective(md, Min, e)
 end
 
-function solve!(model_data::FullModel, is_mip_en::Bool = true)
+function solve!(model_data::MIPModel, is_mip_en::Bool = true)
     model = model_data.model
 
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
-    set_attribute(model, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
+    set_attribute(model, 
+                  MOI.RawOptimizerAttribute("TimeLimit"), 
+                  param_solver_time_limit)
 
     rt_runtime = 0.0
-    incumbent_time = solver_time_limit
+    incumbent_time = param_solver_time_limit
     rt_best_bound = 0.0
     mip_start_gap = Inf64
     # Callback to get the root node best bound and runtime (if), and the time to 
@@ -272,7 +274,7 @@ function solve!(model_data::FullModel, is_mip_en::Bool = true)
                 rt_best_bound = root_bound[]
             end
         elseif cb_where == GRB_CB_MIPSOL && 
-               iseq(incumbent_time, solver_time_limit)
+               iseq(incumbent_time, param_solver_time_limit)
             # Prevents incumbent_time from being updated after the first 
             # incumbent solution is found
             runtime = Ref{Cdouble}()
@@ -300,7 +302,7 @@ function solve!(model_data::FullModel, is_mip_en::Bool = true)
     obj = "-"
     gap = "-"
 
-    # if the solver found a solution
+    # If the solver found a solution
     if has_values(model)
         if is_mip_en
             best_bound = dual_objective_value(model)
@@ -329,34 +331,11 @@ function solve!(model_data::FullModel, is_mip_en::Bool = true)
 end
 
 """
-    mipstart(inst, model, x)
-
-Mip starts all candidate circuits to 1 and run Gurobi with SolutionLimit = 1.
-"""
-function mipstart!(inst::Instance, model_data::FullModel)
-    model = model_data.model
-    x = model_data.x
-    @warn "MIP start"
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        set_start_value(x[k], 1)
-    end
-    # Limits the number of feasible MIP solutions found. Optimization returns 
-    # with a SOLUTION_LIMIT status once the limit has been reached. To find a 
-    # feasible solution quickly, Gurobi executes additional feasible point 
-    # heuristics when the solution limit is set to exactly 1.
-    set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
-    optimize!(model)
-
-    # set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
-    return termination_status(model)
-end
-
-"""
     get_g(inst, model_dt)
 
 Get g values from the model.
 """
-function get_g(inst::Instance, model_dt::FullModel)
+function get_g(inst::Instance, model_dt::MIPModel)
     g = zeros(inst.nb_I)
     for i in inst.I
         if i in keys(inst.G)
@@ -364,4 +343,13 @@ function get_g(inst::Instance, model_dt::FullModel)
         end
     end
     return g
+end
+
+function config(model::GenericModel, logfile::String)
+    if param_log_level > 1
+        set_attribute(model, MOI.RawOptimizerAttribute("LogFile"), logfile)
+        set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 1)
+    else
+        set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+    end
 end

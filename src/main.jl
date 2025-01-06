@@ -1,5 +1,5 @@
 function run2(instance)
-    dir = "TransExpanProblem.jl"
+    dir = "TEP.jl"
     logfile = "$dir/log.txt"
 
     rng = Random.MersenneTwister(123)
@@ -45,7 +45,7 @@ function update_bounds_g(inst, model_dt, is_fix_en)
 end
 
 function run(instance)
-    dir = "TransExpanProblem.jl"
+    dir = "TEP.jl"
     logfile = "$dir/log.txt"
 
     rng = Random.MersenneTwister(123)
@@ -122,7 +122,7 @@ end
 Execute all instances.
 """
 function run_all()
-    dir = "TransExpanProblem.jl"
+    dir = "TEP.jl"
     dir_log = "log"
     outputfile = "$dir/$dir_log/log.md"
     
@@ -149,13 +149,15 @@ function run_all()
     ]
     counter = 0
     f = length(files)
-    for file in files[1:f]
+    # for file in files[1:f]
+    # 13, 18, 25, 26
+    for file in files[14:14]
         counter += 1
         if file in skip
-            println("Skipping instance $file nb $counter")
+            log("Skipping instance $file nb $counter")
             continue
         end
-        println("Processing $file nb $counter")
+        log("Processing $file nb $counter", true)
 
         inputfile = "$dir/input3/$file"
         logfile = "$dir/$dir_log/$file"
@@ -163,36 +165,34 @@ function run_all()
         model = nothing
         build_time = 0.0
         heur_time = 0.0
-        nb_inserted_first = 0
+        inserted_candidates = Set{Int}()
         nb_inserted = 0
         ratio1 = 0.0
         ratio2 = 0.0
+        start_time = 0.0
         ms_gap = 0.0
 
         # try
-        
-        @warn "Build heuristic solution"
+        log("Build heuristic solution", true)
         heur_time = @elapsed((inserted_candidates, 
-                              nb_inserted_first,
                               nb_inserted,
                               ratio1, 
                               ratio2) = build_solution(inst, logfile))
 
-        @warn "Build full model"
-        build_time = @elapsed (model = build_model(inst, logfile))
-        # readline()
+        log("Build full model", true)
+        build_time = @elapsed (model = build_mip_model(inst, logfile))
 
-        @warn "Mip starting the model"
+        log("Fix the start of the model", true)
         start_time = @elapsed (is_feas = 
-                                   mip_start!(inst, model, inserted_candidates))
-        # readline()
+                                   fix_start!(inst, model, inserted_candidates))
 
+        log("Solve the model", true)
         results = solve!(model, true)
         ms_gap = results[length(results)]
         results = results[1:length(results) - 1]
         
         results = (model.dem_gen_ratio, results..., 
-                   heur_time, nb_inserted_first, nb_inserted, 
+                   heur_time, nb_inserted, 
                    ratio1, ratio2, start_time)
         log_instance(outputfile, file, inst, build_time, results, is_feas)
         # catch e

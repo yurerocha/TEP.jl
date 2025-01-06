@@ -99,13 +99,60 @@ Add heuristic gap
 Add outra estratégia para quando a solução heurística dá inviável
 -Nb 13 inst 162
 
-Implementar soluçãao para sols iniciais inviáveis
+Ideia: implementar solução para sols iniciais inviáveis
 -Depois de rodar a heurística, verificar os circuitos existentes, próximos às 
  violações, que estejam sobrecarregados
 -Adicionar os candidatos correspondentes
+
+Ideia
+-Adicionar candidatos próximos a geradores
+-Testar não só em geradores, mas cargas mais altas
+-Também testar em cargas mais baixas
+
+Ideia
+-Verificar os fluxos nos candidatos conectados aos que violam
+
+Ideia
+-Calcular alguns níveis a partir do circuito violado e adicionar todos os 
+ candidatos
+-Isso é similar à ideia dos candidatos conectando o gerador, a qual funcionou
+-Por outro lado, é similar à ideia de adicionar candidatos paralelos, que não 
+ funcionou
+
+INVESTIR NA PRÓXIMA IDEIA PRIMEIRO
+-Talvez já seja suficiente
+
+Ideia
+-Calcular o caminho mínimo entre os nós envolvidos na violação, com limite de 
+ tamanho, e adicionar os candidatos referentes aos caminhos encontrados
 
 GRBmsg
 https://docs.gurobi.com/projects/optimizer/en/current/reference/c/logging.html
 
 É possível terminar o callback
 https://jump.dev/JuMP.jl/stable/packages/Gurobi/#Accessing-Gurobi-specific-attributes
+
+FullModel -> MipModel
+FullLPModel -> LpModel
+
+Tem algo errado com o algoritmo de adição de candidatos
+
+Bug
+-Verificar o motivo da linha 386 no arquivo heuristic.jl estar fazendo diferença:
+fix(lp_model.f[k], 0.0; force = true)
+-O bug está em violated_flows_neigh!, mas pode estar sendo causado pelo controle de 
+variáveis nos métodos add_lines e rm_lines
+-Fazer um teste adicionando tudo e controlando apenas os gammas
+
+As restrições de Ohm estão ok
+Os Deltas estão diferentes
+As restrições da fkl estão levemente diferentes (os sinais)
+Ainda não chequei as restrições que limitam os fluxos
+Sol: adicionar uma terceira lista de candidatos que já entraram no modelo em algum momento
+Pq dá problema desconsiderar candidatos adicionados em algum momento, mas que estejam fora da lista de candidatos?
+-Em iterações futuras, o candidato pode ser novamente considerado, mas seu fluxo não ser amarrado nas fkls
+
+TODO
+Montagem modelo do modelo completo como um parâmetro
+Fix: buses_involved como set para evitar delete e insert da mesma restrição múltiplas vezes
+Ao rm_lines, não reotimizar

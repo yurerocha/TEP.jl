@@ -192,7 +192,7 @@ function flow_cons(inst::Instance,
                          lower_bound = 0.0, 
                          upper_bound = 0.0,
                          base_name = "s$l")
-        add_to_expression!(e, penalty, s[l])
+        add_to_expression!(e, param_penalty, s[l])
         f_lower_cons[l] = @constraint(md, -f[l] - inst.f_bar[l] <= s[l])
         f_upper_cons[l] = @constraint(md, f[l] - inst.f_bar[l] <= s[l])
         # When s[l] is zero, the constraints above are equivalent to the
@@ -335,7 +335,7 @@ function update_beta!(inst::Instance,
     
     md.Gamma[i, i] *= gamma_star / gamma_i
     # Computing the new B⁻¹ and β matrices from scratch
-    if debugging_level == 5
+    if param_debugging_level == 5
         # GammaC = copy(md.Gamma)
         # GammaC[i, i] = md.Gamma[i, i] * gamma_star / inst.gamma[i]
         BC = md.S' * md.Gamma * md.S
@@ -373,7 +373,7 @@ function comp_inverse!(B::Matrix{Float64}, refbus::Int64 = 1)
     X = Matrix{Float64}(undef, n, n)
     make_invertible!(B, refbus)
 
-    if debugging_level == 5
+    if param_debugging_level == 5
         # @show rank(B), n
         @assert rank(B) == n
         @assert is_one(X * B)

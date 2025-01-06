@@ -1,4 +1,4 @@
-module TransExpanProblem
+module TEP
 
 using Colors
 using Dates

@@ -4,7 +4,7 @@
 Compute if a is less than b.
 """
 function isl(a::Float64, b::Float64)
-    return a < b - eps
+    return a < b - param_eps
 end
 
 """
@@ -13,16 +13,16 @@ end
 Compute if a is greater than b.
 """
 function isg(a::Float64, b::Float64)
-    return a > b + eps
+    return a > b + param_eps
 end
 
 """
-    isg(a::Float64, b::Float64)
+    iseq(a::Float64, b::Float64)
 
 Compute if a is equal to b.
 """
 function iseq(a::Float64, b::Float64)
-    return abs(a - b) < eps
+    return abs(a - b) < param_eps
 end
 
 """
@@ -31,7 +31,7 @@ end
 Return true if matrices A and B are equal.
 """
 function iseq(A::Matrix{Float64}, B::Matrix{Float64})
-    return norm(A - B) < eps
+    return norm(A - B) < param_eps
 end
 
 function get_nb(s::Vector{String}, i::Int64)
@@ -39,7 +39,7 @@ function get_nb(s::Vector{String}, i::Int64)
 end
 
 """
-    get_filename(input)
+    get_filename(input::String)
 
 Return the filename without the path and the extension.
 """
@@ -153,11 +153,10 @@ end
 
 """
     comp_existing_incident_flows(inst::Instance,
-                                 md::GenericModel, 
                                  f::Vector{VariableRef}, 
                                  i::Int64)
 
-Compute the incident flow in node i for the existing lines.
+Compute the incident flow at node i for the existing lines.
 """
 function comp_existing_incident_flows(inst::Instance,
                                       f::Vector{VariableRef}, 
@@ -176,22 +175,21 @@ end
 
 """
     comp_candidate_incident_flows(inst::Instance,
-                                  md::GenericModel, 
                                   f::Vector{VariableRef}, 
-                                  i::Int64,
-                                  is_res_list_en::Bool,
-                                  res_list::Vector{Int64})
+                                  i::Int64)
 
-Compute the incident flow in node i for the candidate lines.
-
-The restricted list can be used to restrict the lines to be evaluated.
+Compute the incident flow at node i for the candidate lines.
 """
 function comp_candidate_incident_flows(inst::Instance,
                                        f::Vector{VariableRef}, 
-                                       i::Int64,
-                                       res_list::T) where T <: VectorSet
+                                       i::Int64)
     e = AffExpr(0.0)
-    for k in res_list
+    # for k in res_list
+    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+        if !isassigned(f, k)
+            continue
+        end
+
         c = inst.K[k - inst.nb_J]
         if c.to == i
             e += f[k]
@@ -200,30 +198,6 @@ function comp_candidate_incident_flows(inst::Instance,
         end
     end
     return e
-end
-
-"""
-    add_flow_variables(md, f, lines)
-
-Add flow variables for circuits in "lines".
-"""
-function add_flow_variables(inst::Instance,
-                            md::GenericModel, 
-                            f::Vector{VariableRef},
-                            lines::Vector{Int64})
-    buses_involved = Vector{Int64}(undef, 0)
-    for k in lines
-        if !isassigned(f, k)
-            f[k] = @variable(md, base_name = "f")
-            for i in inst.I
-                c = inst.K[k - inst.nb_J]
-                if c.fr == i || c.to == i
-                    push!(buses_involved, i)
-                end
-            end
-        end
-    end
-    return buses_involved
 end
 
 function populate_circuits(I::Set{Int64}, 
@@ -236,11 +210,11 @@ function populate_circuits(I::Set{Int64},
                            nb_circs::Int64, 
                            is_cand_en::Bool = false, 
                            rng = Random.default_rng())
-    for i in nb_line:nb_line+nb_circs-1
+    for i in nb_line:nb_line + nb_circs - 1
         d = split(s[i])
         circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
         if is_cand_en
-            nb = nb_candidates
+            nb = param_nb_candidates
         else
             nb = parse(Int, d[3])
         end
@@ -260,8 +234,8 @@ function populate_circuits(I::Set{Int64},
             push!(f_bar, parse(Float64, d[5]))
             c = parse(Float64, d[6])
             if is_cand_en
-                c /= (nb_candidates + 1) # plus the existing circuit
-                rn = rand(rng, 1:max_rand)
+                c /= (param_nb_candidates + 1) # plus the existing circuit
+                rn = rand(rng, 1:param_max_rand)
                 # @show rn
                 c += c / rn
             end
@@ -270,9 +244,14 @@ function populate_circuits(I::Set{Int64},
     end
 end
 
-function log(outputfile::String, str::String)
-    open(outputfile, "a") do f
-        write(f, str)
+"""
+    log(file::String, msg::String)
+
+Log message to file.
+"""
+function log(file::String, msg::String)
+    open(file, "a") do f
+        write(f, msg)
     end
 end
 
@@ -280,9 +259,9 @@ function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Objective | Gap (%) | Heur (s) | Ins it 1 | Ins |" *
+              " Objective | Gap (%) | Heur (s) | Ins |" *
               " R1 (%) | R2 (%) | Start (s) | Feas | \n"
-    outstr *= "|:---"^21 * "| \n"
+    outstr *= "|:---"^20 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -301,12 +280,9 @@ function log_instance(outputfile::String,
         " $(round(build_time, digits=2)) |"
     for r in results
         if typeof(r) == Float64
-            # s *= @sprintf(" %.2f |", r)
             r = round(r, digits=2)
-            s *= " $r |"
-        else
-            s *= " $r |"
         end
+        s *= " $r |"
     end
     s *= " $is_mip_start_feas | \n"
     log(outputfile, s)
@@ -359,7 +335,7 @@ end
 Detect cycles in the graph and return the free buses (those outside cycles).
 """
 function detect_cycles(inst::Instance, 
-                       md::FullModel, 
+                       md::MIPModel, 
                        is_drawing_en::Bool = true, 
                        filename::String = "graph")
     # TODO: Add "demand - generation" to the vertices.
@@ -403,7 +379,7 @@ end
     draw_cycles(inst, model, graph, cycles, filename)
 """
 function draw_cycles(inst::Instance, 
-                     md::FullModel, 
+                     md::MIPModel, 
                      elist::Vector{Tuple{Int64, Int64}}, 
                      cycles::Vector{Vector{Int64}}, 
                      filename::String)
@@ -469,22 +445,26 @@ Each edge is labeled with the flow value and each vertex is labeled with
 "generation - demand".
 """
 function draw_solution(inst::Instance, 
-                       md::FullModel, 
+                       md::T, 
                        f::Vector{Float64}, 
-                       viols::Vector{Float64} = [], 
-                       filename::String = "solution")
+                       viols::Vector{Tuple{Float64, Int64}}, 
+                       filename::String = "solution") where T <: TepModel
     flows = Dict{Circuit, Float64}()
+    circuits = Dict{Circuit, Int64}()
     for l in 1:inst.nb_J + inst.nb_K
-        c = get_circuit(dt, l)
+        c = get_circuit(inst, l)
         if c in keys(flows)
             flows[c] += value(f[l])
         else
             flows[c] = value(f[l])
+            # Shift to the candidates
+            k = inst.nb_J + 1 + param_nb_candidates * (l - 1)
+            circuits[c] = k
         end
     end
     elist = []
     for l in 1:inst.nb_J + inst.nb_K
-        c = get_circuit(dt, l)
+        c = get_circuit(inst, l)
         push!(elist, (c.fr, c.to))
     end
     # @show flows
@@ -494,16 +474,21 @@ function draw_solution(inst::Instance,
     edgestrokecolors = [colorant"grey" for _ in elist]
     for (i, e) in enumerate(edges(g))
         for v in viols
-            c = get_circuit(dt, v[1])
+            c = get_circuit(inst, v[2])
             if (src(e), dst(e)) == (c.fr, c.to)
-                edgestrokecolors[i] = colorant"white"
+                edgestrokecolors[i] = colorant"blue"
             end
         end
     end
 
     delta = [round(Int, (i in keys(md.g) ? value(md.g[i]) : 0.0) - 
              (i in keys(inst.D) ? inst.D[i] : 0.0)) for i in 1:inst.nb_I]
-    edgelabels = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
+    # edgelabels = ["$(round(Int, flows[Circuit(src(e), dst(e))])):$" for e in edges(g)]
+    edgelabels = []
+    for e in edges(g)
+        c = Circuit(src(e), dst(e))
+        push!(edgelabels, "$(round(Int, flows[c])):$(circuits[c])")
+    end
     # Generate n maximally distinguishable colors in LCHab space.
     # vertexfillc = distinguishable_colors(nv(g), colorant"blue")
 
@@ -514,9 +499,11 @@ function draw_solution(inst::Instance,
     vertexshapesizes = []
     for i in eachindex(delta)
         d = delta[i]
-        # t = round(theta[i], digits=2)
+        theta = value(md.theta[i])
+        t = round(theta, digits=2)
         # vertices[i] = "$(I[i]) $d $t"
-        vertices[i] = "$(I[i]) $d"
+        vertices[i] = "$(I[i]) $t"
+        # vertices[i] = "$(I[i]) $d"
         if d < 0 
             vertexfillc[i] = colorant"red"
         elseif d > 0
@@ -527,8 +514,8 @@ function draw_solution(inst::Instance,
         push!(vertexshapesizes, 10 * log10(abs(d)))
     end
     @svg begin
+        # background("grey")
         background("white")
-        # background("white")
         fontsize(6)
         sethue("black")
         text(filename, boxbottomcenter() + (0, -50), halign=:center)
@@ -550,5 +537,20 @@ function draw_solution(inst::Instance,
                       #        for i in 1:nv(g)]
             )
         end
-    end 3000 3000 filename * ".svg"
+    end 1000 1000 filename * ".svg"
+end
+
+"""
+    log(msg::String, is_warn::Bool = false)
+
+Log message to console.
+"""
+function log(msg::String, is_warn::Bool = false)
+    if param_log_level >= 1
+        if is_warn
+            @warn msg
+        else
+            println(msg)
+        end
+    end
 end
