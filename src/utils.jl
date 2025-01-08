@@ -232,12 +232,12 @@ function populate_circuits(I::Set{Int64},
             end
             push!(gamma, comp_gamma(x))
             push!(f_bar, parse(Float64, d[5]))
-            c = parse(Float64, d[6])
+            bc = parse(Float64, d[6])
+            c = bc
             if is_cand_en
-                c /= (param_nb_candidates + 1) # plus the existing circuit
+                # bc /= (param_nb_candidates + 1) # plus the existing circuit
                 rn = rand(rng, 1:param_max_rand)
-                # @show rn
-                c += c / rn
+                c = bc / (param_nb_candidates + 1) + bc / rn
             end
             push!(cost, c)
         end

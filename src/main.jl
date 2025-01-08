@@ -151,7 +151,7 @@ function run_all()
     f = length(files)
     # for file in files[1:f]
     # 13, 18, 25, 26
-    for file in files[14:14]
+    for file in files[1:f]
         counter += 1
         if file in skip
             log("Skipping instance $file nb $counter")

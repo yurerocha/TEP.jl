@@ -70,7 +70,7 @@ function violated_flows_neigh!(inst::Instance,
 
     it = 0
     lambda = param_lambda_init
-    viols = comp_viols(inst, lp_model, existing)
+    viols = comp_viols(lp_model, existing)
     while true
         it += 1
         log("---------- it $it ----------", true)
@@ -93,7 +93,7 @@ function violated_flows_neigh!(inst::Instance,
             union!(inserted_candidates, insert_set)
             setdiff!(candidates, insert_set)
             best_viol = viol
-            viols = comp_viols(inst, lp_model, existing)
+            viols = comp_viols(lp_model, existing)
 
             if param_debugging_level == 1
                 lp_debug = build_lp_model(inst)
@@ -121,8 +121,9 @@ function violated_flows_neigh!(inst::Instance,
             # If the viol increases, we have to remove the last inserted lines 
             # and decrease λ
             log("Removing lines and decreasing λ")
-            rm_lines!(inst, lp_model, insert)
-            lambda = max(0.0, lambda - 0.25)
+            rm_lines!(lp_model, insert)
+            # lambda = max(0.0, lambda - 0.25)
+            lambda /= 2.0
         end
     end
 
@@ -218,7 +219,7 @@ function residual_flows_neigh(inst::Instance,
             else
                 rm_count += 1
                 # The inserted candidates make the solution worse
-                rm_lines!(inst, lp_model, insert)
+                rm_lines!(lp_model, insert)
             end
         end
 
@@ -252,9 +253,34 @@ function g_lines_neigh(inst::Instance,
     # Ideia 3: add linhas conectando os geradores
     # TODO: colocar mais níveis de candidatos na árvore
     lines = Vector{Int64}(undef, 0)
+    cap = Dict{Int64, Float64}()
     for k in candidates
-        c1 = get_circuit(inst, k)
-        if (c1.fr in keys(inst.G) || c1.to in keys(inst.G))
+        c = get_circuit(inst, k)
+        buses = zeros(Int64, 2)
+        if c.fr in keys(inst.G)
+            buses[1] = c.fr
+        end
+        if c.to in keys(inst.G)
+            buses[2] = c.to
+        end
+
+        is_cap_changed = false
+        # Connect a line to the generator if the capacity of the connected
+        # lines is insufficient to carry the generation
+        for b in buses
+            if b == 0 || (haskey(cap, b) && !isl(cap[b], inst.G[b]))
+                continue
+            end
+
+            if haskey(cap, b)
+                cap[b] += inst.f_bar[k]
+            else
+                cap[b] = inst.f_bar[k]
+            end
+            is_cap_changed = true
+        end
+
+        if is_cap_changed
             push!(lines, k)
         end
     end
@@ -300,7 +326,7 @@ function g_lines_neigh(inst::Instance,
                 string(round(length(inserted_candidates) / 
                              inst.nb_K, digits=2)))
         else
-            rm_lines!(inst, lp_model, insert)
+            rm_lines!(lp_model, insert)
         end
 
         if iseq(best_viol, 0.0)
@@ -391,14 +417,11 @@ function add_lines!(inst::Instance,
 end
 
 """
-    comp_viols(inst, lp_model, existing_lines)
+    comp_viols(lp_model::LPModel, existing_lines::Vector{Int64})
 
 Compute the violations of the flow constraints in the existing lines.
-
-Returns a sorted list of tuples with the line index and the violation.
 """
-function comp_viols(inst::Instance, 
-                    lp_model::LPModel, 
+function comp_viols(lp_model::LPModel, 
                     existing_lines::Vector{Int64})
     viols = Vector{Tuple{Int64, Float64}}(undef, 0)
     for j in existing_lines
@@ -468,12 +491,14 @@ function fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
     model = md.model
     status = termination_status(model)
     is_feas = true
-    if param_log_level >= 2 && (status == MOI.INFEASIBLE || 
-                                status == MOI.INFEASIBLE_OR_UNBOUNDED)
-        compute_conflict!(model)
-        if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-            iis_model, _ = copy_conflict(model)
-            print(iis_model)
+    if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
+        if param_log_level >= 3
+            println("Infeasible model")
+            compute_conflict!(model)
+            if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
+                iis_model, _ = copy_conflict(model)
+                print(iis_model)
+            end
         end
         is_feas = false
     end
