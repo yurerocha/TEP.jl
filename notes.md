@@ -156,4 +156,5 @@ TODO
 -Profiling
 -Ao rm_lines, não reotimizar
 -Parametrização
--Add log redução de violação por neigh
+-Add log redução de violação por neigh OK
+-Verificar runtime duas estratégias: construindo tudo desde o início Vs adicionando sob demanda OK

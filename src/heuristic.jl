@@ -7,27 +7,21 @@ function build_solution(inst::Instance, logfile::String)
     # At the first it, all candidate lines are removed
     lp_model = build_lp_model(inst, logfile)
 
-    optimize!(lp_model.model)
-
-    viol = objective_value(lp_model.model)
-
-    inserted = Set{Int64}()
-    # if iseq(viol, 0.0)
-    #     return inserted_candidates, 
-    #            (NeighReport(0.0, 0.0, 0.0), 
-    #             NeighReport(0.0, 0.0, 0.0), 
-    #             NeighReport(0.0, 0.0, 0.0))
-    # end
-        
     # All removed lines are candidates for reinsertion
     lines = collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
-
     candidates = Set(lines)
     existing = collect(1:inst.nb_J)
+    inserted = Set{Int64}()
+
+    if param_is_build_start
+        rm_lines!(lp_model, lines)
+    end
+
+    optimize!(lp_model.model)
+    viol = objective_value(lp_model.model)
 
     init_viol = viol
     best_viol = viol
-
     vf_report = NeighReport()
     gl_report = NeighReport()
     rf_report = NeighReport()
@@ -91,7 +85,7 @@ function violated_flows_neigh!(inst::Instance,
     end
 
     it = 0
-    lambda = param_lambda_init
+    lambda = param_lambda_start
     viols = comp_viols(lp_model, existing)
     while true
         it += 1
@@ -421,19 +415,22 @@ function add_lines!(inst::Instance,
                     new_candidates::Vector{Int64})
     log("Add lines", true)
     
-    # Add flow variables if required
-    buses_involved = add_flow_variables(inst, 
-                                        lp_model.model, 
-                                        lp_model.f, 
-                                        lp_model.s, 
-                                        new_candidates)    
-    # Add fkl constraints considering candidate lines in the restricted list
-    add_fkl_constrs(inst, 
-                    lp_model.model, 
-                    lp_model.f, 
-                    lp_model.g, 
-                    lp_model.fkl_cons, 
-                    buses_involved)
+    if !param_is_build_start
+        # Add flow variables if required
+        buses_involved = add_flow_variables(inst, 
+                                            lp_model.model, 
+                                            lp_model.f, 
+                                            lp_model.s, 
+                                            new_candidates)    
+        # Add fkl constraints considering candidate lines in the restricted list
+        add_fkl_constrs(inst, 
+                        lp_model.model, 
+                        lp_model.f, 
+                        lp_model.g, 
+                        lp_model.fkl_cons, 
+                        buses_involved)
+    end
+
     for k in new_candidates
         if is_fixed(lp_model.s[k])
             unfix(lp_model.s[k])

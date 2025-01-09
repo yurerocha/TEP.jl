@@ -81,9 +81,14 @@ function build_lp_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
 
     # Flow variables
     f = Vector{VariableRef}(undef, inst.nb_J + inst.nb_K)
-    for j in 1:inst.nb_J
-    # for j in 1:inst.nb_J + inst.nb_K
-        f[j] = @variable(md, base_name = "fe$j")
+
+    l_max = inst.nb_J
+    if param_is_build_start
+        l_max += inst.nb_K
+    end
+
+    for l in 1:l_max
+        f[l] = @variable(md, base_name = "fe$l")
     end
     # First Kirchhoff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
@@ -110,9 +115,11 @@ function build_lp_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         c = inst.K[k - inst.nb_J]
         @constraint(md, Delta_theta[k] == theta[c.fr] - theta[c.to])
-        # f_cons[k] = @constraint(md, 
-        #                         f[k] == inst.gamma[k] * Delta_theta[k],
-        #                         base_name = "ol$k")
+        if param_is_build_start
+            f_cons[k] = @constraint(md, 
+                                    f[k] == inst.gamma[k] * Delta_theta[k],
+                                    base_name = "ol$k")
+        end
     end
 
     # Flow limits
@@ -127,8 +134,10 @@ function build_lp_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
     end
     # Candidate circuits
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        # @constraint(md, f[k] - inst.f_bar[k] <= s[k])
-        # @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
+        if param_is_build_start
+            @constraint(md, f[k] - inst.f_bar[k] <= s[k])
+            @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
+        end
         fix(s[k], 0.0; force = true)
     end
 
