@@ -1,6 +1,6 @@
 # ----------------------------- General parameters -----------------------------
 const param_eps = 1e-5
-param_debugging_level = 0
+param_debugging_level = 2
 param_log_level = 2
 
 # --------------------------- instance.jl parameters ---------------------------
@@ -10,7 +10,7 @@ const param_max_rand = 100 # Max random value for the new cost (see text)
 const param_nb_candidates = 2 # Nb of candidates available per existing line
 
 # ---------------------------- model.jl parameters -----------------------------
-param_solver_time_limit::Float64 = 600.0
+param_solver_time_limit::Float64 = 1.0
 const MAXINT = 2_000_000_000 # Gurobi MAXINT value
 const param_penalty = 1e6
 
@@ -22,3 +22,4 @@ param_is_add_single_line = true # Add single cand in viol cand neigh
 param_lambda_init = 1.0 # Initial percentage of violated cands to insert
 param_res_flow_ins = 0.05 # Percent of cands to evaluate insert per it
 param_g_lines_ins = 0.05 # Percent of cands connected to g to evaluate per it
+param_neigh = 0 # Neighboorhood structures for the heuristic

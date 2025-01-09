@@ -11,7 +11,7 @@ function build_solution(inst::Instance, logfile::String)
 
     viol = objective_value(lp_model.model)
 
-    inserted_candidates = Set{Int64}()
+    inserted = Set{Int64}()
     # if iseq(viol, 0.0)
     #     return inserted_candidates, 
     #            (NeighReport(0.0, 0.0, 0.0), 
@@ -27,28 +27,47 @@ function build_solution(inst::Instance, logfile::String)
 
     init_viol = viol
     best_viol = viol
+
+    vf_report = NeighReport()
+    gl_report = NeighReport()
+    rf_report = NeighReport()
+
+    neighs = [1, 2, 3]
+    if param_neigh == 1
+        neighs = [1, 2]
+    elseif param_neigh == 2
+        neighs = [2, 1]
+    elseif param_neigh == 3
+        neighs = [2, 1, 3]
+    end
     
-    best_viol, vf_report = violated_flows_neigh!(inst, 
+    for neigh in neighs
+        if neigh == 1
+            best_viol, vf_report = violated_flows_neigh!(inst, 
+                                                         lp_model, 
+                                                         existing, 
+                                                         candidates, 
+                                                         inserted, 
+                                                         init_viol, 
+                                                         best_viol)
+        elseif neigh == 2
+            best_viol, gl_report = g_lines_neigh(inst, 
                                                  lp_model, 
-                                                 existing, 
                                                  candidates, 
-                                                 inserted_candidates, 
+                                                 inserted, 
                                                  init_viol, 
                                                  best_viol)
+        elseif neigh == 3
+            best_viol, rf_report = residual_flows_neigh(inst, 
+                                                        lp_model, 
+                                                        candidates, 
+                                                        inserted, 
+                                                        init_viol, 
+                                                        best_viol)
+        end
+    end
 
-    best_viol, gl_report = g_lines_neigh(inst, 
-                                         lp_model, 
-                                         candidates, 
-                                         inserted_candidates, 
-                                         best_viol)
-
-    best_viol, rf_report = residual_flows_neigh(inst, 
-                                                lp_model, 
-                                                candidates, 
-                                                inserted_candidates, 
-                                                best_viol)
-
-    return inserted_candidates, (vf_report, gl_report, rf_report)
+    return inserted, (vf_report, gl_report, rf_report)
 end
 
 function violated_flows_neigh!(inst::Instance,
@@ -61,7 +80,7 @@ function violated_flows_neigh!(inst::Instance,
     log("Violated flows neigh", true)
     
     if iseq(best_viol, 0.0)
-        return best_viol, NeighReport(0.0, 0.0, 0.0)
+        return best_viol, NeighReport()
     end
     time_beg = time()
     inserted_beg = length(inserted_candidates)
@@ -143,12 +162,13 @@ end
 function residual_flows_neigh(inst::Instance, 
                               lp_model::LPModel, 
                               candidates::Set{Int64}, 
-                              inserted_candidates::Set{Int64},
+                              inserted_candidates::Set{Int64}, 
+                              init_viol::Float64, 
                               best_viol::Float64)
     log("Residual flows neigh", true)
 
     if iseq(best_viol, 0.0)
-        return best_viol, NeighReport(0.0, 0.0, 0.0)
+        return best_viol, NeighReport()
     end
     time_beg = time()
     inserted_beg = length(inserted_candidates)
@@ -246,7 +266,7 @@ function residual_flows_neigh(inst::Instance,
     end
     delta_runtime = time() - time_beg
     delta_inserted = length(inserted_candidates) - inserted_beg
-    delta_viol = best_viol - viol_beg
+    delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
                          delta_inserted / inst.nb_K, 
@@ -259,11 +279,12 @@ function g_lines_neigh(inst::Instance,
                        lp_model::LPModel, 
                        candidates::Set{Int64}, 
                        inserted_candidates::Set{Int64},
+                       init_viol::Float64, 
                        best_viol::Float64)
     log("Generation lines neigh", true)
 
     if iseq(best_viol, 0.0)
-        return best_viol, NeighReport(0.0, 0.0, 0.0)
+        return best_viol, NeighReport()
     end
     time_beg = time()
     inserted_beg = length(inserted_candidates)
@@ -359,7 +380,7 @@ function g_lines_neigh(inst::Instance,
     end
     delta_runtime = time() - time_beg
     delta_inserted = length(inserted_candidates) - inserted_beg
-    delta_viol = best_viol - viol_beg
+    delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
                          delta_inserted / inst.nb_K, 

@@ -36,6 +36,13 @@ struct NeighReport
     runtime::Float64
     inserted_ratio::Float64
     improvement_ratio::Float64
+
+    NeighReport() = new(0.0, 0.0, 0.0)
+    NeighReport(runtime::Float64, 
+                inserted_ratio::Float64, 
+                improvement_ratio::Float64) = new(runtime, 
+                                                  inserted_ratio, 
+                                                  improvement_ratio)
 end
 
 # -------------------------- Instance data structures --------------------------
