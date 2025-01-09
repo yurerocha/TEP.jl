@@ -32,6 +32,12 @@ struct Start
     g::Vector{Float64}
 end
 
+struct NeighReport
+    runtime::Float64
+    inserted_ratio::Float64
+    improvement_ratio::Float64
+end
+
 # -------------------------- Instance data structures --------------------------
 struct Circuit
     fr::Int64 # "from" bus

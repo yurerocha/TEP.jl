@@ -1,7 +1,7 @@
 # ----------------------------- General parameters -----------------------------
 const param_eps = 1e-5
 param_debugging_level = 0
-param_log_level = 0
+param_log_level = 2
 
 # --------------------------- instance.jl parameters ---------------------------
 const param_mult_load = 2.0 # Multiplier for the load
@@ -18,7 +18,7 @@ const param_penalty = 1e6
 param_gamma_star = 0.0 # Simulate line rm by setting its susceptance to this val
 param_ratio_rm_stop = 0.01 # Stop heuristic when viol_rm/viol_init < this val
 param_viol_threashold = 0.1 # Ignore flow violations below this val
-param_is_add_single_line = false
-param_lambda_init = 1.0
-param_res_flow_neigh_ins = 0.05
-param_g_lines_neigh_ins = 0.05
+param_is_add_single_line = true # Add single cand in viol cand neigh
+param_lambda_init = 1.0 # Initial percentage of violated cands to insert
+param_res_flow_ins = 0.05 # Percent of cands to evaluate insert per it
+param_g_lines_ins = 0.05 # Percent of cands connected to g to evaluate per it

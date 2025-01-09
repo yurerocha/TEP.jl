@@ -165,19 +165,13 @@ function run_all()
         model = nothing
         build_time = 0.0
         heur_time = 0.0
-        inserted_candidates = Set{Int}()
-        nb_inserted = 0
-        ratio1 = 0.0
-        ratio2 = 0.0
         start_time = 0.0
         ms_gap = 0.0
 
         # try
         log("Build heuristic solution", true)
         heur_time = @elapsed((inserted_candidates, 
-                              nb_inserted,
-                              ratio1, 
-                              ratio2) = build_solution(inst, logfile))
+                              reports) = build_solution(inst, logfile))
 
         log("Build full model", true)
         build_time = @elapsed (model = build_mip_model(inst, logfile))
@@ -191,10 +185,10 @@ function run_all()
         ms_gap = results[length(results)]
         results = results[1:length(results) - 1]
         
-        results = (model.dem_gen_ratio, results..., 
-                   heur_time, nb_inserted, 
-                   ratio1, ratio2, start_time)
-        log_instance(outputfile, file, inst, build_time, results, is_feas)
+        results = (model.dem_gen_ratio, results...)
+        heur_times = (heur_time, start_time)
+        log_instance(outputfile, file, inst, build_time, 
+                     results, reports, heur_times, is_feas)
         # catch e
         #     @warn e
         #     log_instance(outputfile, 

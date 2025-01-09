@@ -153,6 +153,7 @@ Pq dá problema desconsiderar candidatos adicionados em algum momento, mas que e
 -Em iterações futuras, o candidato pode ser novamente considerado, mas seu fluxo não ser amarrado nas fkls
 
 TODO
-Montagem modelo do modelo completo como um parâmetro
-Fix: buses_involved como set para evitar delete e insert da mesma restrição múltiplas vezes
-Ao rm_lines, não reotimizar
+-Profiling
+-Ao rm_lines, não reotimizar
+-Parametrização
+-Add log redução de violação por neigh

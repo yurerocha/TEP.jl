@@ -259,9 +259,10 @@ function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Objective | Gap (%) | Heur (s) | Ins |" *
-              " R1 (%) | R2 (%) | Start (s) | Feas | \n"
-    outstr *= "|:---"^20 * "| \n"
+              " Objective | Gap (%) | VF (s) | Ins (%) | Impr (%) |" * 
+              " GL (s) | Ins (%) | Impr (%) | RF (s) | Ins (%) |" *
+              " Impr (%) | Heur (s) | Start (s) | Feas | \n"
+    outstr *= "|:---"^26 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -273,17 +274,32 @@ function log_instance(outputfile::String,
                       inst::Instance, 
                       build_time::Float64, 
                       results::Tuple,
+                      reports::Tuple,
+                      heur_times::Tuple,
                       is_mip_start_feas::Bool)
     N = inst.nb_I
     L = (inst.nb_K + inst.nb_J)
     s = "| $inst_name | $N | $L | $(round(L / N, digits=2)) |" * 
         " $(round(build_time, digits=2)) |"
+
     for r in results
         if typeof(r) == Float64
             r = round(r, digits=2)
         end
         s *= " $r |"
     end
+
+    for r in reports
+        s *= " $(round(r.runtime, digits=2)) |" *
+             " $(round(100.0 * r.inserted_ratio, digits=2)) |" *
+             " $(round(100.0 * r.improvement_ratio, digits=2)) |"
+    end
+
+    for t in heur_times
+        t = round(t, digits=2)
+        s *= " $t |"
+    end
+
     s *= " $is_mip_start_feas | \n"
     log(outputfile, s)
 end
