@@ -12,6 +12,7 @@ function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
         # Forcing to build candidates
         x[k] = @variable(md, binary = true, base_name = "x$(k - inst.nb_J)")
     end
+    add_symmetry_constrs(inst, md, x)
 
     gen = add_g_vars(inst, md)
     sum_d, sum_g = comp_sum_d_sum_g(inst)
@@ -72,24 +73,32 @@ Build linear programming model.
 
 The gamma values can be used to simulate building a candidate line.
 """
-function build_lp_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
+function build_lp_model(inst::Instance, 
+                        logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
     config(md, logfile)
+    # https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parametercrossover
+    # https://support.gurobi.com/hc/en-us/community/posts/360043330491-The-role-of-crossover-in-linear-programming
+    # https://support.gurobi.com/hc/en-us/community/posts/360043463792-How-to-terminate-once-barrier-solves-problem
+    # https://support.gurobi.com/hc/en-us/community/posts/28806723752849-Terminate-once-barrier-solves-problem
+    set_attribute(md, MOI.RawOptimizerAttribute("Method"), 2)
+    # set_attribute(md, MOI.RawOptimizerAttribute("BarConvTol"), 1e-2)
+    set_attribute(md, MOI.RawOptimizerAttribute("Crossover"), 0)
 
     gen = add_g_vars(inst, md)
     sum_d, sum_g = comp_sum_d_sum_g(inst)
 
     # Flow variables
-    f = Vector{VariableRef}(undef, inst.nb_J + inst.nb_K)
-
-    l_max = inst.nb_J
+    f = Vector{VariableRef}()
     if param_is_build_start
-        l_max += inst.nb_K
+        f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
+    else
+        f = Vector{VariableRef}(undef, inst.nb_J + inst.nb_K)
+        for j in 1:inst.nb_J
+            f[j] = @variable(md, base_name = "fe$j")
+        end
     end
 
-    for l in 1:l_max
-        f[l] = @variable(md, base_name = "fe$l")
-    end
     # First Kirchhoff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering only existing lines
@@ -137,6 +146,7 @@ function build_lp_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
         if param_is_build_start
             @constraint(md, f[k] - inst.f_bar[k] <= s[k])
             @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
+            fix(f[k], 0.0)
         end
         fix(s[k], 0.0; force = true)
     end
@@ -224,7 +234,8 @@ function add_fkl_constrs(inst::Instance,
         end
 
         e = comp_candidate_incident_flows(inst, f, i)
-        e += comp_existing_incident_flows(inst, f, i)
+        # e += comp_existing_incident_flows(inst, f, i)
+        add_to_expression!(e, comp_existing_incident_flows(inst, f, i))
         
         # Some buses may not have load or generation
         d = inst.D[i]
@@ -245,6 +256,7 @@ function set_obj(inst::Instance,
     e = 0.0
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         e += inst.cost[k] * x[k]
+        # add_to_expression!(e, inst.cost[k], x[k])
     end
     @objective(md, Min, e)
 end
@@ -353,6 +365,28 @@ function get_g(inst::Instance, model_dt::MIPModel)
     end
     return g
 end
+
+"""
+    add_symmetry_constrs(inst::Instance, 
+                         md::GenericModel, 
+                         x::Vector{VariableRef})
+
+Add constraints to help breaking symmetry.
+"""
+function add_symmetry_constrs(inst::Instance, 
+                              md::GenericModel, 
+                              x::Dict{Int64, VariableRef})
+    for j in 1:inst.nb_J
+        l = map_to_first_cand(inst, j)
+        for k in l:l + param_nb_candidates - 2
+            if iseq(inst.gamma[k], inst.gamma[k + 1]) && 
+               iseq(inst.cost[k], inst.cost[k + 1])
+                @constraint(md, x[k] >= x[k + 1], base_name = "sym")
+            end
+        end
+    end
+end
+
 
 function config(model::GenericModel, logfile::String)
     if param_log_level > 1

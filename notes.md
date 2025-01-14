@@ -158,3 +158,27 @@ TODO
 -Parametrização
 -Add log redução de violação por neigh OK
 -Verificar runtime duas estratégias: construindo tudo desde o início Vs adicionando sob demanda OK
+-Colocar a mudança em g_lines_neigh como parâmetro
+-Para cada barra, pegar todos os circuitos conectados
+-G tá sendo preenchido com zeros por causa da instância
+-Add param g_lines neigh
+        Linhas conectadas a g
+        Linhas conectadas a d
+        Linhas conectadas a barras que não são g nem d
+-Add restrições Joaquim
+-Fixar 
+
+┌ Warning: The addition operator has been used on JuMP expressions a large number of times. This warning is safe to ignore but may indicate that model generation is slower than necessary. For performance reasons, you should not add expressions in a loop. Instead of x += y, use add_to_expression!(x,y) to modify x in place. If y is a single variable, you may also use add_to_expression!(x, coef, y) for x += coef*y.
+
+## Experimentos
+- ref2:
+# -------------------------- heuristic.jl parameters ---------------------------
+param_gamma_star = 0.0 # Simulate line rm by setting its susceptance to this val
+param_lambda_start = 1.0 # Initial percentage of violated cands to insert
+param_res_flow_ins = 0.1 # Percent of cands to evaluate insert per it
+param_g_lines_ins = 0.1 # Percent of cands connected to g to evaluate per it
+param_is_consider_all = true
+param_neigh = 0 # Neighboorhood structures for the heuristic
+param_is_build_start = true # Build the model at the start
+
+Sem restrições de simetria

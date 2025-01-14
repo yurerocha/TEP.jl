@@ -84,33 +84,33 @@ function violated_flows_neigh!(inst::Instance,
         @assert isdisjoint(candidates, inserted_candidates)
     end
 
-    # Another option is to store the f values of the last successfull opt call
-    if !has_values(lp_model.model)
-        optimize!(lp_model.model)
-    end
-    model_slacks = value.(lp_model.s)
-    lines = comp_viols(inst, model_slacks, candidates)
-
     it = 0
     rm_count = 0
     add_count = 0
-    lambda = param_lambda_start
     while true
+        # Another option is to store the f values of the last successfull opt call
+        if !has_values(lp_model.model)
+            optimize!(lp_model.model)
+        end
+        viols = comp_viols(lp_model, existing)
+        lines = select_lines(inst, candidates, viols, 1.0)
+
         a = 1
-        b = a + trunc(Int64, lambda * length(lines))
-        has_impr = false
+        b = trunc(Int64, param_lambda_start * length(lines))
+        is_impr = false
         while true
+            it += 1
+            log("---------- it $it ----------", true)
+                
             insert = lines[a:min(b, length(lines))]
-            if a > length(lines) || a > b
+
+            if length(insert) == 0
+                log("No new candidates to add")
                 break
             end
-
-            it += 1
-            log("---------- it $it ---------- viol", true)
-            @warn length(lines)
-                
+            
             a = b + 1
-            b = b + trunc(Int64, lambda * length(lines))
+            b = b + trunc(Int64, param_lambda_start * length(lines))
             
             add_lines!(inst, lp_model, insert)
             add_count += 1
@@ -119,18 +119,13 @@ function violated_flows_neigh!(inst::Instance,
             viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
 
             if isl(viol, best_viol)
-                log_neigh_run(inst, 
-                              best_viol, 
-                              viol, 
-                              inserted_candidates, 
-                              time() - time_beg)
                 # Update data structures
                 insert_set = Set(insert)
                 union!(inserted_candidates, insert_set)
                 setdiff!(candidates, insert_set)
                 best_viol = viol
-                model_slacks = value.(lp_model.s)
-                has_impr = true
+
+                is_impr = true
 
                 if param_debugging_level == 1
                     lp_debug = build_lp_model(inst)
@@ -140,6 +135,15 @@ function violated_flows_neigh!(inst::Instance,
                     optimize!(lp_debug.model)
                     @assert iseq(viol, objective_value(lp_debug.model))
                 end
+
+                log(string(round(viol, digits=2)) * " " *
+                    string(round(best_viol, digits=2)) * " " *
+                    string(round(length(inserted_candidates) / 
+                                 inst.nb_K, digits=2)))
+                # break
+                # if iseq(best_viol, 0.0)
+                #     break
+                # end
             else
                 rm_count += 1
                 # The inserted candidates make the solution worse
@@ -150,17 +154,9 @@ function violated_flows_neigh!(inst::Instance,
         if iseq(best_viol, 0.0)
             log("All viol removed!")
             break
-        end
-
-        if has_impr
-            lines = comp_viols(inst, model_slacks, candidates)
-        else
-            lambda /= 2.0
-            if isl(lambda * length(lines), 1.0)
-                log("Small lambda")
-                break
-            end
-            log("Decrease lambda and restart $lambda")
+        elseif !is_impr
+            log("End nested loop without improvement")
+            break
         end
     end
     delta_runtime = time() - time_beg
@@ -204,10 +200,11 @@ function residual_flows_neigh(inst::Instance,
     rm_count = 0
     add_count = 0
     while true
-        f_residuals = Vector{Tuple{Int64, Float64}}()
+        f_residuals = Vector{Tuple{Int64, Float64}}(undef, 0)
         for k in candidates
             # Shift to the existing lines
-            j = map_to_existing_line(inst, k)
+            j = div(k - inst.nb_J + param_nb_candidates - 1, 
+                    param_nb_candidates)
             diff = inst.f_bar[j] - f[j]
             # if !isl(diff, 0.0) # diff >= 0.0
             r = (inst.f_bar[j] - f[j]) / inst.f_bar[j]
@@ -219,20 +216,20 @@ function residual_flows_neigh(inst::Instance,
         lines = [f_residuals[i][1] for i in 1:length(f_residuals)]
 
         a = 1
-        b = a + trunc(Int64, param_res_flow_ins * length(lines))
-        has_impr = false
+        b = trunc(Int64, param_res_flow_ins * length(lines))
+        is_impr = false
         while true
-            if a > length(lines) || a > b
+            if a > length(lines)
                 break
             end
 
             it += 1
-            log("---------- it $it ---------- res", true)
+            log("---------- it $it ----------", true)
 
             insert = lines[a:min(b, length(lines))]
 
             a = b + 1
-            b = a + trunc(Int64, param_res_flow_ins * length(lines))
+            b = b + trunc(Int64, param_res_flow_ins * length(lines))
             
             add_lines!(inst, lp_model, insert)
             add_count += 1
@@ -241,18 +238,13 @@ function residual_flows_neigh(inst::Instance,
             viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
 
             if isl(viol, best_viol)
-                log_neigh_run(inst, 
-                              best_viol, 
-                              viol, 
-                              inserted_candidates, 
-                              time() - time_beg)
                 # Update data structures
                 insert_set = Set(insert)
                 union!(inserted_candidates, insert_set)
                 setdiff!(candidates, insert_set)
                 best_viol = viol
 
-                has_impr = true
+                is_impr = true
 
                 if param_debugging_level == 1
                     lp_debug = build_lp_model(inst)
@@ -262,7 +254,15 @@ function residual_flows_neigh(inst::Instance,
                     optimize!(lp_debug.model)
                     @assert iseq(viol, objective_value(lp_debug.model))
                 end
+
+                log(string(round(viol, digits=2)) * " " *
+                    string(round(best_viol, digits=2)) * " " *
+                    string(round(length(inserted_candidates) / 
+                                 inst.nb_K, digits=2)))
                 break
+                # if iseq(best_viol, 0.0)
+                #     break
+                # end
             else
                 rm_count += 1
                 # The inserted candidates make the solution worse
@@ -273,8 +273,8 @@ function residual_flows_neigh(inst::Instance,
         if iseq(best_viol, 0.0)
             log("All viol removed!")
             break
-        elseif !has_impr
-            log("End residual flows neigh")
+        elseif !is_impr
+            log("End nested loop without improvement")
             break
         end
     end
@@ -362,19 +362,19 @@ function g_lines_neigh(inst::Instance,
     end
 
     a = 1
-    b = a + trunc(Int64, param_g_lines_ins * length(lines))
+    b = trunc(Int64, param_g_lines_ins * length(lines))
     it = 0
     while true
-        if a > length(lines) || a > b
+        if a > length(lines)
             break
         end
 
         it += 1
-        log("---------- it $it ---------- g", true)
+        log("---------- it $it ----------", true)
         insert = lines[a:min(b, length(lines))]
 
         a = b + 1
-        b = a + trunc(Int64, param_g_lines_ins * length(lines))
+        b = b + trunc(Int64, param_g_lines_ins * length(lines))
 
         add_lines!(inst, lp_model, insert)
 
@@ -382,12 +382,6 @@ function g_lines_neigh(inst::Instance,
         viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
         
         if isl(viol, best_viol)
-            log_neigh_run(inst, 
-                          best_viol, 
-                          viol, 
-                          inserted_candidates, 
-                          time() - time_beg)
-
             # Update data structures
             insert_set = Set(insert)
             union!(inserted_candidates, insert_set)
@@ -402,6 +396,11 @@ function g_lines_neigh(inst::Instance,
                 optimize!(lp_debug.model)
                 @assert iseq(viol, objective_value(lp_debug.model))
             end
+
+            log(string(round(viol, digits=2)) * " " *
+                string(round(best_viol, digits=2)) * " " *
+                string(round(length(inserted_candidates) / 
+                             inst.nb_K, digits=2)))
         else
             rm_lines!(lp_model, insert)
         end
@@ -411,8 +410,6 @@ function g_lines_neigh(inst::Instance,
             break
         end
     end
-    log("End g lines neigh")
-
     delta_runtime = time() - time_beg
     delta_inserted = length(inserted_candidates) - inserted_beg
     delta_viol = viol_beg - best_viol
@@ -431,7 +428,7 @@ Remove lines from the model by setting the susceptances to a small value.
 """
 function rm_lines!(lp_model::LPModel,  
                    candidates::Vector{Int64})
-    log("Rm $(length(candidates)) line(s)")
+    log("Rm $(length(candidates)) line(s)", true)
 
     for k in candidates
         if !is_fixed(lp_model.s[k])
@@ -456,7 +453,7 @@ Insert lines in the model by setting the diagonal terms of the susceptance.
 function add_lines!(inst::Instance, 
                     lp_model::LPModel,
                     new_candidates::Vector{Int64})
-    log("Add $(length(new_candidates)) line(s)")
+    log("Add $(length(new_candidates)) line(s)", true)
 
     if !param_is_build_start
         # Add flow variables if required
@@ -511,29 +508,61 @@ function add_lines!(inst::Instance,
 end
 
 """
-    comp_viols(inst::Instance, 
-               s::Vector{Float64}, 
-               candidates::Set{Int64})
+    comp_viols(lp_model::LPModel, existing_lines::Vector{Int64})
 
 Compute the violations of the flow constraints in the existing lines.
 """
-function comp_viols(inst::Instance, 
-                    s::Vector{Float64}, 
-                    candidates::Set{Int64})
+function comp_viols(lp_model::LPModel, 
+                    existing_lines::Vector{Int64})
     viols = Vector{Tuple{Int64, Float64}}(undef, 0)
-    for k in candidates
-        j = map_to_existing_line(inst, k)
-        if isg(s[j], 0.0)
-            push!(viols, (k, s[j]))
+    for j in existing_lines
+        v = value(lp_model.s[j])
+        if isg(v, param_viol_threashold)
+            push!(viols, (j, v))
         end
     end
-    sort!(viols, by = x->x[2], rev = true)
 
-    return [v[1] for v in viols]
+    return viols
 end
 
 """
-    fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
+    select_lines(data, candidates, viols, lambda)
+
+Choose the λ percent of lines to add to the model, considering the available 
+candidates.
+"""
+function select_lines(inst::Instance, 
+                      candidates::Set{Int}, 
+                      viols::Vector{Tuple{Int64, Float64}}, 
+                      lambda::Float64)
+    nb_viols = length(viols)
+    # if !iseq(lambda, 1.0)
+    sort!(viols, by = x->x[2], rev = true)
+    # end
+
+    lines = Vector{Int64}(undef, 0)
+    for i in 1:length(viols)
+        l = viols[i][1]
+        # Shift to the candidates
+        l = inst.nb_J + 1 + param_nb_candidates * (l - 1)
+        for k in l:l + param_nb_candidates - 1
+            if k in candidates
+                push!(lines, k)
+                if param_is_add_single_line
+                    break # Add a single candidate for existing circuit at a 
+                          # time
+                end
+            end
+        end
+    end
+
+    nb_sel = round(Int, lambda * length(lines))
+
+    return lines[1:nb_sel]
+end
+
+"""
+    mip_start(inst, md, inserted)
 
 Fix start the model with the lines, generation, and flows of the start struct.
 """
@@ -542,32 +571,10 @@ function fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
     # set_attribute(md.model, MOI.RawOptimizerAttribute("TimeLimit"), 1)
 
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        # set_start_value(md.x[k], 0)
-        # set_lower_bound(md.x[k], 0)
-        # set_upper_bound(md.x[k], 0)
-        fix(md.x[k], 0)
+        fix(md.x[k], 0.0)
     end
-    # for k in inserted
-    #     fix(md.x[k], 1; force = true)
-    # end
-
-    # Count, for existing line, the number of candidates inserted
-    nb_cands = zeros(Int64, inst.nb_J)
-    for j in 1:inst.nb_J
-        l = map_to_first_cand(inst, j)
-        for k in l:l + param_nb_candidates - 1
-            if k in inserted
-                nb_cands[j] += 1
-            end
-        end
-    end
-    # Insert the first candidates for a given existing line (due to the symmetry 
-    # constraints)
-    for j in 1:inst.nb_J
-        l = map_to_first_cand(inst, j)
-        for k in l:l + nb_cands[j] - 1
-            fix(md.x[k], 1; force = true)
-        end
+    for k in inserted
+        fix(md.x[k], 1.0)
     end
 
     optimize!(md.model)
@@ -587,9 +594,9 @@ function fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
         is_feas = false
     end
 
-    # for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-    #     unfix(md.x[k])
-    # end
+    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+        unfix(md.x[k])
+    end
 
     return is_feas
 end

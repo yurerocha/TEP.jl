@@ -561,12 +561,50 @@ end
 
 Log message to console.
 """
-function log(msg::String, is_warn::Bool = false)
+function log(msg::String, is_info::Bool = false)
     if param_log_level >= 1
-        if is_warn
-            @warn msg
+        if is_info
+            @info msg
         else
             println(msg)
         end
     end
+end
+
+"""
+    shift_to_existing_line(inst::Instance, k::Int64)
+
+Map candidate line k to corresponding existing circuit.
+"""
+function map_to_existing_line(inst::Instance, k::Int64)
+    return div(k - inst.nb_J + param_nb_candidates - 1, param_nb_candidates)
+end
+
+"""
+    map_to_first_cand(inst::Instance, j::Int64)
+
+Map existing line j to first corresponding candidate circuit.
+"""
+function map_to_first_cand(inst::Instance, j::Int64)
+    return inst.nb_J + 1 + param_nb_candidates * (j - 1)
+end
+
+"""
+    log_neigh_run(inst::Instance, 
+                  best_viol::Float64, 
+                  new_viol::Float64, 
+                  inserted_candidates::Set{Int64})
+
+Log neighborhood run.
+"""
+function log_neigh_run(inst::Instance, 
+                       best_viol::Float64, 
+                       new_viol::Float64, 
+                       inserted_candidates::Set{Int64}, 
+                       runtime::Float64)
+    log("best_viol:" * string(round(best_viol, digits = 2)) *
+        " new_viol:" * string(round(new_viol, digits = 2)) *
+        " ins_perc:" * string(round(length(inserted_candidates) / 
+                                    inst.nb_K, digits = 2)) * 
+        " runtime:" * string(round(runtime, digits = 2)))
 end

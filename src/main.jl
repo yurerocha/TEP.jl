@@ -24,13 +24,29 @@ function run()
         # "pglib_opf_case162_ieee_dtc.txt", # Compact model infeasible
         "pglib_opf_case1803_snem.txt" # Zero reactance
         # "pglib_opf_case3375wp_k.txt", # Singular exception
-        # "pglib_opf_case4661_sdet.txt" # Compact model infeasible
+        "pglib_opf_case4661_sdet.txt" # Infeasible
         # Memory consumption problems
     ]
     counter = 0
     f = length(files)
-    # 13, 18, 25, 26
-    for file in files[1:f]
+    # pglib_opf_case6468_rte.txt inviável
+    # pglib_opf_case7336_epigrids.txt inviável
+    # pglib_opf_case8387_pegase.txt tempo alto
+    # pglib_opf_case10480_goc.txt inviável
+    # pglib_opf_case19402_goc.txt inviável
+    # files = ["pglib_opf_case6468_rte.txt", 
+    #          "pglib_opf_case7336_epigrids.txt",
+    #          "pglib_opf_case8387_pegase.txt",
+    #          "pglib_opf_case10480_goc.txt",
+    #          "pglib_opf_case19402_goc.txt"]
+    # files = ["pglib_opf_case6468_rte.txt"]
+    # files = ["pglib_opf_case8387_pegase.txt"]
+    # files = ["pglib_opf_case10480_goc.txt"]
+    # files = ["pglib_opf_case19402_goc.txt"]
+    # files = ["pglib_opf_case4917_goc.txt"]
+    # files = ["pglib_opf_case500_goc.txt"]
+    files = ["pglib_opf_case10192_epigrids.txt"]
+    for file in files
         counter += 1
         if file in skip
             log("Skipping instance $file nb $counter")
