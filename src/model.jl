@@ -12,7 +12,7 @@ function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
         # Forcing to build candidates
         x[k] = @variable(md, binary = true, base_name = "x$(k - inst.nb_J)")
     end
-    add_symmetry_constrs(inst, md, x)
+    # add_symmetry_constrs(inst, md, x)
 
     gen = add_g_vars(inst, md)
     sum_d, sum_g = comp_sum_d_sum_g(inst)
@@ -268,6 +268,7 @@ function solve!(model_data::MIPModel, is_mip_en::Bool = true)
     set_attribute(model, 
                   MOI.RawOptimizerAttribute("TimeLimit"), 
                   param_solver_time_limit)
+    set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-6)
 
     rt_runtime = 0.0
     incumbent_time = param_solver_time_limit

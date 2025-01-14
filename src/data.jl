@@ -28,7 +28,9 @@ end
 
 # -------------------------- Heuristic data structures -------------------------
 struct Start
-    built_candidates::Set{Int64}
+    is_feas::Bool
+    inserted::Set{Int64}
+    f::Vector{Float64}
     g::Vector{Float64}
 end
 

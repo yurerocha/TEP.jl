@@ -10,7 +10,7 @@ const param_max_rand = 100 # Max random value for the new cost (see text)
 const param_nb_candidates = 2 # Nb of candidates available per existing line
 
 # ---------------------------- model.jl parameters -----------------------------
-param_solver_time_limit::Float64 = 10.0
+param_solver_time_limit::Float64 = 5.0
 const MAXINT = 2_000_000_000 # Gurobi MAXINT value
 const param_penalty = 1e6
 

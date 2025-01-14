@@ -259,9 +259,9 @@ function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Objective | Gap (%) | VF (s) | Ins (%) | Impr (%) |" * 
-              " GL (s) | Ins (%) | Impr (%) | RF (s) | Ins (%) |" *
-              " Impr (%) | Heur (s) | Start (s) | Feas | \n"
+              " Cost | Gap (%) | VF (s) | VF ins (%) | VF impr (%) |" * 
+              " GL (s) | GL ins (%) | GL impr (%) | RF (s) | RF ins (%) |" *
+              " RF impr (%) | Heur (s) | Start (s) | Feas | \n"
     outstr *= "|:---"^26 * "| \n"
     log(outputfile, outstr)
 end

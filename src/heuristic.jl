@@ -61,7 +61,19 @@ function build_solution(inst::Instance, logfile::String)
         end
     end
 
-    return inserted, (vf_report, gl_report, rf_report)
+    is_feas = false
+    f = Vector{Float64}()
+    g = Vector{Float64}()
+    if iseq(best_viol, 0.0)
+        is_feas = true
+        f = value.(lp_model.f)
+        g = Vector{Float64}(undef, inst.nb_I)
+        for i in inst.I
+            g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
+        end
+    end
+
+    return Start(is_feas, inserted, f, g), (vf_report, gl_report, rf_report)
 end
 
 function violated_flows_neigh!(inst::Instance,
@@ -533,42 +545,51 @@ function comp_viols(inst::Instance,
 end
 
 """
-    fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
+    fix_start!(inst::Instance, md::MIPModel, start::Start)
 
 Fix start the model with the lines, generation, and flows of the start struct.
 """
-function fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
+function fix_start!(inst::Instance, md::MIPModel, start::Start)
+    if !start.is_feas
+        log("Infeasible model")
+        return false
+    end
     set_attribute(md.model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
-    # set_attribute(md.model, MOI.RawOptimizerAttribute("TimeLimit"), 1)
+    set_attribute(md.model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-3)
 
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        # set_start_value(md.x[k], 0)
-        # set_lower_bound(md.x[k], 0)
-        # set_upper_bound(md.x[k], 0)
         fix(md.x[k], 0)
     end
-    # for k in inserted
-    #     fix(md.x[k], 1; force = true)
-    # end
+    for k in start.inserted
+        fix(md.x[k], 1; force = true)
+    end
+    for l in 1:inst.nb_J + inst.nb_K
+        fix(md.f[l], start.f[l])
+    end
+    for i in inst.I
+        if i in keys(inst.G)
+            fix(md.g[i], start.g[i]; force = true)
+        end
+    end
 
     # Count, for existing line, the number of candidates inserted
-    nb_cands = zeros(Int64, inst.nb_J)
-    for j in 1:inst.nb_J
-        l = map_to_first_cand(inst, j)
-        for k in l:l + param_nb_candidates - 1
-            if k in inserted
-                nb_cands[j] += 1
-            end
-        end
-    end
+    # nb_cands = zeros(Int64, inst.nb_J)
+    # for j in 1:inst.nb_J
+    #     l = map_to_first_cand(inst, j)
+    #     for k in l:l + param_nb_candidates - 1
+    #         if k in start.x
+    #             nb_cands[j] += 1
+    #         end
+    #     end
+    # end
     # Insert the first candidates for a given existing line (due to the symmetry 
     # constraints)
-    for j in 1:inst.nb_J
-        l = map_to_first_cand(inst, j)
-        for k in l:l + nb_cands[j] - 1
-            fix(md.x[k], 1; force = true)
-        end
-    end
+    # for j in 1:inst.nb_J
+    #     l = map_to_first_cand(inst, j)
+    #     for k in l:l + nb_cands[j] - 1
+    #         fix(md.x[k], 1; force = true)
+    #     end
+    # end
 
     optimize!(md.model)
 
@@ -576,8 +597,8 @@ function fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
     status = termination_status(model)
     is_feas = true
     if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
+        log("Infeasible model")
         if param_log_level >= 3
-            println("Infeasible model")
             compute_conflict!(model)
             if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
                 iis_model, _ = copy_conflict(model)
@@ -587,9 +608,21 @@ function fix_start!(inst::Instance, md::MIPModel, inserted::Set{Int64})
         is_feas = false
     end
 
-    # for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-    #     unfix(md.x[k])
-    # end
+    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+        unfix(md.x[k])
+    end
+    for l in 1:inst.nb_J + inst.nb_K
+        unfix(md.f[l])
+    end
+    for i in inst.I
+        # Some buses may not have generation
+        if i in keys(inst.G)
+            unfix(md.g[i])
+            g_max = inst.G[i]
+            set_lower_bound(md.g[i], 0.0)
+            set_upper_bound(md.g[i], g_max)
+        end
+    end
 
     return is_feas
 end

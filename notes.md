@@ -166,7 +166,8 @@ TODO
         Linhas conectadas a d
         Linhas conectadas a barras que não são g nem d
 -Add restrições Joaquim
--Fixar 
+-Rm variáveis g e d com valores zero
+-Colocar os thetas no mip start
 
 ┌ Warning: The addition operator has been used on JuMP expressions a large number of times. This warning is safe to ignore but may indicate that model generation is slower than necessary. For performance reasons, you should not add expressions in a loop. Instead of x += y, use add_to_expression!(x,y) to modify x in place. If y is a single variable, you may also use add_to_expression!(x, coef, y) for x += coef*y.
 
