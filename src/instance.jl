@@ -43,15 +43,14 @@ function read_instance(filename::String, rng::MersenneTwister)
     # The demand is increased according to param_mult_load
     for j in i:i + nb_dem_gen - 1
         v = split(s[j])
-        bus = parse(Int, v[1])
-        D[bus] = param_mult_load * parse(Float64, v[3])
-        sumD += D[bus]
-
+        bus = parse(Int64, v[1])
         g = parse(Float64, v[2])
-        # if !iseq(g, 0.0)
+        if !iseq(g, 0.0)
             G[bus] = g
             sumG += g
-        # end
+        end
+        D[bus] = param_mult_load * parse(Float64, v[3])
+        sumD += D[bus]
     end
     # The generation is increased according to the amount required to meet the
     # new demand with a given random slack between 0.05 and mult

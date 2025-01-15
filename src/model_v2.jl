@@ -98,7 +98,7 @@ function build_lp_model(inst::Instance,
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
-    Delta_theta = @variable(md, Delta_theta[j = 1:inst.nb_J], 
+    Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
                             base_name = "Delta_theta")
     f_cons = Vector{ConstraintRef}(undef, inst.nb_J + inst.nb_K)
     # Ohm's law for existing circuits
@@ -108,12 +108,16 @@ function build_lp_model(inst::Instance,
         f_cons[j] = @constraint(md, 
                                 f[j] == inst.gamma[j] * Delta_theta[j],
                                 base_name = "ol$j")
+        # e = theta[inst.J[j].fr] - theta[inst.J[j].to]
+        # f_cons[j] = @constraint(md, 
+        #                         f[j] == inst.gamma[j] * e,
+        #                         base_name = "ol$j")
     end
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         c = inst.K[k - inst.nb_J]
-        j = map_to_existing_line(inst, k)
+        @constraint(md, Delta_theta[k] == theta[c.fr] - theta[c.to])
         f_cons[k] = @constraint(md, 
-                                f[k] == param_gamma_star * Delta_theta[j],
+                                f[k] == param_gamma_star * Delta_theta[k],
                                 base_name = "ol$k")
     end
 

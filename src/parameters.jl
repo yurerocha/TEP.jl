@@ -1,7 +1,7 @@
 # ----------------------------- General parameters -----------------------------
 const param_eps = 1e-5
 param_debugging_level = 0
-param_log_level = 2
+param_log_level = 1
 
 # --------------------------- instance.jl parameters ---------------------------
 const param_mult_load = 2.0 # Multiplier for the load
@@ -19,11 +19,6 @@ param_gamma_star = 0.0 # Simulate line rm by setting its susceptance to this val
 param_lambda_start = 1.0 # Initial percentage of violated cands to insert
 param_res_flow_ins = 0.1 # Percent of cands to evaluate insert per it
 param_g_lines_ins = 0.1 # Percent of cands connected to g to evaluate per it
+param_g_lines_strategy = 1
 param_is_consider_all = true
 param_neigh = 0 # Neighboorhood structures for the heuristic
-param_is_build_start = true # Build the model at the start
-
-# 1 - Build the model at the start
-# 2 - Ordens das vizinhanças
-#     param_neigh == 1 or == 2
-# 3 - 

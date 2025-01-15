@@ -212,30 +212,33 @@ function populate_circuits(I::Set{Int64},
                            rng = Random.default_rng())
     for i in nb_line:nb_line + nb_circs - 1
         d = split(s[i])
-        circ = Circuit(parse(Int, d[1]), parse(Int, d[2]))
+        circ = Circuit(parse(Int64, d[1]), parse(Int64, d[2]))
         if is_cand_en
             nb = param_nb_candidates
         else
-            nb = parse(Int, d[3])
+            nb = parse(Int64, d[3])
         end
         for _ in 1:nb
-            # update the set of buses
+            # Update the set of buses
             if !in(circ.fr, I)
                 push!(I, circ.fr)
-            elseif !in(circ.to, I)
+            end
+            if !in(circ.to, I)
                 push!(I, circ.to)
             end
+
             push!(circuits, circ)
+
             x = parse(Float64, d[4])
             if iseq(x, 0.0)
                 throw(ArgumentError("Reactance equal to zero."))
             end
+
             push!(gamma, comp_gamma(x))
             push!(f_bar, parse(Float64, d[5]))
             bc = parse(Float64, d[6])
             c = bc
             if is_cand_en
-                # bc /= (param_nb_candidates + 1) # plus the existing circuit
                 rn = rand(rng, 1:param_max_rand)
                 c = bc / (param_nb_candidates + 1) + bc / rn
             end

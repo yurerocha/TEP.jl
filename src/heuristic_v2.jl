@@ -449,9 +449,9 @@ function rm_lines!(inst::Instance,
             fix(lp_model.s[k], 0.0; force = true)
         end
 
-        j = map_to_existing_line(inst, k)
+        # j = map_to_existing_line(inst, k)
         set_normalized_coefficient(lp_model.f_cons[k], 
-                                    lp_model.Delta_theta[j], 
+                                    lp_model.Delta_theta[k], 
                                     -param_gamma_star)
         fix(lp_model.f[k], 0.0; force = true)
     end
@@ -478,9 +478,9 @@ function add_lines!(inst::Instance,
             unfix(lp_model.f[k])
         end
 
-        j = map_to_existing_line(inst, k)
+        # j = map_to_existing_line(inst, k)
         set_normalized_coefficient(lp_model.f_cons[k], 
-                                   lp_model.Delta_theta[j], 
+                                   lp_model.Delta_theta[k], 
                                    -inst.gamma[k])
     end
     optimize!(lp_model.model)
