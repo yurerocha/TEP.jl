@@ -183,3 +183,24 @@ param_neigh = 0 # Neighboorhood structures for the heuristic
 param_is_build_start = true # Build the model at the start
 
 Sem restrições de simetria
+
+## Nova ideia
+- Começar removendo circuitos muito ociosos
+- Ir removendo uma porcentagem até inviabilizar
+- Ao inviabilizar, tentar viabilizar com as vizinhanças atuais, em especial a de
+  a de reforçar onde há violações
+- Continuar com o processo até não ser mais possível remover e adicionar sem
+  manter a solução viável
+- O objetivo é não ter mais problemas com a viabilidade das soluções. Na
+  verdade, isso é uma garantia
+- Expectativa: não piorar o tempo
+- Algoritmo
+        1. Rm P (%) circuitos
+        2. Verifique a viabilidade
+        3. Se viável, incremente P e volte ao passo 1
+        4. Se inviável
+                4.a Tente viabilizar com a vizinhança VF
+                4.b Se conseguir, volte ao passo 1
+                4.c Senão, restaure os circuitos removidos e reduza P
+- É preciso armazenar e manter atualizado o custo da solução
+- O modelo dará as violações

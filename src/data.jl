@@ -28,7 +28,6 @@ end
 
 # -------------------------- Heuristic data structures -------------------------
 struct Start
-    is_feas::Bool
     inserted::Set{Int64}
     f::Vector{Float64}
     g::Vector{Float64}
@@ -36,15 +35,11 @@ end
 
 struct NeighReport
     runtime::Float64
-    inserted_ratio::Float64
-    improvement_ratio::Float64
+    removed_ratio::Float64
 
-    NeighReport() = new(0.0, 0.0, 0.0)
+    NeighReport() = new(0.0, 0.0)
     NeighReport(runtime::Float64, 
-                inserted_ratio::Float64, 
-                improvement_ratio::Float64) = new(runtime, 
-                                                  inserted_ratio, 
-                                                  improvement_ratio)
+                removed_ratio::Float64) = new(runtime, removed_ratio)
 end
 
 # -------------------------- Instance data structures --------------------------
