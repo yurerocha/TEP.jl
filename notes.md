@@ -183,3 +183,57 @@ param_neigh = 0 # Neighboorhood structures for the heuristic
 param_is_build_start = true # Build the model at the start
 
 Sem restrições de simetria
+
+## Nova ideia
+- Começar removendo circuitos muito ociosos
+- Ir removendo uma porcentagem até inviabilizar
+- Ao inviabilizar, tentar viabilizar com as vizinhanças atuais, em especial a de
+  a de reforçar onde há violações
+- Continuar com o processo até não ser mais possível remover e adicionar sem
+  manter a solução viável
+- O objetivo é não ter mais problemas com a viabilidade das soluções
+- Expectativa: não piorar o tempo
+- Algoritmo
+        1. Rm P (%) circuitos
+        2. Verifique a viabilidade
+        3. Se viável, incremente P e volte ao passo 1
+        4. Se inviável
+                4.a Tente viabilizar com a vizinhança VF
+                4.b Se conseguir, volte ao passo 1
+                4.c Senão, restaure os circuitos removidos e reduza P
+
+- exp1:
+# -------------------------- heuristic.jl parameters ---------------------------
+param_gamma_star = 0.0 # Simulate line rm by setting its susceptance to this val
+param_lambda_start = 1.0 # Initial percentage of violated cands to insert
+param_res_flow_ins = 0.1 # Percent of cands to evaluate insert per it
+param_g_lines_ins = 0.1 # Percent of cands connected to g to evaluate per it
+param_g_lines_strategy = 1 # in [1, 2, 3, 4]
+param_neigh = 0 # Neighboorhood structures for the heuristic
+
+- exp2:
+param_g_lines_strategy = 2 # in [1, 2, 3, 4]
+
+- exp3:
+param_g_lines_strategy = 3 # in [1, 2, 3, 4]
+
+- exp4:
+param_g_lines_strategy = 4 # in [1, 2, 3, 4]
+
+- exp5:
+param_g_lines_ins = 0.05 # Percent of cands connected to g to evaluate per it
+param_g_lines_strategy = 1 # in [1, 2, 3, 4]
+
+- exp6:
+param_g_lines_ins = 0.2 # Percent of cands connected to g to evaluate per it
+param_g_lines_strategy = 1 # in [1, 2, 3, 4]
+
+- exp7:
+param_res_flow_ins = 0.05 # Percent of cands to evaluate insert per it
+param_g_lines_ins = 0.1 # Percent of cands connected to g to evaluate per it
+param_g_lines_strategy = 1 # in [1, 2, 3, 4]
+
+- exp8:
+param_res_flow_ins = 0.2 # Percent of cands to evaluate insert per it
+param_g_lines_ins = 0.1 # Percent of cands connected to g to evaluate per it
+param_g_lines_strategy = 1 # in [1, 2, 3, 4]

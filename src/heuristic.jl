@@ -97,7 +97,7 @@ function violated_flows_neigh!(inst::Instance,
         optimize!(lp_model.model)
     end
     model_slacks = value.(lp_model.s)
-    lines = comp_viols(inst, model_slacks, inserted_candidates, candidates)
+    lines = comp_viols(inst, model_slacks, candidates)
 
     it = 0
     rm_count = 0
@@ -160,11 +160,9 @@ function violated_flows_neigh!(inst::Instance,
         end
 
         if has_impr
-            lines = comp_viols(inst, 
-                               model_slacks, 
-                               inserted_candidates, 
-                               candidates)
+            lines = comp_viols(inst, model_slacks, candidates)
         else
+            break
             lambda /= 2.0
             if isl(lambda * length(lines), 1.0)
                 log("Lambda too small")
@@ -225,7 +223,7 @@ function residual_flows_neigh(inst::Instance,
             # end
         end
 
-        sort!(f_residuals, by = x->x[2])
+        sort!(f_residuals, by = x->x[2], rev = true)
         lines = [f_residuals[i][1] for i in 1:length(f_residuals)]
 
         a = 1
@@ -320,54 +318,28 @@ function g_lines_neigh(inst::Instance,
 
     # Ideia 3: add linhas conectando os geradores
     lines = Vector{Int64}()
-    if param_is_consider_all
-        lines_g = Vector{Tuple{Int64, Float64}}()
-        for k in candidates
-            c = get_circuit(inst, k)
-            if !(isg(inst.D[c.fr], 0.0) || (c.fr in keys(inst.G) && isg(inst.G[c.fr], 0.0)))
-            # if isg(inst.D[c.fr], 0.0)
-            # if c.fr in keys(inst.G) && isg(inst.G[c.fr], 0.0)
-                push!(lines, k)
-                # push!(lines_g, (k, inst.G[c.fr]))
-            elseif !(isg(inst.D[c.to], 0.0) || (c.to in keys(inst.G) && isg(inst.G[c.to], 0.0)))
-            # elseif isg(inst.D[c.to], 0.0)
-            # elseif c.to in keys(inst.G) && isg(inst.G[c.to], 0.0)
-                push!(lines, k)
-                # push!(lines_g, (k, inst.G[c.to]))
-            end
+    lines_g = Vector{Tuple{Int64, Float64}}()
+    for k in candidates
+        c = get_circuit(inst, k)
+
+        cond_a = true
+        cond_b = false
+        if param_g_lines_strategy == 1
+            cond_a = c.fr in keys(inst.G)
+            cond_b = c.to in keys(inst.G)
+        elseif param_g_lines_strategy == 2
+            cond_a = isg(inst.D[c.fr], 0.0)
+            cond_b = isg(inst.D[c.to], 0.0)
+        elseif param_g_lines_strategy == 3
+            cond_a = isg(inst.D[c.fr], 0.0) || c.fr in keys(inst.G)
+            cond_b = isg(inst.D[c.to], 0.0) || c.to in keys(inst.G)
+        elseif param_g_lines_strategy == 4
+            cond_a = !(isg(inst.D[c.fr], 0.0) || c.fr in keys(inst.G))
+            cond_b = !(isg(inst.D[c.to], 0.0) || c.to in keys(inst.G))
         end
-        # sort!(lines_g, by = x->x[2], rev = true)
-        # lines = [v[1] for v in lines_g]
-    else
-        cap = Dict{Int64, Float64}()
-        for k in candidates
-            c = get_circuit(inst, k)
-            buses = zeros(Int64, 2)
-            if c.fr in keys(inst.G) && !iseq(inst.G[c.fr], 0.0)
-                buses[1] = c.fr
-            end
-            if c.to in keys(inst.G) && !iseq(inst.G[c.to], 0.0)
-                buses[2] = c.to
-            end
 
-            has_cap_changed = false
-            # Connect a line to the generator if the capacity of the connected
-            # lines is insufficient to carry the generation
-            for b in buses
-                if b == 0 || (haskey(cap, b) && !isl(cap[b], inst.G[b]))
-                    continue
-                end
-
-                if haskey(cap, b)
-                    cap[b] += inst.f_bar[k]
-                else
-                    cap[b] = inst.f_bar[k]
-                end
-                has_cap_changed = true
-            end
-            if has_cap_changed
-                push!(lines, k)
-            end
+        if cond_a || cond_b
+            push!(lines, k)
         end
     end
 
@@ -489,15 +461,14 @@ end
 """
     comp_viols(inst::Instance, 
                s::Vector{Float64}, 
-               inserted::Set{Int64}, 
                candidates::Set{Int64})
 
 Compute the violations of the flow constraints in the existing lines.
 """
 function comp_viols(inst::Instance, 
                     s::Vector{Float64}, 
-                    inserted::Set{Int64}, 
-                    candidates::Set{Int64})
+                    candidates::Set{Int64}, 
+                    is_sort::Bool = false)
     viols = Vector{Tuple{Int64, Float64}}()
     for k in candidates
         j = map_to_existing_line(inst, k)
@@ -507,7 +478,9 @@ function comp_viols(inst::Instance,
             push!(viols, (k, s[j]))
         end
     end
-    sort!(viols, by = x->x[2], rev = true)
+    if is_sort
+        sort!(viols, by = x->x[2], rev = true)
+    end
 
     return [v[1] for v in viols]
 end
