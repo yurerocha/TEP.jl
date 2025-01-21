@@ -1,6 +1,6 @@
 # ----------------------------- General parameters -----------------------------
 const param_eps = 1e-5
-param_debugging_level = 1
+param_debugging_level = 0
 param_log_level = 1
 
 # --------------------------- instance.jl parameters ---------------------------

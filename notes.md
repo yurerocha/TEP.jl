@@ -204,3 +204,8 @@ Sem restrições de simetria
                 4.c Senão, restaure os circuitos removidos e reduza P
 - É preciso armazenar e manter atualizado o custo da solução
 - O modelo dará as violações
+
+# TODO
+- Calcular o impacto de todas as vizinhanças
+- Testar configurando um tempo limite em vez de quantidade de iterações
+- Colocar os thetas no fix start

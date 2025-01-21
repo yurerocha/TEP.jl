@@ -20,8 +20,6 @@ function build_solution(inst::Instance, logfile::String)
     init_cost = cost
     best_cost = cost
 
-    report = NeighReport()
-
     best_cost, report = rm_and_fix(inst, 
                                    lp_model, 
                                    inserted, 
@@ -83,7 +81,6 @@ function rm_and_fix(inst::Instance,
     lines = comp_f_residuals(inst, f, inserted)
     for it in 1:param_rf_max_it
         nb_itens = trunc(Int64, res_flow_percent * length(lines))
-        a = 1
         if nb_itens == 0
             log("Delta too small")
             break
@@ -97,7 +94,7 @@ function rm_and_fix(inst::Instance,
 
         log("---------- It $it ----------", true)
 
-        rm = lines[a:min(nb_itens, length(lines))]
+        rm = lines[1:min(nb_itens, length(lines))]
         
         rm_lines!(inst, lp_model, rm, true)
         rm_set = Set(rm)
@@ -115,7 +112,7 @@ function rm_and_fix(inst::Instance,
             has_impr = true
         else
             # The following neigh changes both the removed and inserted sets
-            viol, report = violated_flows_neigh!(inst, 
+            viol, _ = violated_flows_neigh!(inst, 
                                                  lp_model, 
                                                  rm_set, 
                                                  removed, 
@@ -160,7 +157,7 @@ function rm_and_fix(inst::Instance,
             lines = comp_f_residuals(inst, f, inserted)
             res_flow_percent = min(1.0, res_flow_percent + param_res_flow_delta)
         else
-            log("Not improved! Add new lines")
+            log("Not improved! Add new lines...")
             setdiff!(removed, rm_set)
             union!(inserted, rm_set)
             add_lines!(inst, lp_model, rm, false)
