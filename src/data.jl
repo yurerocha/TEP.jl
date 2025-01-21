@@ -31,6 +31,7 @@ struct Start
     inserted::Set{Int64}
     f::Vector{Float64}
     g::Vector{Float64}
+    # theta::Vector{Float64}
 end
 
 struct NeighReport

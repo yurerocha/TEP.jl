@@ -234,10 +234,10 @@ Set the objective to minimize the costs of expanding the network.
 function set_obj(inst::Instance, 
                  md::GenericModel,
                  x::Dict{Int64, JuMP.VariableRef})
-    e = 0.0
+    e = AffExpr(0.0)
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        e += inst.cost[k] * x[k]
-        # add_to_expression!(e, inst.cost[k], x[k])
+        # e += inst.cost[k] * x[k]
+        add_to_expression!(e, inst.cost[k], x[k])
     end
     @objective(md, Min, e)
 end

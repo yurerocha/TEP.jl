@@ -163,11 +163,11 @@ function comp_existing_incident_flows(inst::Instance,
                                       i::Int64)
     e = AffExpr(0.0)
     for j in 1:inst.nb_J
-        circ = inst.J[j]
-        if circ.to == i
-            e += f[j]
-        elseif circ.fr == i
-            e -= f[j]
+        c = inst.J[j]
+        if c.to == i
+            add_to_expression!(e, f[j])
+        elseif c.fr == i
+            add_to_expression!(e, -1.0, f[j])
         end
     end
     return e
@@ -186,15 +186,15 @@ function comp_candidate_incident_flows(inst::Instance,
     e = AffExpr(0.0)
     # for k in res_list
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        if !isassigned(f, k)
-            continue
-        end
+        # if !isassigned(f, k)
+        #     continue
+        # end
 
         c = inst.K[k - inst.nb_J]
         if c.to == i
-            e += f[k]
+            add_to_expression!(e, f[k])
         elseif c.fr == i
-            e -= f[k]
+            add_to_expression!(e, -1.0, f[k])
         end
     end
     return e
@@ -600,4 +600,100 @@ function log_neigh_run(inst::Instance,
         " delta_perc:" * string(round(length(rm_ins) / 
                                     inst.nb_K, digits = 2)) * 
         " runtime:" * string(round(runtime, digits = 2)))
+end
+
+"""
+    comp_cost(inst::Instance, inserted::Set{Int64})
+
+Compute the cost of the solution.
+"""
+function comp_cost(inst::Instance, inserted::Set{Int64})
+    cost = 0.0
+    for k in inserted
+        cost += inst.cost[k]
+    end
+    return cost
+end
+
+"""
+    comp_new_cost(inst::Instance, 
+                  old_cost::Float64, 
+                  removed::Vector{Int64})
+
+Compute the new cost after removing some candidate circuits.
+"""
+function comp_new_cost(inst::Instance, 
+                       old_cost::Float64, 
+                       removed::Vector{Int64})
+    new_cost = old_cost
+    for k in removed
+        new_cost -= inst.cost[k]
+    end
+    return new_cost
+end
+
+"""
+    comp_f_residuals(inst::Instance, 
+                     f::Vector{Float64}, 
+                     inserted::Set{Int64})
+
+Compute the residuals of the line flows.
+"""
+function comp_f_residuals(inst::Instance, 
+                          f::Vector{Float64}, 
+                          inserted::Set{Int64})
+    f_residuals = Vector{Tuple{Int64, Float64}}()
+    for k in inserted
+        # Shift to the existing lines
+        # j = map_to_existing_line(inst, k)
+        diff = inst.f_bar[k] - f[k]
+        # if !isl(diff, 0.0) # diff >= 0.0
+        r = diff / inst.f_bar[k]
+        push!(f_residuals, (k, r))
+        # end
+    end
+
+    # Sort lines in non-descending order of residuals
+    sort!(f_residuals, by = x->x[2], rev = true)
+
+    return [f_residuals[i][1] for i in 1:length(f_residuals)]
+end
+
+"""
+    comp_viols(inst::Instance, 
+               s::Vector{Float64}, 
+               inserted::Set{Int64}, 
+               candidates::Set{Int64})
+
+Compute the violations of the flow constraints in the existing lines.
+"""
+function comp_viols(inst::Instance, 
+                    s::Vector{Float64}, 
+                    inserted::Set{Int64}, 
+                    candidates::Set{Int64})
+    viols = Vector{Tuple{Int64, Float64}}()
+    for k in candidates
+        j = map_to_existing_line(inst, k)
+        if isg(s[k], 0.0)
+            push!(viols, (k, s[k]))
+        elseif isg(s[j], 0.0)
+            push!(viols, (k, s[j]))
+        end
+    end
+    sort!(viols, by = x->x[2], rev = true)
+
+    return [v[1] for v in viols]
+end
+
+"""
+    get_g_values(inst::Instance, lp_model::LPModel)
+
+Get values for g variables.
+"""
+function get_g_values(inst::Instance, lp_model::LPModel)
+    g = Vector{Float64}(undef, inst.nb_I)
+    for i in inst.I
+        g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
+    end
+    return g
 end

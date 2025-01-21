@@ -40,19 +40,18 @@ function run()
         inst = read_instance(inputfile, rng)
         model = nothing
         build_time = 0.0
-        heur_time = 0.0
         start_time = 0.0
         ms_gap = 0.0
 
         # try
         log("Build heuristic solution", true)
-        @elapsed((start, report) = build_solution(inst, logfile))
+        (start, report) = build_solution(inst, logfile)
 
         log("Build full model", true)
         build_time = @elapsed (model = build_mip_model(inst, logfile))
 
         log("Fix the start of the model", true)
-        start_time = @elapsed (is_feas = fix_start!(inst, model, start))
+        start_time = @elapsed (fix_start!(inst, model, start))
 
         log("Solve the model", true)
         results = solve!(model, true)
