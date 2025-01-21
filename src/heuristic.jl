@@ -569,18 +569,18 @@ function fix_start!(inst::Instance, md::MIPModel, start::Start)
     set_attribute(md.model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
     set_attribute(md.model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-3)
 
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        fix(md.x[k], 0)
-    end
+    # for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+    #     fix(md.x[k], 0)
+    # end
     for k in start.inserted
-        fix(md.x[k], 1; force = true)
+        set_start_value(md.x[k], 1)
     end
     for l in 1:inst.nb_J + inst.nb_K
-        fix(md.f[l], start.f[l])
+        set_start_value(md.f[l], start.f[l])
     end
     for i in inst.I
         if i in keys(inst.G)
-            fix(md.g[i], start.g[i]; force = true)
+            set_start_value(md.g[i], start.g[i])
         end
         # fix(md.theta[i], start.theta[i])
     end
@@ -624,20 +624,20 @@ function fix_start!(inst::Instance, md::MIPModel, start::Start)
         @assert is_feas
     end
 
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        unfix(md.x[k])
-    end
-    for l in 1:inst.nb_J + inst.nb_K
-        unfix(md.f[l])
-    end
-    for i in inst.I
-        # Some buses may not have generation
-        if i in keys(inst.G)
-            unfix(md.g[i])
-            g_max = inst.G[i]
-            set_lower_bound(md.g[i], 0.0)
-            set_upper_bound(md.g[i], g_max)
-        end
-        # unfix(md.theta[i])
-    end
+    # for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+    #     unfix(md.x[k])
+    # end
+    # for l in 1:inst.nb_J + inst.nb_K
+    #     unfix(md.f[l])
+    # end
+    # for i in inst.I
+    #     # Some buses may not have generation
+    #     if i in keys(inst.G)
+    #         unfix(md.g[i])
+    #         g_max = inst.G[i]
+    #         set_lower_bound(md.g[i], 0.0)
+    #         set_upper_bound(md.g[i], g_max)
+    #     end
+    #     # unfix(md.theta[i])
+    # end
 end

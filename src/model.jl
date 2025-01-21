@@ -82,7 +82,10 @@ function build_lp_model(inst::Instance,
     # https://support.gurobi.com/hc/en-us/community/posts/360043463792-How-to-terminate-once-barrier-solves-problem
     # https://support.gurobi.com/hc/en-us/community/posts/28806723752849-Terminate-once-barrier-solves-problem
     set_attribute(md, MOI.RawOptimizerAttribute("Method"), 2)
-    # set_attribute(md, MOI.RawOptimizerAttribute("BarConvTol"), 1e-2)
+    # set_attribute(md, MOI.RawOptimizerAttribute("Sifting"), 2)
+    set_attribute(md, MOI.RawOptimizerAttribute("MIPFocus"), 1)
+    set_attribute(md, MOI.RawOptimizerAttribute("ScaleFlag"), 2)
+    set_attribute(md, MOI.RawOptimizerAttribute("BarConvTol"), 1e-6)
     set_attribute(md, MOI.RawOptimizerAttribute("Crossover"), 0)
 
     gen = add_g_vars(inst, md)
