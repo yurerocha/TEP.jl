@@ -27,7 +27,6 @@ function run()
         "pglib_opf_case78484_epigrids.txt" # Infeasible with all candidates
     ]
     counter = 0
-    f = length(files)
     for file in files
         counter += 1
         if file in skip
@@ -47,7 +46,7 @@ function run()
 
         # try
         log("Build heuristic solution", true)
-        heur_time = @elapsed((start, reports) = build_solution(inst, logfile))
+        @elapsed((start, report) = build_solution(inst, logfile))
 
         log("Build full model", true)
         build_time = @elapsed (model = build_mip_model(inst, logfile))
@@ -61,9 +60,8 @@ function run()
         results = results[1:length(results) - 1]
         
         results = (model.dem_gen_ratio, results...)
-        heur_times = (heur_time, start_time)
         log_instance(outputfile, file, inst, build_time, 
-                     results, reports, heur_times, is_feas)
+                     results, report, start_time)
         # catch e
         #     @warn e
         #     log_instance(outputfile, 

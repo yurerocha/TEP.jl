@@ -110,10 +110,9 @@ function build_lp_model(inst::Instance,
                                 base_name = "ol$j")
     end
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        c = inst.K[k - inst.nb_J]
         j = map_to_existing_line(inst, k)
         f_cons[k] = @constraint(md, 
-                                f[k] == param_gamma_star * Delta_theta[j],
+                                f[k] == inst.gamma[k] * Delta_theta[j],
                                 base_name = "ol$k")
     end
 
@@ -131,8 +130,8 @@ function build_lp_model(inst::Instance,
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         @constraint(md, f[k] - inst.f_bar[k] <= s[k])
         @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
-        fix(f[k], 0.0)
-        fix(s[k], 0.0; force = true)
+        # fix(f[k], 0.0)
+        # fix(s[k], 0.0; force = true)
     end
 
     # The initial objective function is to minimize the slack variables

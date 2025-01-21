@@ -262,10 +262,8 @@ function log_header(outputfile::String)
     outstr = "| Instance | N | L | L/N |"
     outstr *= " Build (s) | D / G | Solve (s) | Incumbent (s) |" * 
               " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Cost | Gap (%) | VF (s) | VF ins (%) | VF impr (%) |" * 
-              " GL (s) | GL ins (%) | GL impr (%) | RF (s) | RF ins (%) |" *
-              " RF impr (%) | Heur (s) | Start (s) | Feas | \n"
-    outstr *= "|:---"^26 * "| \n"
+              " Cost | Gap (%) | Heur (s) | Heur rm (%) | Start (s) | \n"
+    outstr *= "|:---"^17 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -277,9 +275,8 @@ function log_instance(outputfile::String,
                       inst::Instance, 
                       build_time::Float64, 
                       results::Tuple,
-                      reports::Tuple,
-                      heur_times::Tuple,
-                      is_mip_start_feas::Bool)
+                      report::NeighReport,
+                      start_time::Float64)
     N = inst.nb_I
     L = (inst.nb_K + inst.nb_J)
     s = "| $inst_name | $N | $L | $(round(L / N, digits=2)) |" * 
@@ -292,18 +289,10 @@ function log_instance(outputfile::String,
         s *= " $r |"
     end
 
-    for r in reports
-        s *= " $(round(r.runtime, digits=2)) |" *
-             " $(round(100.0 * r.inserted_ratio, digits=2)) |" *
-             " $(round(100.0 * r.improvement_ratio, digits=2)) |"
-    end
+    s *= " $(round(report.runtime, digits=2)) |" *
+         " $(round(100.0 * report.removed_ratio, digits=2)) |" *
+         " $(round(start_time, digits=2)) | \n"
 
-    for t in heur_times
-        t = round(t, digits=2)
-        s *= " $t |"
-    end
-
-    s *= " $is_mip_start_feas | \n"
     log(outputfile, s)
 end
 
@@ -601,13 +590,14 @@ end
 Log neighborhood run.
 """
 function log_neigh_run(inst::Instance, 
-                       best_viol::Float64, 
-                       new_viol::Float64, 
-                       inserted_candidates::Set{Int64}, 
-                       runtime::Float64)
-    log("best_viol:" * string(round(best_viol, digits = 2)) *
-        " new_viol:" * string(round(new_viol, digits = 2)) *
-        " ins_perc:" * string(round(length(inserted_candidates) / 
+                       best_val::Float64, 
+                       new_val::Float64, 
+                       rm_ins::Set{Int64}, 
+                       runtime::Float64,
+                       msg::String = "cost")
+    log("best_$msg:" * string(round(best_val, digits = 2)) *
+        " new_$msg:" * string(round(new_val, digits = 2)) *
+        " delta_perc:" * string(round(length(rm_ins) / 
                                     inst.nb_K, digits = 2)) * 
         " runtime:" * string(round(runtime, digits = 2)))
 end

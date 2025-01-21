@@ -9,87 +9,192 @@ function build_solution(inst::Instance, logfile::String)
 
     # All removed lines are candidates for reinsertion
     lines = collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
-    candidates = Set(lines)
+    inserted = Set{Int64}(lines)
     existing = collect(1:inst.nb_J)
-    inserted = Set{Int64}()
+    removed = Set{Int64}()
 
     optimize!(lp_model.model)
-    viol = objective_value(lp_model.model)
+    obj = objective_value(lp_model.model)
 
-    init_viol = viol
-    best_viol = viol
-    vf_report = NeighReport()
-    gl_report = NeighReport()
-    rf_report = NeighReport()
+    cost = comp_cost(inst, inserted)
+    init_cost = cost
+    best_cost = cost
 
-    neighs = [1, 2, 3]
-    if param_neigh == 1
-        neighs = [1, 2]
-    elseif param_neigh == 2
-        neighs = [2, 1]
-    elseif param_neigh == 3
-        neighs = [2, 1, 3]
+    report = NeighReport()
+
+    best_cost, report = rm_and_fix(inst, 
+                                   lp_model, 
+                                   inserted, 
+                                   removed, 
+                                   init_cost, 
+                                   best_cost)
+
+    @warn "Runtime", report.runtime
+    @warn "Rm ratio", report.removed_ratio
+
+    if !has_values(lp_model.model)
+        optimize!(lp_model.model)
     end
-    
-    for neigh in neighs
-        if neigh == 1
-            best_viol, vf_report = violated_flows_neigh!(inst, 
-                                                         lp_model, 
-                                                         existing, 
-                                                         candidates, 
-                                                         inserted, 
-                                                         init_viol, 
-                                                         best_viol)
-        elseif neigh == 2
-            best_viol, gl_report = g_lines_neigh(inst, 
+
+    f = value.(lp_model.f)
+    g = Vector{Float64}(undef, inst.nb_I)
+    for i in inst.I
+        g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
+    end
+
+    return Start(inserted, f, g), report
+end
+
+function comp_cost(inst::Instance, inserted::Set{Int64})
+    cost = 0.0
+    for k in inserted
+        cost += inst.cost[k]
+    end
+    return cost
+end
+
+function comp_new_cost(inst::Instance, 
+                       old_cost::Float64, 
+                       removed::Vector{Int64})
+    new_cost = old_cost
+    for k in removed
+        new_cost -= inst.cost[k]
+    end
+    return new_cost
+end
+
+function rm_and_fix(inst::Instance, 
+                    lp_model::LPModel, 
+                    inserted::Set{Int64}, 
+                    removed::Set{Int64}, 
+                    init_cost::Float64, 
+                    best_cost::Float64)
+    log("Remove and fix", true)
+
+    time_beg = time()
+    nb_rm_beg = length(removed)
+
+    if param_debugging_level == 1
+        @assert isdisjoint(inserted, removed)
+    end
+
+    res_flow_percent = param_res_flow_percent
+    f = value.(lp_model.f)
+    lines = comp_f_residuals(inst, f, inserted)
+    for it in 1:param_rf_max_it
+        nb_itens = trunc(Int64, res_flow_percent * length(lines))
+        a = 1
+        if nb_itens == 0
+            log("Delta too small")
+            break
+        elseif iseq(best_cost, 0.0)
+            log("All candidates removed!")
+            break
+        elseif isg(time() - time_beg, param_time_limit)
+            log("Reached time limit")
+            break
+        end
+
+        log("---------- It $it ----------", true)
+
+        rm = lines[a:min(nb_itens, length(lines))]
+        
+        rm_lines!(inst, lp_model, rm, true)
+        rm_set = Set(rm)
+        setdiff!(inserted, rm_set)
+        union!(removed, rm_set)
+        
+        st = termination_status(lp_model.model)
+        viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
+        cost = 0.0
+
+        has_impr = false
+        if iseq(viol, 0.0)
+            # Update data structures
+            cost = comp_new_cost(inst, best_cost, rm)
+            has_impr = true
+        else
+            # The following neigh changes both the removed and inserted sets
+            viol, report = violated_flows_neigh!(inst, 
                                                  lp_model, 
-                                                 candidates, 
+                                                 rm_set, 
+                                                 removed, 
                                                  inserted, 
-                                                 init_viol, 
-                                                 best_viol)
-        elseif neigh == 3
-            best_viol, rf_report = residual_flows_neigh(inst, 
-                                                        lp_model, 
-                                                        candidates, 
-                                                        inserted, 
-                                                        init_viol, 
-                                                        best_viol)
+                                                 viol, 
+                                                 viol)
+            
+            viol, _ = g_lines_neigh(inst, 
+                                    lp_model, 
+                                    rm_set, 
+                                    removed, 
+                                    inserted, 
+                                    viol, 
+                                    viol)
+
+            # viol, _ = residual_flows_neigh(inst, 
+            #                                lp_model, 
+            #                                rm_set, 
+            #                                removed, 
+            #                                inserted, 
+            #                                viol, 
+            #                                viol)
+            if iseq(viol, 0.0)
+                cost = comp_cost(inst, inserted)
+                if isl(cost, best_cost)
+                    has_impr = true
+                end
+            end
+        end
+
+        if has_impr
+            if param_debugging_level == 1
+                @assert length(inserted) + length(removed) == inst.nb_K
+                lp_debug = build_lp_model(inst)
+                rm_lines!(inst, lp_debug, collect(removed), true)
+                @assert iseq(viol, objective_value(lp_debug.model))
+            end
+
+            log_neigh_run(inst, best_cost, cost, removed, time() - time_beg)
+            best_cost = cost
+            f = value.(lp_model.f)
+            lines = comp_f_residuals(inst, f, inserted)
+            res_flow_percent = min(1.0, res_flow_percent + param_res_flow_delta)
+        else
+            log("Not improved! Add new lines")
+            setdiff!(removed, rm_set)
+            union!(inserted, rm_set)
+            add_lines!(inst, lp_model, rm, false)
+            res_flow_percent = max(0.0, res_flow_percent - param_res_flow_delta)
         end
     end
+    log("End remove and fix", true)
 
-    is_feas = false
-    f = Vector{Float64}()
-    g = Vector{Float64}()
-    if iseq(best_viol, 0.0)
-        is_feas = true
-        f = value.(lp_model.f)
-        g = Vector{Float64}(undef, inst.nb_I)
-        for i in inst.I
-            g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
-        end
-    end
+    delta_runtime = time() - time_beg
+    delta_rm = length(removed) - nb_rm_beg
 
-    return Start(is_feas, inserted, f, g), (vf_report, gl_report, rf_report)
+    report = NeighReport(delta_runtime, delta_rm / inst.nb_K, 0.0)
+
+    return best_cost, report
 end
 
 function violated_flows_neigh!(inst::Instance,
                                lp_model::LPModel, 
-                               existing::Vector{Int64}, 
-                               candidates::Set{Int64}, 
-                               inserted_candidates::Set{Int64}, 
+                               removed::Set{Int64}, 
+                               removed_all::Set{Int64}, 
+                               inserted::Set{Int64}, 
                                init_viol::Float64, 
-                               best_viol::Float64)
-    log("Violated flows neigh", true)
-    
+                               best_viol::Float64)    
     if iseq(best_viol, 0.0)
         return best_viol, NeighReport()
     end
+    log("Violated flows neigh", true)
+
     time_beg = time()
-    inserted_beg = length(inserted_candidates)
+    nb_inserted_beg = length(inserted)
     viol_beg = best_viol
 
     if param_debugging_level == 1
-        @assert isdisjoint(candidates, inserted_candidates)
+        @assert isdisjoint(removed, inserted)
     end
 
     # Another option is to store the f values of the last successfull opt call
@@ -97,7 +202,7 @@ function violated_flows_neigh!(inst::Instance,
         optimize!(lp_model.model)
     end
     model_slacks = value.(lp_model.s)
-    lines = comp_viols(inst, model_slacks, candidates)
+    lines = comp_viols(inst, model_slacks, inserted, removed)
 
     it = 0
     rm_count = 0
@@ -129,22 +234,23 @@ function violated_flows_neigh!(inst::Instance,
                 log_neigh_run(inst, 
                               best_viol, 
                               viol, 
-                              inserted_candidates, 
-                              time() - time_beg)
+                              inserted, 
+                              time() - time_beg,
+                              "viol")
                 # Update data structures
+                add_count += 1
                 insert_set = Set(insert)
-                union!(inserted_candidates, insert_set)
-                setdiff!(candidates, insert_set)
+                setdiff!(removed, insert_set)
+                setdiff!(removed_all, insert_set)
+                union!(inserted, insert_set)
                 best_viol = viol
                 model_slacks = value.(lp_model.s)
                 has_impr = true
 
                 if param_debugging_level == 1
+                    @assert length(inserted) + length(removed_all) == inst.nb_K
                     lp_debug = build_lp_model(inst)
-                    add_lines!(inst, 
-                               lp_debug, 
-                               collect(inserted_candidates))
-                    optimize!(lp_debug.model)
+                    rm_lines!(inst, lp_debug, collect(removed_all), true)
                     @assert iseq(viol, objective_value(lp_debug.model))
                 end
             else
@@ -160,9 +266,11 @@ function violated_flows_neigh!(inst::Instance,
         end
 
         if has_impr
-            lines = comp_viols(inst, model_slacks, candidates)
+            lines = comp_viols(inst, 
+                               model_slacks, 
+                               inserted, 
+                               removed)
         else
-            break
             lambda /= 2.0
             if isl(lambda * length(lines), 1.0)
                 log("Lambda too small")
@@ -172,7 +280,7 @@ function violated_flows_neigh!(inst::Instance,
         end
     end
     delta_runtime = time() - time_beg
-    delta_inserted = length(inserted_candidates) - inserted_beg
+    delta_inserted = length(inserted) - nb_inserted_beg
     delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
@@ -182,23 +290,44 @@ function violated_flows_neigh!(inst::Instance,
     return best_viol, report
 end
 
+function comp_f_residuals(inst::Instance, 
+                          f::Vector{Float64}, 
+                          inserted::Set{Int64})
+    f_residuals = Vector{Tuple{Int64, Float64}}()
+    for k in inserted
+        # Shift to the existing lines
+        # j = map_to_existing_line(inst, k)
+        diff = inst.f_bar[k] - f[k]
+        # if !isl(diff, 0.0) # diff >= 0.0
+        r = diff / inst.f_bar[k]
+        push!(f_residuals, (k, r))
+        # end
+    end
+
+    # Sort lines in non-descending order of residuals
+    sort!(f_residuals, by = x->x[2], rev = true)
+
+    return [f_residuals[i][1] for i in 1:length(f_residuals)]
+end
+
 function residual_flows_neigh(inst::Instance, 
                               lp_model::LPModel, 
-                              candidates::Set{Int64}, 
-                              inserted_candidates::Set{Int64}, 
+                              removed::Set{Int64}, 
+                              removed_all::Set{Int64}, 
+                              inserted::Set{Int64}, 
                               init_viol::Float64, 
                               best_viol::Float64)
-    log("Residual flows neigh", true)
-
     if iseq(best_viol, 0.0)
         return best_viol, NeighReport()
     end
+    log("Residual flows neigh", true)
+
     time_beg = time()
-    inserted_beg = length(inserted_candidates)
+    nb_rm_beg = length(removed)
     viol_beg = best_viol
 
     if param_debugging_level == 1
-        @assert isdisjoint(candidates, inserted_candidates)
+        @assert isdisjoint(removed, inserted)
     end
 
     # Another option is to store the f values of the last successfull opt call
@@ -213,7 +342,7 @@ function residual_flows_neigh(inst::Instance,
     add_count = 0
     while true
         f_residuals = Vector{Tuple{Int64, Float64}}()
-        for k in candidates
+        for k in removed
             # Shift to the existing lines
             j = map_to_existing_line(inst, k)
             diff = inst.f_bar[j] - f[j]
@@ -223,7 +352,7 @@ function residual_flows_neigh(inst::Instance,
             # end
         end
 
-        sort!(f_residuals, by = x->x[2], rev = true)
+        sort!(f_residuals, by = x->x[2])
         lines = [f_residuals[i][1] for i in 1:length(f_residuals)]
 
         a = 1
@@ -252,22 +381,21 @@ function residual_flows_neigh(inst::Instance,
                 log_neigh_run(inst, 
                               best_viol, 
                               viol, 
-                              inserted_candidates, 
-                              time() - time_beg)
+                              inserted, 
+                              time() - time_beg,
+                              "viol")
                 # Update data structures
                 insert_set = Set(insert)
-                union!(inserted_candidates, insert_set)
-                setdiff!(candidates, insert_set)
+                setdiff!(removed, insert_set)
+                setdiff!(removed_all, insert_set)
+                union!(inserted, insert_set)
                 best_viol = viol
-
                 has_impr = true
-
+    
                 if param_debugging_level == 1
+                    @assert length(inserted) + length(removed_all) == inst.nb_K
                     lp_debug = build_lp_model(inst)
-                    add_lines!(inst, 
-                               lp_debug, 
-                               collect(inserted_candidates))
-                    optimize!(lp_debug.model)
+                    rm_lines!(inst, lp_debug, collect(removed_all), true)
                     @assert iseq(viol, objective_value(lp_debug.model))
                 end
                 break
@@ -286,12 +414,14 @@ function residual_flows_neigh(inst::Instance,
             break
         end
     end
+    log("End RF lines neigh")
+
     delta_runtime = time() - time_beg
-    delta_inserted = length(inserted_candidates) - inserted_beg
+    delta_rm = length(removed) - nb_rm_beg
     delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
-                         delta_inserted / inst.nb_K, 
+                         delta_rm / inst.nb_K, 
                          delta_viol / init_viol)
 
     return best_viol, report
@@ -299,27 +429,27 @@ end
 
 function g_lines_neigh(inst::Instance, 
                        lp_model::LPModel, 
-                       candidates::Set{Int64}, 
-                       inserted_candidates::Set{Int64},
+                       removed::Set{Int64}, 
+                       removed_all::Set{Int64}, 
+                       inserted::Set{Int64},
                        init_viol::Float64, 
                        best_viol::Float64)
-    log("Generation lines neigh", true)
-
     if iseq(best_viol, 0.0)
         return best_viol, NeighReport()
     end
+    log("Generation lines neigh", true)
+
     time_beg = time()
-    inserted_beg = length(inserted_candidates)
+    nb_rm_beg = length(removed)
     viol_beg = best_viol
 
     if param_debugging_level == 1
-        @assert isdisjoint(candidates, inserted_candidates)
+        @assert isdisjoint(removed, inserted)
     end
 
     # Ideia 3: add linhas conectando os geradores
     lines = Vector{Int64}()
-    lines_g = Vector{Tuple{Int64, Float64}}()
-    for k in candidates
+    for k in removed
         c = get_circuit(inst, k)
 
         cond_a = true
@@ -367,21 +497,20 @@ function g_lines_neigh(inst::Instance,
             log_neigh_run(inst, 
                           best_viol, 
                           viol, 
-                          inserted_candidates, 
-                          time() - time_beg)
-
+                          inserted, 
+                          time() - time_beg,
+                          "viol")
             # Update data structures
             insert_set = Set(insert)
-            union!(inserted_candidates, insert_set)
-            setdiff!(candidates, insert_set)
+            setdiff!(removed, insert_set)
+            setdiff!(removed_all, insert_set)
+            union!(inserted, insert_set)
             best_viol = viol
 
             if param_debugging_level == 1
+                @assert length(inserted) + length(removed_all) == inst.nb_K
                 lp_debug = build_lp_model(inst)
-                add_lines!(inst, 
-                           lp_debug, 
-                           collect(inserted_candidates))
-                optimize!(lp_debug.model)
+                rm_lines!(inst, lp_debug, collect(removed_all), true)
                 @assert iseq(viol, objective_value(lp_debug.model))
             end
         else
@@ -396,24 +525,28 @@ function g_lines_neigh(inst::Instance,
     log("End g lines neigh")
 
     delta_runtime = time() - time_beg
-    delta_inserted = length(inserted_candidates) - inserted_beg
+    delta_rm = length(removed) - nb_rm_beg
     delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
-                         delta_inserted / inst.nb_K, 
+                         delta_rm / inst.nb_K, 
                          delta_viol / init_viol)
 
     return best_viol, report
 end
 
 """
-    rm_lines!(inst::Instance, lp_model::LPModel, candidates::Vector{Int64})
+    rm_lines!(inst::Instance, 
+              lp_model::LPModel, 
+              candidates::Vector{Int64}, 
+              is_opt::Bool = false)
 
 Remove lines from the model by setting the susceptances to a small value.
 """
 function rm_lines!(inst::Instance, 
                    lp_model::LPModel,  
-                   candidates::Vector{Int64})
+                   candidates::Vector{Int64}, 
+                   is_opt::Bool = false)
     log("Rm $(length(candidates)) line(s)")
 
     for k in candidates
@@ -427,17 +560,23 @@ function rm_lines!(inst::Instance,
                                     -param_gamma_star)
         fix(lp_model.f[k], 0.0; force = true)
     end
-    # optimize!(lp_model.model)
+    if is_opt
+        optimize!(lp_model.model)
+    end
 end
 
 """
-    add_lines!(inst::Instance, lp_model::LPModel, new_candidates::Vector{Int64})
+    add_lines!(inst::Instance, 
+               lp_model::LPModel, 
+               new_candidates::Vector{Int64}, 
+               is_opt::Bool = true)
 
 Insert lines in the model by setting the diagonal terms of the susceptance.
 """
 function add_lines!(inst::Instance, 
                     lp_model::LPModel,
-                    new_candidates::Vector{Int64})
+                    new_candidates::Vector{Int64}, 
+                    is_opt::Bool = true)
     log("Add $(length(new_candidates)) line(s)")
 
     for k in new_candidates
@@ -455,20 +594,23 @@ function add_lines!(inst::Instance,
                                    lp_model.Delta_theta[j], 
                                    -inst.gamma[k])
     end
-    optimize!(lp_model.model)
+    if is_opt
+        optimize!(lp_model.model)
+    end
 end
 
 """
     comp_viols(inst::Instance, 
                s::Vector{Float64}, 
+               inserted::Set{Int64}, 
                candidates::Set{Int64})
 
 Compute the violations of the flow constraints in the existing lines.
 """
 function comp_viols(inst::Instance, 
                     s::Vector{Float64}, 
-                    candidates::Set{Int64}, 
-                    is_sort::Bool = false)
+                    inserted::Set{Int64}, 
+                    candidates::Set{Int64})
     viols = Vector{Tuple{Int64, Float64}}()
     for k in candidates
         j = map_to_existing_line(inst, k)
@@ -478,9 +620,7 @@ function comp_viols(inst::Instance,
             push!(viols, (k, s[j]))
         end
     end
-    if is_sort
-        sort!(viols, by = x->x[2], rev = true)
-    end
+    sort!(viols, by = x->x[2], rev = true)
 
     return [v[1] for v in viols]
 end
@@ -491,10 +631,6 @@ end
 Fix start the model with the lines, generation, and flows of the start struct.
 """
 function fix_start!(inst::Instance, md::MIPModel, start::Start)
-    if !start.is_feas
-        log("Infeasible model")
-        return false
-    end
     set_attribute(md.model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
     set_attribute(md.model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-3)
 

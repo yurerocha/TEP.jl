@@ -1,6 +1,6 @@
 # ----------------------------- General parameters -----------------------------
 const param_eps = 1e-5
-param_debugging_level = 0
+param_debugging_level = 1
 param_log_level = 1
 
 # --------------------------- instance.jl parameters ---------------------------
@@ -17,7 +17,19 @@ const param_penalty = 1e6
 # -------------------------- heuristic.jl parameters ---------------------------
 param_gamma_star = 0.0 # Simulate line rm by setting its susceptance to this val
 param_lambda_start = 1.0 # Initial percentage of violated cands to insert
-param_res_flow_ins = 0.2 # Percent of cands to evaluate insert per it
+param_res_flow_percent = 0.7
+param_res_flow_delta = 0.2
+param_res_flow_ins = 0.2
 param_g_lines_ins = 0.1 # Percent of cands connected to g to evaluate per it
-param_g_lines_strategy = 1 # in [1, 2, 3, 4]
-param_neigh = 0 # Neighboorhood structures for the heuristic
+# 1: g lines
+# 2: d lines
+# 3: g or d lines
+# 4: !(g or d) lines
+param_g_lines_strategy = 3 # in [1, 2, 3, 4]
+param_rf_max_it = 100
+param_time_limit = 5.0 
+
+# firt_impr
+# param_rf_max_it = 3
+# param_res_flow_percent = 0.7
+# param_res_flow_delta = 0.4
