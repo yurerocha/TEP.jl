@@ -130,3 +130,7 @@ Sem restrições de simetria
 - Testar configurando um tempo limite em vez de quantidade de iterações 
 - Colocar os thetas no fix start Ok
 - Add restrições Joaquim
+
+- Callback no resolvedor para parar assim que o dual no barrier for pior que
+  a melhor violação
+- Testar a instância pglib_opf_case8387_pegase sem os callbacks

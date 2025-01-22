@@ -58,19 +58,19 @@ function rm_and_fix(inst::Instance,
         @assert isdisjoint(inserted, removed)
     end
 
-    res_flow_percent = param_res_flow_percent
+    rnf_percent = param_rnf_percent
     f = value.(lp_model.f)
     g = get_g_values(inst, lp_model)
     lines = comp_f_residuals(inst, f, inserted)
-    for it in 1:param_rf_max_it
-        nb_itens = trunc(Int64, res_flow_percent * length(lines))
+    for it in 1:param_rnf_max_it
+        nb_itens = trunc(Int64, rnf_percent * length(lines))
         if nb_itens == 0
             log("Insufficient nb of lines")
             break
         elseif iseq(best_cost, 0.0)
             log("All candidates removed!")
             break
-        elseif isg(time() - time_beg, param_time_limit)
+        elseif isg(time() - time_beg, param_rnf_time_limit)
             log("Reached time limit")
             break
         end
@@ -111,13 +111,6 @@ function rm_and_fix(inst::Instance,
                                     viol, 
                                     viol)
 
-            # viol, _ = residual_flows_neigh(inst, 
-            #                                lp_model, 
-            #                                rm_set, 
-            #                                removed, 
-            #                                inserted, 
-            #                                viol, 
-            #                                viol)
             if iseq(viol, 0.0)
                 cost = comp_cost(inst, inserted)
                 if isl(cost, best_cost)
@@ -136,16 +129,21 @@ function rm_and_fix(inst::Instance,
 
             log_neigh_run(inst, best_cost, cost, removed, time() - time_beg)
             best_cost = cost
+
+            if !has_values(lp_model.model)
+                optimize!(lp_model.model)
+            end
             f = value.(lp_model.f)
             g = get_g_values(inst, lp_model)
+
             lines = comp_f_residuals(inst, f, inserted)
-            res_flow_percent = min(1.0, res_flow_percent + param_res_flow_delta)
+            rnf_percent = min(1.0, rnf_percent + param_rnf_delta)
         else
             log("Not improved! Add new lines...")
             setdiff!(removed, rm_set)
             union!(inserted, rm_set)
             add_lines!(inst, lp_model, rm, false)
-            res_flow_percent = max(0.0, res_flow_percent - param_res_flow_delta)
+            rnf_percent = max(0.0, rnf_percent - param_rnf_delta)
         end
     end
     log("End remove and fix", true)
@@ -170,6 +168,19 @@ function violated_flows_neigh!(inst::Instance,
     end
     log("Violated flows neigh", true)
 
+    function barrier_callback(cb_data, cb_where::Cint)
+        if cb_where == GRB_CB_BARRIER
+            dual_obj = Ref{Cdouble}()
+            GRBcbget(cb_data, cb_where, GRB_CB_BARRIER_DUALOBJ, dual_obj)
+            if isg(dual_obj[], best_viol)
+                @warn dual_obj, best_viol, "Terminate Gurobi"
+                # readline()
+                GRBterminate(backend(lp_model.model).optimizer.model.inner)
+            end
+        end
+    end
+    set_attribute(lp_model.model, Gurobi.CallbackFunction(), barrier_callback)
+
     time_beg = time()
     nb_inserted_beg = length(inserted)
     viol_beg = best_viol
@@ -185,80 +196,60 @@ function violated_flows_neigh!(inst::Instance,
     model_slacks = value.(lp_model.s)
     lines = comp_viols(inst, model_slacks, inserted, removed)
 
-    it = 0
-    rm_count = 0
-    add_count = 0
-    lambda = param_lambda_start
+    it = 1
+    lambda = param_vf_lambda_start
     while true
-        a = 1
-        b = a + trunc(Int64, lambda * length(lines))
-        has_impr = false
-        while true
-            if a > length(lines) || a > b
-                break
-            end
-
-            it += 1
-            log("---------- VF it $it ----------", true)
-            
-            insert = lines[a:min(b, length(lines))]
-            a = b + 1
-            b = b + trunc(Int64, lambda * length(lines))
-            
-            add_lines!(inst, lp_model, insert)
-            add_count += 1
-
-            st = termination_status(lp_model.model)
-            viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
-
-            if isl(viol, best_viol)
-                log_neigh_run(inst, 
-                              best_viol, 
-                              viol, 
-                              inserted, 
-                              time() - time_beg,
-                              "viol")
-                # Update data structures
-                add_count += 1
-                insert_set = Set(insert)
-                setdiff!(removed, insert_set)
-                setdiff!(removed_all, insert_set)
-                union!(inserted, insert_set)
-                best_viol = viol
-                model_slacks = value.(lp_model.s)
-                has_impr = true
-
-                if param_debugging_level == 1
-                    @assert length(inserted) + length(removed_all) == inst.nb_K
-                    lp_debug = build_lp_model(inst)
-                    rm_lines!(inst, lp_debug, collect(removed_all), true)
-                    @assert iseq(viol, objective_value(lp_debug.model))
-                end
-            else
-                rm_count += 1
-                # The inserted candidates make the solution worse
-                rm_lines!(inst, lp_model, insert)
-            end
-        end
-
+        nb_itens = trunc(Int64, lambda * length(lines))
         if iseq(best_viol, 0.0)
             log("All viol removed!")
             break
+        elseif nb_itens == 0
+            log("Insufficient nb of lines")
+            break
         end
 
-        if has_impr
+        log("---------- VF it $it ----------", true)
+        
+        insert = lines[1:min(nb_itens, length(lines))]
+        
+        add_lines!(inst, lp_model, insert)
+
+        st = termination_status(lp_model.model)
+        viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
+
+        if isl(viol, best_viol)
+            log_neigh_run(inst, 
+                            best_viol, 
+                            viol, 
+                            inserted, 
+                            time() - time_beg,
+                            "viol")
+            # Update data structures
+            insert_set = Set(insert)
+            setdiff!(removed, insert_set)
+            setdiff!(removed_all, insert_set)
+            union!(inserted, insert_set)
+            best_viol = viol
+            model_slacks = value.(lp_model.s)
             lines = comp_viols(inst, 
                                model_slacks, 
                                inserted, 
                                removed)
-        else
-            lambda /= 2.0
-            if isl(lambda * length(lines), 1.0)
-                log("Lambda too small")
-                break
+
+            if param_debugging_level == 1
+                @assert length(inserted) + length(removed_all) == inst.nb_K
+                lp_debug = build_lp_model(inst)
+                rm_lines!(inst, lp_debug, collect(removed_all), true)
+                @assert iseq(viol, objective_value(lp_debug.model))
             end
+        else
+            # lambda /= 2.0
+            lambda = max(0.0, lambda - param_vf_delta)
             log("Decrease lambda and restart $lambda")
+            # The inserted candidates make the solution worse
+            rm_lines!(inst, lp_model, insert)
         end
+        it += 1
     end
     delta_runtime = time() - time_beg
     delta_inserted = length(inserted) - nb_inserted_beg
@@ -266,123 +257,6 @@ function violated_flows_neigh!(inst::Instance,
 
     report = NeighReport(delta_runtime, 
                          delta_inserted / inst.nb_K, 
-                         delta_viol / init_viol)
-
-    return best_viol, report
-end
-
-function residual_flows_neigh(inst::Instance, 
-                              lp_model::LPModel, 
-                              removed::Set{Int64}, 
-                              removed_all::Set{Int64}, 
-                              inserted::Set{Int64}, 
-                              init_viol::Float64, 
-                              best_viol::Float64)
-    if iseq(best_viol, 0.0)
-        return best_viol, NeighReport()
-    end
-    log("Residual flows neigh", true)
-
-    time_beg = time()
-    nb_rm_beg = length(removed)
-    viol_beg = best_viol
-
-    if param_debugging_level == 1
-        @assert isdisjoint(removed, inserted)
-    end
-
-    # Another option is to store the f values of the last successfull opt call
-    if !has_values(lp_model.model)
-        optimize!(lp_model.model)
-    end
-    
-    # Ideia 1: adiciona candidatos para existentes muito utilizados
-    it = 0
-    f = [value(lp_model.f[j]) for j in 1:inst.nb_J]
-    rm_count = 0
-    add_count = 0
-    while true
-        f_residuals = Vector{Tuple{Int64, Float64}}()
-        for k in removed
-            # Shift to the existing lines
-            j = map_to_existing_line(inst, k)
-            diff = inst.f_bar[j] - f[j]
-            # if !isl(diff, 0.0) # diff >= 0.0
-            r = (inst.f_bar[j] - f[j]) / inst.f_bar[j]
-            push!(f_residuals, (k, r))
-            # end
-        end
-
-        sort!(f_residuals, by = x->x[2])
-        lines = [f_residuals[i][1] for i in 1:length(f_residuals)]
-
-        a = 1
-        b = a + trunc(Int64, param_res_flow_ins * length(lines))
-        has_impr = false
-        while true
-            if a > length(lines) || a > b
-                break
-            end
-
-            it += 1
-            log("---------- RF it $it ----------", true)
-
-            insert = lines[a:min(b, length(lines))]
-
-            a = b + 1
-            b = a + trunc(Int64, param_res_flow_ins * length(lines))
-            
-            add_lines!(inst, lp_model, insert)
-            add_count += 1
-
-            st = termination_status(lp_model.model)
-            viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
-
-            if isl(viol, best_viol)
-                log_neigh_run(inst, 
-                              best_viol, 
-                              viol, 
-                              inserted, 
-                              time() - time_beg,
-                              "viol")
-                # Update data structures
-                insert_set = Set(insert)
-                setdiff!(removed, insert_set)
-                setdiff!(removed_all, insert_set)
-                union!(inserted, insert_set)
-                best_viol = viol
-                has_impr = true
-    
-                if param_debugging_level == 1
-                    @assert length(inserted) + length(removed_all) == inst.nb_K
-                    lp_debug = build_lp_model(inst)
-                    rm_lines!(inst, lp_debug, collect(removed_all), true)
-                    @assert iseq(viol, objective_value(lp_debug.model))
-                end
-                break
-            else
-                rm_count += 1
-                # The inserted candidates make the solution worse
-                rm_lines!(inst, lp_model, insert)
-            end
-        end
-
-        if iseq(best_viol, 0.0)
-            log("All viol removed!")
-            break
-        elseif !has_impr
-            log("End residual flows neigh")
-            break
-        end
-    end
-    log("End RF lines neigh")
-
-    delta_runtime = time() - time_beg
-    delta_rm = length(removed) - nb_rm_beg
-    delta_viol = viol_beg - best_viol
-
-    report = NeighReport(delta_runtime, 
-                         delta_rm / inst.nb_K, 
                          delta_viol / init_viol)
 
     return best_viol, report
@@ -400,6 +274,19 @@ function g_lines_neigh(inst::Instance,
     end
     log("Generation lines neigh", true)
 
+    function barrier_callback(cb_data, cb_where::Cint)
+        if cb_where == GRB_CB_BARRIER
+            dual_obj = Ref{Cdouble}()
+            GRBcbget(cb_data, cb_where, GRB_CB_BARRIER_DUALOBJ, dual_obj)
+            if isg(dual_obj[], best_viol)
+                @warn dual_obj, best_viol, "Terminate Gurobi"
+                # readline()
+                GRBterminate(backend(lp_model.model).optimizer.model.inner)
+            end
+        end
+    end
+    set_attribute(lp_model.model, Gurobi.CallbackFunction(), barrier_callback)
+
     time_beg = time()
     nb_rm_beg = length(removed)
     viol_beg = best_viol
@@ -415,16 +302,16 @@ function g_lines_neigh(inst::Instance,
 
         cond_a = true
         cond_b = false
-        if param_g_lines_strategy == 1
+        if param_gl_strategy == 1
             cond_a = c.fr in keys(inst.G)
             cond_b = c.to in keys(inst.G)
-        elseif param_g_lines_strategy == 2
+        elseif param_gl_strategy == 2
             cond_a = isg(inst.D[c.fr], 0.0)
             cond_b = isg(inst.D[c.to], 0.0)
-        elseif param_g_lines_strategy == 3
+        elseif param_gl_strategy == 3
             cond_a = isg(inst.D[c.fr], 0.0) || c.fr in keys(inst.G)
             cond_b = isg(inst.D[c.to], 0.0) || c.to in keys(inst.G)
-        elseif param_g_lines_strategy == 4
+        elseif param_gl_strategy == 4
             cond_a = !(isg(inst.D[c.fr], 0.0) || c.fr in keys(inst.G))
             cond_b = !(isg(inst.D[c.to], 0.0) || c.to in keys(inst.G))
         end
@@ -435,7 +322,7 @@ function g_lines_neigh(inst::Instance,
     end
 
     a = 1
-    b = a + trunc(Int64, param_g_lines_ins * length(lines))
+    b = a + trunc(Int64, param_gl_ins * length(lines))
     it = 0
     while true
         if a > length(lines) || a > b
@@ -447,7 +334,7 @@ function g_lines_neigh(inst::Instance,
         insert = lines[a:min(b, length(lines))]
 
         a = b + 1
-        b = a + trunc(Int64, param_g_lines_ins * length(lines))
+        b = a + trunc(Int64, param_gl_ins * length(lines))
 
         add_lines!(inst, lp_model, insert)
 
@@ -569,18 +456,18 @@ function fix_start!(inst::Instance, md::MIPModel, start::Start)
     set_attribute(md.model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
     set_attribute(md.model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-3)
 
-    # for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-    #     fix(md.x[k], 0)
-    # end
+    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+        fix(md.x[k], 0)
+    end
     for k in start.inserted
-        set_start_value(md.x[k], 1)
+        fix(md.x[k], 1; force = true)
     end
     for l in 1:inst.nb_J + inst.nb_K
-        set_start_value(md.f[l], start.f[l])
+        fix(md.f[l], start.f[l])
     end
     for i in inst.I
         if i in keys(inst.G)
-            set_start_value(md.g[i], start.g[i])
+            fix(md.g[i], start.g[i]; force = true)
         end
         # fix(md.theta[i], start.theta[i])
     end
@@ -624,20 +511,20 @@ function fix_start!(inst::Instance, md::MIPModel, start::Start)
         @assert is_feas
     end
 
-    # for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-    #     unfix(md.x[k])
-    # end
-    # for l in 1:inst.nb_J + inst.nb_K
-    #     unfix(md.f[l])
-    # end
-    # for i in inst.I
-    #     # Some buses may not have generation
-    #     if i in keys(inst.G)
-    #         unfix(md.g[i])
-    #         g_max = inst.G[i]
-    #         set_lower_bound(md.g[i], 0.0)
-    #         set_upper_bound(md.g[i], g_max)
-    #     end
-    #     # unfix(md.theta[i])
-    # end
+    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+        unfix(md.x[k])
+    end
+    for l in 1:inst.nb_J + inst.nb_K
+        unfix(md.f[l])
+    end
+    for i in inst.I
+        # Some buses may not have generation
+        if i in keys(inst.G)
+            unfix(md.g[i])
+            g_max = inst.G[i]
+            set_lower_bound(md.g[i], 0.0)
+            set_upper_bound(md.g[i], g_max)
+        end
+        # unfix(md.theta[i])
+    end
 end
