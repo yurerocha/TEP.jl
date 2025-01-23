@@ -1,40 +1,4 @@
-# TransExpanProblem
-
-[![Build Status](https://github.com/yurerocha/TransExpanProblem.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/yurerocha/TransExpanProblem.jl/actions/workflows/CI.yml?query=branch%3Amain)
-
-## Ignored instances
-
-- pglib_opf_case162_ieee_dtc: infeasible with all candidates.
-- pglib_opf_case1803_snem: one existing line with zero reactance.
-- pglib_opf_case4661_sdet: infeasible or unbounded.
-- pglib_opf_case78484_epigrids: infeasible with all candidates.
-
-## Table legends
-
-- N: number of nodes.
-- L: number of lines (existing and candidates).
-- Build (s): time to build the MIP model, in seconds.
-- D / G: demand divided by generation.
-- Solve (s): time to solve the instance, in seconds.
-- Incumbent (s): time to find an incumbent solution for the MIP model, in seconds.
-- Status: solver status.
-- Rt solve (s): time to solve the root node, in seconds.
-- Rt best bound: best bound at the end of the root node.
-- Best bound: best bound.
-- Cost: cost of the best solution found.
-- Gap (%): solver Gap.
-- Heur (s): time to run the heuristic, in seconds.
-- Heur rm (%): percentage of candidate lines removed.
-- Start (s): time to load the LP solution into the MIP model, in seconds.
-
-## Summary
-
-- Avg. Heur (s): 7.01
-- Avg. Heur rm (%): 84.37
-
-## Results
-
-| Instance | N | L | L / N | Build (s) | D / G | Solve (s) | Incumbent (s) | Status | Rt solve (s) | Rt best bound | Best bound | Cost | Gap (%) | Heur (s) | Heur rm (%) | Start (s) | 
+| Instance | N | L | L/N | Build (s) | D / G | Solve (s) | Incumbent (s) | Status | Rt solve (s) | Rt best bound | Best bound | Cost | Gap (%) | Heur (s) | Heur rm (%) | Start (s) | 
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---| 
 | pglib_opf_case3_lmbd.txt | 3 | 9 | 3.0 | 0.02 | 0.32 | 0.0 | 0.0 | OPTIMAL | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 100.0 | 0.0 | 
 | pglib_opf_case5_pjm.txt | 5 | 18 | 3.6 | 0.0 | 0.87 | 0.01 | 0.0 | OPTIMAL | 0.01 | 1.03 | 1.03 | 1.03 | 0.0 | 0.0 | 75.0 | 0.0 | 

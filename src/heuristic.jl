@@ -75,6 +75,11 @@ function rm_and_fix(inst::Instance,
             break
         end
 
+        # Remove the barrier callback inserted in the remaining neighs
+        function empty_callback(cb_data, cb_where::Cint)
+        end
+        set_attribute(lp_model.model, Gurobi.CallbackFunction(), empty_callback)
+
         log("---------- It $it ----------", true)
 
         rm = lines[1:min(nb_itens, length(lines))]
@@ -101,7 +106,8 @@ function rm_and_fix(inst::Instance,
                                                  removed, 
                                                  inserted, 
                                                  viol, 
-                                                 viol)
+                                                 viol, 
+                                                 time_beg)
             
             viol, _ = g_lines_neigh(inst, 
                                     lp_model, 
@@ -109,7 +115,8 @@ function rm_and_fix(inst::Instance,
                                     removed, 
                                     inserted, 
                                     viol, 
-                                    viol)
+                                    viol, 
+                                    time_beg)
 
             if iseq(viol, 0.0)
                 cost = comp_cost(inst, inserted)
@@ -162,7 +169,8 @@ function violated_flows_neigh!(inst::Instance,
                                removed_all::Set{Int64}, 
                                inserted::Set{Int64}, 
                                init_viol::Float64, 
-                               best_viol::Float64)    
+                               best_viol::Float64, 
+                               rnf_time_beg::Float64)    
     if iseq(best_viol, 0.0)
         return best_viol, NeighReport()
     end
@@ -206,6 +214,9 @@ function violated_flows_neigh!(inst::Instance,
         elseif nb_itens == 0
             log("Insufficient nb of lines")
             break
+        elseif isg(time() - rnf_time_beg, param_rnf_time_limit)
+            log("Reached time limit")
+            break
         end
 
         log("---------- VF it $it ----------", true)
@@ -243,6 +254,7 @@ function violated_flows_neigh!(inst::Instance,
                 @assert iseq(viol, objective_value(lp_debug.model))
             end
         else
+            break
             # lambda /= 2.0
             lambda = max(0.0, lambda - param_vf_delta)
             log("Decrease lambda and restart $lambda")
@@ -268,7 +280,8 @@ function g_lines_neigh(inst::Instance,
                        removed_all::Set{Int64}, 
                        inserted::Set{Int64},
                        init_viol::Float64, 
-                       best_viol::Float64)
+                       best_viol::Float64, 
+                       rnf_time_beg::Float64)
     if iseq(best_viol, 0.0)
         return best_viol, NeighReport()
     end
@@ -325,7 +338,13 @@ function g_lines_neigh(inst::Instance,
     b = a + trunc(Int64, param_gl_ins * length(lines))
     it = 0
     while true
-        if a > length(lines) || a > b
+        if iseq(best_viol, 0.0)
+            log("All viol removed!")
+            break
+        elseif isg(time() - rnf_time_beg, param_rnf_time_limit)
+            log("Reached time limit")
+            break
+        elseif a > length(lines) || a > b
             break
         end
 
@@ -363,11 +382,6 @@ function g_lines_neigh(inst::Instance,
             end
         else
             rm_lines!(inst, lp_model, insert)
-        end
-
-        if iseq(best_viol, 0.0)
-            log("All viol removed!")
-            break
         end
     end
     log("End g lines neigh")

@@ -104,7 +104,7 @@ param_is_build_start = true # Build the model at the start
 
 Sem restrições de simetria
 
-## Nova ideia
+## Novo algoritmo
 - Começar removendo circuitos muito ociosos
 - Ir removendo uma porcentagem até inviabilizar
 - Ao inviabilizar, tentar viabilizar com as vizinhanças atuais, em especial a de
@@ -125,7 +125,7 @@ Sem restrições de simetria
 - É preciso armazenar e manter atualizado o custo da solução
 - O modelo dará as violações
 
-# TODO
+## TODO
 - Calcular o impacto de todas as vizinhanças
 - Testar configurando um tempo limite em vez de quantidade de iterações 
 - Colocar os thetas no fix start Ok
@@ -134,3 +134,40 @@ Sem restrições de simetria
 - Callback no resolvedor para parar assim que o dual no barrier for pior que
   a melhor violação
 - Testar a instância pglib_opf_case8387_pegase sem os callbacks
+- Colocar o tempo restante nas vizinhanças e encerrar no matter what
+
+
+## Experiments
+
+### Base config
+- param_gl_ins = 0.1
+- param_rnf_time_limit = 10.0
+- param_rnf_percent = 0.6
+- param_rnf_delta = 0.2
+
+### TODO
+- param_gl_strategy = 1, 2, 3, 4
+- param_gl_ins = 0.05, 0.1, 0.2
+- param_rnf_percent = 0.5, 0.6, 0.7
+- param_rnf_delta = 0.1, 0.2, 0.3
+- param_rnf_time_limit = 5.0, 10, 20.0
+
+### Batch 1
+- param_gl_strategy = 1, 2, 3, 4 (exp1, exp2, exp3, exp4)
+- best: 4
+
+### Batch 2
+- param_gl_ins = 0.05, 0.2, 0.4, 0.5 (exp5, exp6, exp7, exp8)
+- best: 0.4
+
+### Batch 3
+- param_rnf_percent = 0.7, 0.8 (exp9, exp10)
+- best: 0.7
+
+### Batch 4
+- param_rnf_delta = 0.1, 0.3 (exp11, exp12)
+- best: 0.2
+
+### Batch 5
+- param_rnf_time_limit = 20.0, 30.0 (exp13, exp14)
+- best: 10.0
