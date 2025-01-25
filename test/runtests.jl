@@ -1,6 +1,6 @@
-using TransExpanProblem
+using TEP
 using Test
 
-@testset "TransExpanProblem.jl" begin
+@testset "TEP.jl" begin
     # Write your tests here.
 end

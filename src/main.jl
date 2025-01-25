@@ -27,6 +27,9 @@ function run()
         "pglib_opf_case78484_epigrids.txt" # Infeasible with all candidates
     ]
     counter = 0
+    files = ["pglib_opf_case6468_rte.txt", 
+             "pglib_opf_case6470_rte.txt",
+             "pglib_opf_case6495_rte.txt"]
     for file in files
         counter += 1
         if file in skip

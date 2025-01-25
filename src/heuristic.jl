@@ -62,7 +62,8 @@ function rm_and_fix(inst::Instance,
     f = value.(lp_model.f)
     g = get_g_values(inst, lp_model)
     lines = comp_f_residuals(inst, f, inserted)
-    for it in 1:param_rnf_max_it
+    it = 1
+    while true
         nb_itens = trunc(Int64, rnf_percent * length(lines))
         if nb_itens == 0
             log("Insufficient nb of lines")
@@ -254,12 +255,12 @@ function violated_flows_neigh!(inst::Instance,
                 @assert iseq(viol, objective_value(lp_debug.model))
             end
         else
-            break
+            # log("Decrease lambda and restart $lambda")
             # lambda /= 2.0
-            lambda = max(0.0, lambda - param_vf_delta)
-            log("Decrease lambda and restart $lambda")
+            # lambda = max(0.0, lambda - param_vf_delta)
             # The inserted candidates make the solution worse
             rm_lines!(inst, lp_model, insert)
+            break
         end
         it += 1
     end
@@ -469,6 +470,21 @@ Fix start the model with the lines, generation, and flows of the start struct.
 function fix_start!(inst::Instance, md::MIPModel, start::Start)
     set_attribute(md.model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
     set_attribute(md.model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-3)
+
+    # For the symmetry constraints.
+    if param_is_symmetry_en
+        for j in 1:inst.nb_J
+            l = map_to_first_cand(inst, j)
+            for k in l + param_nb_candidates - 2:l:-1
+                if iseq(inst.gamma[k], inst.gamma[k + 1]) &&
+                !(k in start.inserted) && k + 1 in start.inserted
+                    start.f[k], start.f[k + 1] = start.f[k + 1], start.f[k]
+                    delete!(start.inserted, k + 1)
+                    push!(start.inserted, k)
+                end
+            end
+        end
+    end
 
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         fix(md.x[k], 0)

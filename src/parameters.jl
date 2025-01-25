@@ -10,17 +10,17 @@ const param_max_rand = 100 # Max random value for the new cost (see text)
 const param_nb_candidates = 2 # Nb of candidates available per existing line
 
 # ---------------------------- model.jl parameters -----------------------------
-param_solver_time_limit::Float64 = 1.0
+param_solver_time_limit::Float64 = 600.0
 const MAXINT = 2_000_000_000 # Gurobi MAXINT value
 const param_penalty = 1e6
+param_is_symmetry_en = false
 
 # -------------------------- heuristic.jl parameters ---------------------------
 param_gamma_star = 0.0 # Simulate line rm by setting its susceptance to this val
-param_rnf_time_limit = 30.0
-param_rnf_max_it = 100
+param_rnf_time_limit = 10.0
 param_rnf_percent = 0.7
 param_rnf_delta = 0.2
-param_vf_delta = 0.25
+# param_vf_delta = 0.25
 param_vf_lambda_start = 1.0 # Initial percentage of violated cands to insert
 param_gl_ins = 0.4 # Percent of cands connected to g to evaluate per it
 # 1: g lines

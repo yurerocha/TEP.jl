@@ -5,14 +5,23 @@ Build mixed-integer linear programming model.
 """
 function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
-    config(md, logfile)
+    # config(md, logfile)
+    if param_log_level >= 2
+        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
+        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
+    else
+        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+    end
     
     x = Dict{Int, VariableRef}()
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         # Forcing to build candidates
-        x[k] = @variable(md, binary = true, base_name = "x$(k - inst.nb_J)")
+        x[k] = @variable(md, binary = true, base_name = "x[$k]")
     end
-    # add_symmetry_constrs(inst, md, x)
+
+    if param_is_symmetry_en
+        add_symmetry_constrs(inst, md, x)
+    end
 
     gen = add_g_vars(inst, md)
     sum_d, sum_g = comp_sum_d_sum_g(inst)
@@ -76,7 +85,13 @@ The gamma values can be used to simulate building a candidate line.
 function build_lp_model(inst::Instance, 
                         logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
-    config(md, logfile)
+    # config(md, logfile)
+    if param_log_level >= 3
+        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
+        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
+    else
+        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+    end
     # https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parametercrossover
     # https://support.gurobi.com/hc/en-us/community/posts/360043330491-The-role-of-crossover-in-linear-programming
     # https://support.gurobi.com/hc/en-us/community/posts/360043463792-How-to-terminate-once-barrier-solves-problem
@@ -357,6 +372,9 @@ end
                          x::Vector{VariableRef})
 
 Add constraints to help breaking symmetry.
+
+For candidates k, k + 1, ..., k + n with the same gamma, x_k >= x_{k + 1} >= ...
+>= x_{k + n}.
 """
 function add_symmetry_constrs(inst::Instance, 
                               md::GenericModel, 
@@ -372,11 +390,11 @@ function add_symmetry_constrs(inst::Instance,
 end
 
 
-function config(model::GenericModel, logfile::String)
-    if param_log_level > 1
-        set_attribute(model, MOI.RawOptimizerAttribute("LogFile"), logfile)
-        set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-    else
-        set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 0)
-    end
-end
+# function config(model::GenericModel, logfile::String)
+#     if param_log_level == 2
+#         set_attribute(model, MOI.RawOptimizerAttribute("LogFile"), logfile)
+#         set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 1)
+#     else
+#         set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+#     end
+# end
