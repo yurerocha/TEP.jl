@@ -64,7 +64,7 @@ function rm_and_fix(inst::Instance,
     lines = comp_f_residuals(inst, f, inserted)
     it = 1
     while true
-        nb_itens = trunc(Int64, rnf_percent * length(lines))
+        nb_itens = round(Int64, rnf_percent * length(lines))
         if nb_itens == 0
             log("Insufficient nb of lines")
             break
@@ -475,7 +475,7 @@ function fix_start!(inst::Instance, md::MIPModel, start::Start)
     if param_is_symmetry_en
         for j in 1:inst.nb_J
             l = map_to_first_cand(inst, j)
-            for k in l + param_nb_candidates - 2:l:-1
+            for k in l + param_nb_candidates - 2:-1:l
                 if iseq(inst.gamma[k], inst.gamma[k + 1]) &&
                 !(k in start.inserted) && k + 1 in start.inserted
                     start.f[k], start.f[k + 1] = start.f[k + 1], start.f[k]

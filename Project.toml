@@ -1,6 +1,6 @@
 name = "TEP"
 uuid = "eb9f2fad-3fa0-4abb-839d-82a3b9cc9b30"
-authors = ["Yure Rocha <yuretalis@gmail.com> and contributors"]
+authors = ["Yure Rocha <yure.trs@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
 [deps]

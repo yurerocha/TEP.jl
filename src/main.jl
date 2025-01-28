@@ -1,21 +1,37 @@
 """
-    run()
+    run(logname::String, 
+        gl_strategy::Int64, 
+        gl_ins::Float64, 
+        rnf_percent::Float64, 
+        rnf_delta::Float64, 
+        rnf_time_limit::Float64)
 
 Solve all instances.
 """
-function run()
-    dir = "TEP.jl"
-    dir_log = "log"
-    outputfile = "$dir/$dir_log/log.md"
+function run(logname::String = "exp.md", 
+             gl_strategy::Int64 = 2, 
+             gl_ins::Float64 = 0.1, 
+             rnf_percent::Float64 = 0.8, 
+             rnf_delta::Float64 = 0.1, 
+             rnf_time_limit::Float64 = 15.0, 
+             is_symmetry_en::Bool = false)
+    global param_gl_strategy = gl_strategy
+    global param_gl_ins = gl_ins
+    global param_rnf_percent = rnf_percent
+    global param_rnf_delta = rnf_delta
+    global param_rnf_time_limit = rnf_time_limit
+    global param_is_symmetry_en = is_symmetry_en
+
+    logfile = "$param_dir/$param_dir_log/$logname"
     
     # Nb of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
     # Random.seed!(seed)
     rng = Random.MersenneTwister(123)
 
-    log_header(outputfile)
+    log_header(logfile)
 
-    files = readdir("$dir/input3")
+    files = readdir("$param_dir/input3")
     # Sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
     # Run solver with binary decision variables
@@ -27,9 +43,6 @@ function run()
         "pglib_opf_case78484_epigrids.txt" # Infeasible with all candidates
     ]
     counter = 0
-    files = ["pglib_opf_case6468_rte.txt", 
-             "pglib_opf_case6470_rte.txt",
-             "pglib_opf_case6495_rte.txt"]
     for file in files
         counter += 1
         if file in skip
@@ -38,8 +51,8 @@ function run()
         end
         log("Processing $file nb $counter", true)
 
-        inputfile = "$dir/input3/$file"
-        logfile = "$dir/$dir_log/$file"
+        inputfile = "$param_dir/input3/$file"
+        logsolver = "$param_dir/$param_dir_log/$file"
         inst = read_instance(inputfile, rng)
         model = nothing
         build_time = 0.0
@@ -48,10 +61,10 @@ function run()
 
         # try
         log("Build heuristic solution", true)
-        (start, report) = build_solution(inst, logfile)
+        (start, report) = build_solution(inst, logsolver)
 
         log("Build full model", true)
-        build_time = @elapsed (model = build_mip_model(inst, logfile))
+        build_time = @elapsed (model = build_mip_model(inst, logsolver))
 
         log("Fix the start of the model", true)
         start_time = @elapsed (fix_start!(inst, model, start))
@@ -62,14 +75,42 @@ function run()
         results = results[1:length(results) - 1]
         
         results = (model.dem_gen_ratio, results...)
-        log_instance(outputfile, file, inst, build_time, 
+        log_instance(logfile, file, inst, build_time, 
                      results, report, start_time)
         # catch e
         #     @warn e
-        #     log_instance(outputfile, 
+        #     log_instance(logfile, 
         #                  "<s>" * file * "</s>", 
         #                  inst, build_time, model_dt.is_xi_req,
         #                  ntuple(v->'-', 14))
         # end
+    end
+end
+
+function tuning()
+    # gl_strategy = [1, 2, 3, 4]
+    # gl_ins = [0.1, 0.2, 0.4]
+    # Best: 2, 0.1
+    rnf_percent = [0.7, 0.8, 0.9]
+    rnf_delta = [[0.1, 0.2, 0.3], [0.1, 0.2], [0.1]]
+    # Best: 0.8, 0.1
+    # count_exp = 13
+    # k = 1
+    # for p in rnf_percent
+    #     for d in rnf_delta[k]
+    #         @warn "rnf_percent:$p rnf_delta:$d"
+    #         run("exp$(count_exp).md", 2, 0.1, p, d, 10.0)
+    #         count_exp += 1
+    #     end
+    #     k += 1
+    # end
+    # count_exp = 19
+    # time_limit = [15.0, 20.0, 5.0]
+    # Best: 15.0
+    count_exp = 22
+    is_symmetry_en = [false, true]
+    for is_en in is_symmetry_en
+        run("exp$(count_exp).md", 2, 0.1, 0.8, 0.1, 15.0, is_en)
+        count_exp += 1
     end
 end

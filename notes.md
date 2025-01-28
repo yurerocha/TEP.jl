@@ -140,34 +140,15 @@ Sem restrições de simetria
 ## Experiments
 
 ### Base config
-- param_gl_ins = 0.1
+- param_gl_strategy = 1
+- param_gl_ins = 0.2
 - param_rnf_time_limit = 10.0
-- param_rnf_percent = 0.6
-- param_rnf_delta = 0.2
+- param_rnf_percent = 0.7
+- param_rnf_delta = 0.1
 
 ### TODO
 - param_gl_strategy = 1, 2, 3, 4
-- param_gl_ins = 0.05, 0.1, 0.2
-- param_rnf_percent = 0.5, 0.6, 0.7
+- param_gl_ins = 0.1, 0.2, 0.4
+- param_rnf_percent = 0.7, 0.8, 0.9
 - param_rnf_delta = 0.1, 0.2, 0.3
-- param_rnf_time_limit = 5.0, 10, 20.0
-
-### Batch 1
-- param_gl_strategy = 1, 2, 3, 4 (exp1, exp2, exp3, exp4)
-- best: 4
-
-### Batch 2
-- param_gl_ins = 0.05, 0.2, 0.4, 0.5 (exp5, exp6, exp7, exp8)
-- best: 0.4
-
-### Batch 3
-- param_rnf_percent = 0.7, 0.8 (exp9, exp10)
-- best: 0.7
-
-### Batch 4
-- param_rnf_delta = 0.1, 0.3 (exp11, exp12)
-- best: 0.2
-
-### Batch 5
-- param_rnf_time_limit = 20.0, 30.0 (exp13, exp14)
-- best: 10.0
+- param_rnf_time_limit = 10.0, 20.0

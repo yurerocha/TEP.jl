@@ -646,7 +646,7 @@ function comp_f_residuals(inst::Instance,
     for k in inserted
         # Shift to the existing lines
         # j = map_to_existing_line(inst, k)
-        diff = inst.f_bar[k] - f[k]
+        diff = inst.f_bar[k] - abs(f[k])
         # if !isl(diff, 0.0) # diff >= 0.0
         r = diff / inst.f_bar[k]
         push!(f_residuals, (k, r))
@@ -680,7 +680,7 @@ function comp_viols(inst::Instance,
             push!(viols, (k, s[j]))
         end
     end
-    sort!(viols, by = x->x[2], rev = true)
+    # sort!(viols, by = x->x[2], rev = true)
 
     return [v[1] for v in viols]
 end
