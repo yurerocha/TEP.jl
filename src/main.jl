@@ -8,12 +8,12 @@
 
 Solve all instances.
 """
-function run(logname::String = "exp.md", 
+function run(logname::String = "log.md", 
              gl_strategy::Int64 = 2, 
              gl_ins::Float64 = 0.1, 
              rnf_percent::Float64 = 0.8, 
              rnf_delta::Float64 = 0.1, 
-             rnf_time_limit::Float64 = 15.0, 
+             rnf_time_limit::Float64 = 5.0,
              is_symmetry_en::Bool = false)
     global param_gl_strategy = gl_strategy
     global param_gl_ins = gl_ins
@@ -39,10 +39,12 @@ function run(logname::String = "exp.md",
     skip = [
         "pglib_opf_case162_ieee_dtc.txt", # Infeasible with all candidates
         "pglib_opf_case1803_snem.txt", # Zero reactance
+        "pglib_opf_case3022_goc.txt", # Infeasible with all candidates
         "pglib_opf_case4661_sdet.txt", # Infeasible or unbounded
+        "pglib_opf_case4917_goc.txt", # Infeasible with all candidates
         "pglib_opf_case78484_epigrids.txt" # Infeasible with all candidates
     ]
-    counter = 0
+    counter = 1
     for file in files
         counter += 1
         if file in skip
@@ -53,7 +55,12 @@ function run(logname::String = "exp.md",
 
         inputfile = "$param_dir/input3/$file"
         logsolver = "$param_dir/$param_dir_log/$file"
+
         inst = read_instance(inputfile, rng)
+        if param_debugging_level == 1
+            @assert iseq(comp_gd_ratio(inst), 1.0 + param_g_slack)
+        end
+
         model = nothing
         build_time = 0.0
         start_time = 0.0
@@ -74,7 +81,6 @@ function run(logname::String = "exp.md",
         ms_gap = results[length(results)]
         results = results[1:length(results) - 1]
         
-        results = (model.dem_gen_ratio, results...)
         log_instance(logfile, file, inst, build_time, 
                      results, report, start_time)
         # catch e
@@ -90,27 +96,35 @@ end
 function tuning()
     # gl_strategy = [1, 2, 3, 4]
     # gl_ins = [0.1, 0.2, 0.4]
-    # Best: 2, 0.1
-    rnf_percent = [0.7, 0.8, 0.9]
-    rnf_delta = [[0.1, 0.2, 0.3], [0.1, 0.2], [0.1]]
-    # Best: 0.8, 0.1
-    # count_exp = 13
-    # k = 1
-    # for p in rnf_percent
-    #     for d in rnf_delta[k]
-    #         @warn "rnf_percent:$p rnf_delta:$d"
-    #         run("exp$(count_exp).md", 2, 0.1, p, d, 10.0)
-    #         count_exp += 1
-    #     end
-    #     k += 1
+    # count_exp = 1
+    # for s in gl_strategy, i in gl_ins
+    #     @warn "Tuning experiment gl_strategy:$s gl_ins:$i"
+    #     run("exp$(count_exp).md", s, i, 0.8, 0.1, 5.0)
+    #     count_exp += 1
     # end
-    # count_exp = 19
-    # time_limit = [15.0, 20.0, 5.0]
-    # Best: 15.0
-    count_exp = 22
-    is_symmetry_en = [false, true]
-    for is_en in is_symmetry_en
-        run("exp$(count_exp).md", 2, 0.1, 0.8, 0.1, 15.0, is_en)
+    # Best: 2, 0.1
+    # New best: 4, 0.2
+    # rnf_percent_delta = [[0.8, 0.2], [0.9, 0.1]]
+    # count_exp = 13
+    # for v in rnf_percent_delta
+    #     @warn "Tuning experiment rnf_percent:$(v[1]) rnf_delta:$(v[2])"
+    #     run("exp$(count_exp).md", 4, 0.2, v[1], v[2], 5.0)
+    #     count_exp += 1
+    # end
+    # Best: 0.8, 0.1
+    # New best: 0.8, 0.2
+    count_exp = 15
+    time_limit = [7.5, 10, 12.5, 15.0]
+    for tl in time_limit
+        @warn "Tuning experiment time_limit:$tl"
+        run("exp$(count_exp).md", 4, 0.2, 0.9, 0.1, tl)
         count_exp += 1
     end
+    # Best: 15.0
+    # count_exp = 22
+    # is_symmetry_en = [false, true]
+    # for is_en in is_symmetry_en
+    #     run("exp$(count_exp).md", 2, 0.1, 0.8, 0.1, 15.0, is_en)
+    #     count_exp += 1
+    # end
 end

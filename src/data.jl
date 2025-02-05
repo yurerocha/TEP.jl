@@ -75,7 +75,6 @@ struct MIPModel
     g::Dict{Int, VariableRef}
     theta::Vector{VariableRef}
     Delta_theta::Vector{VariableRef}
-    dem_gen_ratio::Float64
 end
 
 struct LPModel
@@ -84,7 +83,6 @@ struct LPModel
     g::Dict{Int64, VariableRef}
     theta::Vector{VariableRef}
     Delta_theta::Vector{VariableRef}
-    dem_gen_ratio::Float64
     s::Vector{VariableRef}
     f_cons::Vector{ConstraintRef}
     fkl_cons::Vector{ConstraintRef}

@@ -7,13 +7,18 @@ function build_solution(inst::Instance, logfile::String)
     # At the first it, there are no candidate lines
     lp_model = build_lp_model(inst, logfile)
 
-    # All removed lines are candidates for reinsertion
     lines = collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
     inserted = Set{Int64}(lines)
     existing = collect(1:inst.nb_J)
     removed = Set{Int64}()
 
     optimize!(lp_model.model)
+
+    if param_debugging_level == 1
+        st = termination_status(lp_model.model)
+        viol = (st == MOI.OPTIMAL ? objective_value(lp_model.model) : Inf64)
+        @assert iseq(viol, 0.0)
+    end
 
     cost = comp_cost(inst, inserted)
     init_cost = cost
@@ -234,7 +239,7 @@ function violated_flows_neigh!(inst::Instance,
                             best_viol, 
                             viol, 
                             inserted, 
-                            time() - time_beg,
+                            time() - rnf_time_beg,
                             "viol")
             # Update data structures
             insert_set = Set(insert)
@@ -366,7 +371,7 @@ function g_lines_neigh(inst::Instance,
                           best_viol, 
                           viol, 
                           inserted, 
-                          time() - time_beg,
+                          time() - rnf_time_beg,
                           "viol")
             # Update data structures
             insert_set = Set(insert)

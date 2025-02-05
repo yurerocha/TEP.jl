@@ -259,11 +259,10 @@ function log(file::String, msg::String)
 end
 
 function log_header(outputfile::String)
-    outstr = "| Instance | N | L | L/N |"
-    outstr *= " Build (s) | D / G | Solve (s) | Incumbent (s) |" * 
-              " Status | Rt solve (s) | Rt best bound | Best bound |" *
-              " Cost | Gap (%) | Heur (s) | Heur rm (%) | Start (s) | \n"
-    outstr *= "|:---"^17 * "| \n"
+    outstr = "| Instance | N | L | L/N | Build (s) | Solve (s) | Incumbent (s) \
+              | Status | Rt solve (s) | Rt best bound | Best bound | Cost \
+              | Gap (%) | Heur (s) | Heur rm (%) | Start (s) | \n"
+    outstr *= "|:---"^16 * "| \n"
     log(outputfile, outstr)
 end
 
@@ -696,4 +695,23 @@ function get_g_values(inst::Instance, lp_model::LPModel)
         g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
     end
     return g
+end
+
+"""
+    comp_gd_ratio(inst::Instance)
+
+Compute ratio of generation over demand.
+"""
+function comp_gd_ratio(inst::Instance)
+    sum_g = 0.0
+    sum_d = 0.0
+    for i in inst.I
+        # Some buses may not have load or generation
+        g = i in keys(inst.G) ? inst.G[i] : 0.0
+        d = inst.D[i]
+
+        sum_g += g
+        sum_d += d
+    end
+    return sum_g / sum_d
 end

@@ -3,16 +3,16 @@ const param_dir = "TEP.jl"
 const param_dir_log = "log"
 const param_eps = 1e-5
 param_debugging_level = 0
-param_log_level = 2
+param_log_level = 1
 
 # --------------------------- instance.jl parameters ---------------------------
 const param_mult_load = 2.0 # Multiplier for the load
-const param_g_slack = 0.1 # Generation slack with respect to the load (see text)
+param_g_slack = 0.15 # Generation slack with respect to the load
 const param_max_rand = 100 # Max random value for the new cost (see text)
 const param_nb_candidates = 2 # Nb of candidates available per existing line
 
 # ---------------------------- model.jl parameters -----------------------------
-param_solver_time_limit::Float64 = 600.0
+param_solver_time_limit::Float64 = 1.0
 const MAXINT = 2_000_000_000 # Gurobi MAXINT value
 const param_penalty = 1e6
 param_is_symmetry_en = false

@@ -24,7 +24,6 @@ function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
     end
 
     gen = add_g_vars(inst, md)
-    sum_d, sum_g = comp_sum_d_sum_g(inst)
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
@@ -72,7 +71,7 @@ function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
 
     set_obj(inst, md, x)
 
-    return MIPModel(md, x, f, gen, theta, Delta_theta, sum_d / sum_g)
+    return MIPModel(md, x, f, gen, theta, Delta_theta)
 end
 
 """
@@ -104,7 +103,6 @@ function build_lp_model(inst::Instance,
     # set_attribute(md, MOI.RawOptimizerAttribute("BarConvTol"), 1e-6)
 
     gen = add_g_vars(inst, md)
-    sum_d, sum_g = comp_sum_d_sum_g(inst)
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
@@ -155,8 +153,7 @@ function build_lp_model(inst::Instance,
     # The initial objective function is to minimize the slack variables
     @objective(md, Min, sum(s))
 
-    return LPModel(md, f, gen, theta, Delta_theta, 
-                       sum_d / sum_g, s, f_cons, fkl_cons)
+    return LPModel(md, f, gen, theta, Delta_theta, s, f_cons, fkl_cons)
 end
 
 """
