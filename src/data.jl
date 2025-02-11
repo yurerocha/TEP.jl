@@ -53,18 +53,25 @@ struct Circuit
     to::Int64 # "to" bus
 end
 
+struct Scenario
+    id::Int64
+    p::Float64 # Probability
+    D::Vector{Float64} # Load
+    G::Dict{Int64, Float64} # Generation
+end
+
 struct Instance
-    I::Set{Int64} # buses
-    gamma::Vector{Float64} # susceptance of circuits
-    f_bar::Vector{Float64} # capacity of circuits
+    I::Set{Int64} # Buses
+    gamma::Vector{Float64} # Susceptance of circuits
+    f_bar::Vector{Float64} # Capacity of circuits
     cost::Vector{Float64}
-    J::Vector{Circuit} # existing circuits
-    K::Vector{Circuit} # candidate circuits
-    D::Vector{Float64} # load
-    G::Dict{Int64, Float64} # generation
-    nb_I::Int64 # nb of buses
-    nb_J::Int64 # nb of existing circuits
-    nb_K::Int64 # nb of candidate circuits
+    J::Vector{Circuit} # Existing circuits
+    K::Vector{Circuit} # Candidate circuits
+    nb_I::Int64 # Nb of buses
+    nb_J::Int64 # Nb of existing circuits
+    nb_K::Int64 # Nb of candidate circuits
+    scenarios::Vector{Scenario}
+    nb_scenarios::Int64
 end
 
 # ---------------------------- Model data structures ---------------------------
@@ -75,6 +82,7 @@ struct MIPModel
     g::Dict{Int, VariableRef}
     theta::Vector{VariableRef}
     Delta_theta::Vector{VariableRef}
+    obj::AffExpr
 end
 
 struct LPModel

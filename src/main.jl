@@ -45,6 +45,7 @@ function run(logname::String = "log.md",
         "pglib_opf_case78484_epigrids.txt" # Infeasible with all candidates
     ]
     counter = 1
+    files = ["pglib_opf_case5_pjm_stoc.txt"]
     for file in files
         counter += 1
         if file in skip

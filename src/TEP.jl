@@ -23,6 +23,7 @@ include("compact_model.jl")
 include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
+include("PH.jl")
 include("utils.jl")
 
 end

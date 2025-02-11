@@ -3,9 +3,9 @@
 
 Build solution with the full linear programming model.
 """
-function build_solution(inst::Instance, logfile::String)
+function build_solution(inst::Instance, scenario_id::Int64, logfile::String)
     # At the first it, there are no candidate lines
-    lp_model = build_lp_model(inst, logfile)
+    lp_model = build_lp_model(inst, scenario_id, logfile)
 
     lines = collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
     inserted = Set{Int64}(lines)
@@ -25,6 +25,7 @@ function build_solution(inst::Instance, logfile::String)
     best_cost = cost
 
     best_cost, start, report = rm_and_fix(inst, 
+                                          scenario_id, 
                                           lp_model, 
                                           inserted, 
                                           removed, 
@@ -49,6 +50,7 @@ function build_solution(inst::Instance, logfile::String)
 end
 
 function rm_and_fix(inst::Instance, 
+                    scenario_id::Int64, 
                     lp_model::LPModel, 
                     inserted::Set{Int64}, 
                     removed::Set{Int64}, 
@@ -107,15 +109,16 @@ function rm_and_fix(inst::Instance,
         else
             # The following neigh changes both the removed and inserted sets
             viol, _ = violated_flows_neigh!(inst, 
-                                                 lp_model, 
-                                                 rm_set, 
-                                                 removed, 
-                                                 inserted, 
-                                                 viol, 
-                                                 viol, 
-                                                 time_beg)
+                                            lp_model, 
+                                            rm_set, 
+                                            removed, 
+                                            inserted, 
+                                            viol, 
+                                            viol, 
+                                            time_beg)
             
             viol, _ = g_lines_neigh(inst, 
+                                    scenario_id, 
                                     lp_model, 
                                     rm_set, 
                                     removed, 
@@ -281,6 +284,7 @@ function violated_flows_neigh!(inst::Instance,
 end
 
 function g_lines_neigh(inst::Instance, 
+                       scenario_id::Int64, 
                        lp_model::LPModel, 
                        removed::Set{Int64}, 
                        removed_all::Set{Int64}, 
@@ -321,18 +325,19 @@ function g_lines_neigh(inst::Instance,
 
         cond_a = true
         cond_b = false
+        G = inst.scenarios[scenario_id].G
         if param_gl_strategy == 1
-            cond_a = c.fr in keys(inst.G)
-            cond_b = c.to in keys(inst.G)
+            cond_a = c.fr in keys(G)
+            cond_b = c.to in keys(G)
         elseif param_gl_strategy == 2
             cond_a = isg(inst.D[c.fr], 0.0)
             cond_b = isg(inst.D[c.to], 0.0)
         elseif param_gl_strategy == 3
-            cond_a = isg(inst.D[c.fr], 0.0) || c.fr in keys(inst.G)
-            cond_b = isg(inst.D[c.to], 0.0) || c.to in keys(inst.G)
+            cond_a = isg(inst.D[c.fr], 0.0) || c.fr in keys(G)
+            cond_b = isg(inst.D[c.to], 0.0) || c.to in keys(G)
         elseif param_gl_strategy == 4
-            cond_a = !(isg(inst.D[c.fr], 0.0) || c.fr in keys(inst.G))
-            cond_b = !(isg(inst.D[c.to], 0.0) || c.to in keys(inst.G))
+            cond_a = !(isg(inst.D[c.fr], 0.0) || c.fr in keys(G))
+            cond_b = !(isg(inst.D[c.to], 0.0) || c.to in keys(G))
         end
 
         if cond_a || cond_b
@@ -472,7 +477,10 @@ end
 
 Fix start the model with the lines, generation, and flows of the start struct.
 """
-function fix_start!(inst::Instance, md::MIPModel, start::Start)
+function fix_start!(inst::Instance, 
+                    scenario_id::Int64,
+                    md::MIPModel, 
+                    start::Start)
     set_attribute(md.model, MOI.RawOptimizerAttribute("SolutionLimit"), 1)
     set_attribute(md.model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-3)
 
@@ -501,7 +509,7 @@ function fix_start!(inst::Instance, md::MIPModel, start::Start)
         fix(md.f[l], start.f[l])
     end
     for i in inst.I
-        if i in keys(inst.G)
+        if i in keys(inst.scenarios[scenario_id].G)
             fix(md.g[i], start.g[i]; force = true)
         end
         # fix(md.theta[i], start.theta[i])
@@ -554,9 +562,9 @@ function fix_start!(inst::Instance, md::MIPModel, start::Start)
     end
     for i in inst.I
         # Some buses may not have generation
-        if i in keys(inst.G)
+        if i in keys(inst.scenarios[scenario_id].G)
             unfix(md.g[i])
-            g_max = inst.G[i]
+            g_max = inst.scenarios[scenario_id].G[i]
             set_lower_bound(md.g[i], 0.0)
             set_upper_bound(md.g[i], g_max)
         end

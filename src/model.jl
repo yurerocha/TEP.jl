@@ -3,7 +3,9 @@
 
 Build mixed-integer linear programming model.
 """
-function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
+function build_mip_model(inst::Instance, 
+                         scenario_id::Int64, 
+                         logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
     # config(md, logfile)
     if param_log_level >= 2
@@ -23,14 +25,14 @@ function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
         add_symmetry_constrs(inst, md, x)
     end
 
-    gen = add_g_vars(inst, md)
+    gen = add_g_vars(inst, scenario_id, md)
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
     # First Kirchhoff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering both existing and candidate lines
-    add_fkl_constrs(inst, md, f, gen, fkl_cons, inst.I)
+    add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
@@ -69,9 +71,9 @@ function build_mip_model(inst::Instance, logfile::String = "TEP.jl/log/log.txt")
         @constraint(md, -f[k] <= inst.f_bar[k] * x[k])
     end
 
-    set_obj(inst, md, x)
+    obj = set_obj(inst, md, x)
 
-    return MIPModel(md, x, f, gen, theta, Delta_theta)
+    return MIPModel(md, x, f, gen, theta, Delta_theta, obj)
 end
 
 """
@@ -82,6 +84,7 @@ Build linear programming model.
 The gamma values can be used to simulate building a candidate line.
 """
 function build_lp_model(inst::Instance, 
+                        scenario_id::Int64, 
                         logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
     # config(md, logfile)
@@ -102,7 +105,7 @@ function build_lp_model(inst::Instance,
     # set_attribute(md, MOI.RawOptimizerAttribute("ScaleFlag"), 2)
     # set_attribute(md, MOI.RawOptimizerAttribute("BarConvTol"), 1e-6)
 
-    gen = add_g_vars(inst, md)
+    gen = add_g_vars(inst, scenario_id, md)
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
@@ -110,7 +113,7 @@ function build_lp_model(inst::Instance,
     # First Kirchhoff law
     fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering only existing lines
-    add_fkl_constrs(inst, md, f, gen, fkl_cons, inst.I)
+    add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
@@ -161,12 +164,12 @@ end
 
 Add generation variables.
 """
-function add_g_vars(inst::Instance, md::GenericModel)
+function add_g_vars(inst::Instance, scenario_id::Int64, md::GenericModel)
     gen = Dict{Int, VariableRef}()
     for i in inst.I
         # Some buses may not have load or generation
-        if i in keys(inst.G)
-            g_max = inst.G[i]
+        if i in keys(inst.scenarios[scenario_id].G)
+            g_max = inst.scenarios[scenario_id].G[i]
             if isl(g_max, 0.0)
                 @show g_max, i
             end
@@ -218,7 +221,8 @@ Add first Kirchhoff law constraints.
 
 Set the node flow constraints considering the assigned candidate f variables.
 """
-function add_fkl_constrs(inst::Instance,
+function add_fkl_constrs(inst::Instance, 
+                         scenario_id::Int64, 
                          md::GenericModel, 
                          f::Vector{VariableRef},
                          gen::Dict{Int, VariableRef},
@@ -234,8 +238,8 @@ function add_fkl_constrs(inst::Instance,
         add_to_expression!(e, comp_existing_incident_flows(inst, f, i))
         
         # Some buses may not have load or generation
-        d = inst.D[i]
-        g = i in keys(inst.G) ? gen[i] : AffExpr(0.0)
+        d = inst.scenarios[scenario_id].D[i]
+        g = i in keys(inst.scenarios[scenario_id].G) ? gen[i] : AffExpr(0.0)
 
         fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl$i")
     end
@@ -254,7 +258,10 @@ function set_obj(inst::Instance,
         # e += inst.cost[k] * x[k]
         add_to_expression!(e, inst.cost[k], x[k])
     end
+
     @objective(md, Min, e)
+    
+    return e
 end
 
 function solve!(model_data::MIPModel, is_mip_en::Bool = true)

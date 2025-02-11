@@ -152,3 +152,15 @@ Sem restrições de simetria
 - param_rnf_percent = 0.7, 0.8, 0.9
 - param_rnf_delta = 0.1, 0.2, 0.3
 - param_rnf_time_limit = 10.0, 20.0
+
+# TODO
+- Dobrar a demanda e deixar o slack em 15%.
+- Utilizar o simplex dual em vez da barreira no b&b pra aproveitar a base
+- Estocástico
+  - Pegar algumas demandas e algumas gerações e adicionar incertezas
+  - Procurar séries temporais de perfil de geração solar, eólica e demanda
+  - Utilizar pra criar os cenários
+  - Várias instâncias, mudando a demanda e geração
+- https://github.com/WISPO-POP/CATS-CaliforniaTestSystem
+  - Pegar esses cenários e colocar nas nossas instâncias
+- https://ieeexplore.ieee.org/document/9678074
