@@ -3,7 +3,7 @@ const param_dir = "TEP.jl"
 const param_dir_log = "log"
 const param_eps = 1e-5
 param_debugging_level = 0
-param_log_level = 1
+param_log_level = 0
 
 # --------------------------- instance.jl parameters ---------------------------
 const param_mult_load = 2.0 # Multiplier for the load

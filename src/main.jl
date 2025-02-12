@@ -79,8 +79,8 @@ function run(logname::String = "log.md",
 
         log("Solve the model", true)
         results = solve!(model, true)
-        ms_gap = results[length(results)]
-        results = results[1:length(results) - 1]
+        ms_gap = results[end]
+        results = results[1:end - 1]
         
         log_instance(logfile, file, inst, build_time, 
                      results, report, start_time)
