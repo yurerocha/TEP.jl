@@ -1,4 +1,6 @@
-function read_instance(filename::String, rng::MersenneTwister)
+function read_instance(params::Parameters, 
+                       filename::String, 
+                       rng::MersenneTwister)
     s = open(filename) do f
         readlines(f)
     end
@@ -14,7 +16,7 @@ function read_instance(filename::String, rng::MersenneTwister)
     nb_ex_circs = get_nb(s, i)
     i += 2
     try 
-        populate_circuits(I, J, gamma, f_bar, cost, s, i, nb_ex_circs)
+        populate_circuits(params, I, J, gamma, f_bar, cost, s, i, nb_ex_circs)
     catch e
         throw(e)
     end
@@ -25,7 +27,7 @@ function read_instance(filename::String, rng::MersenneTwister)
     nb_ca_circs = get_nb(s, i)
     i += 2
     try
-        populate_circuits(I, K, gamma, f_bar, cost, 
+        populate_circuits(params, I, K, gamma, f_bar, cost, 
                           s, i, nb_ca_circs, true, rng)
     catch e
         throw(e)
@@ -61,7 +63,7 @@ function read_instance(filename::String, rng::MersenneTwister)
                 G[bus] = g
                 sumG += g
             end
-            D[bus] = param_mult_load * parse(Float64, v[3])
+            D[bus] = params.instance.load_mult * parse(Float64, v[3])
             sumD += D[bus]
         end
         # The generation is increased according to the amount required to meet 
@@ -69,7 +71,7 @@ function read_instance(filename::String, rng::MersenneTwister)
         # mult_gen = ((1.0 + gen_slack_percent) +
         #             rand(rng) * gen_max_add_slack_percent) * (sumD / sumG)
         # mult_gen = ceil((1.0 + param_g_slack) * (sumD / sumG))
-        mult_gen = (1.0 + param_g_slack) * (sumD / sumG)
+        mult_gen = (1.0 + params.instance.g_slack) * (sumD / sumG)
 
         for (bus, g) in G
             G[bus] = mult_gen * g

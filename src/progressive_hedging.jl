@@ -1,28 +1,20 @@
-# 1. Initialization:
-#   v = 0
-#   For each realization of parameters \xi in \Xi, solve the problem to obtain 
-#   x^{v + 1}(\xi) and y^{v + 1}(\xi)
-# 2. Iteration update: 
-#   v = v + 1
-# 3. Agreggation:
-#   x'^v = sum_{\xi in \Xi}p_{\xi}x^v(\xi)
-# 4. Price update:
-#   w^v(\xi) = w^{v - 1} + \rho(x^v(\xi) - x'^v), where \rho is a parameter
-# 5. Decomposition:
-#   For each \xi in \Xi, compute:
-#       the problem with new penalty parameters w^v(\xi)^T x
-#       + \rho / 2 ||x - x'^v||^2 to obtain x^{v + 1}(\xi) and y^{v + 1}(\xi)
-#       if all scenario slutions x(\xi) are equal, stop
-#       else, go to step 2
+"""
+    progressive_hedging()
 
-function PH()
+Implementation of the progressive hedging algorithm. 
+
+Associated paper: https://link.springer.com/article/10.1007/s10107-016-1000-z
+"""
+function progressive_hedging()
+    params = Parameters()
+
     file = "pglib_opf_case5_pjm_stoc.txt"
     rng = Random.MersenneTwister(123)
 
-    inputfile = "$param_dir/input3/$file"
-    logsolver = "$param_dir/$param_dir_log/$file"
+    inputfile = "$(params.dir)/input3/$file"
+    logsolver = "$(params.dir)/$(params.dir_log)/$file"
 
-    inst = read_instance(inputfile, rng)
+    inst = read_instance(params, inputfile, rng)
 
     param_rho = 1.0
 
@@ -30,20 +22,21 @@ function PH()
     v = 0
     w = zeros(inst.nb_scenarios, inst.nb_K)
     mip_models = Vector{MIPModel}(undef, inst.nb_scenarios)
-    x_values = Vector{Vector{Float64}}()
+    x_values = Vector{Vector{Float64}}(undef, inst.nb_scenarios)
     for xi in inst.scenarios
-        (start, _) = build_solution(inst, xi.id, logsolver)
+        (start, _) = build_solution(inst, params, xi.id, logsolver)
 
-        md = build_mip_model(inst, xi.id, logsolver)
-        fix_start!(inst, xi.id, md, start)
-        solve!(md)
+        md = build_mip_model(inst, params, xi.id, logsolver)
+        fix_start!(inst, params, xi.id, md, start)
+        solve!(params, md)
+
         x = [value(md.x[k]) for k in inst.nb_J + 1:inst.nb_J + inst.nb_K]
-        push!(x_values, x)
 
         mip_models[xi.id] = md
+        x_values[xi.id] = x
     end
 
-    for it in 1:500
+    for it in 1:100
         # Iteration update
         v += 1
 
@@ -59,19 +52,22 @@ function PH()
         # At each it, builld_solution?
         for xi in inst.scenarios
             # Get x as a Vector
-            x = Vector{VariableRef}(undef, inst.nb_K)
+            x = Vector{JuMP.VariableRef}(undef, inst.nb_K)
             for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
                 x[k - inst.nb_J] = mip_models[xi.id].x[k]
             end
             # Piece-wise linear function for the squared two-norm
             # Or (a - b)² = a² - 2ab + b²
+            @warn x_hat
             e = x - 2 * x .* x_hat + x_hat .^ 2
+            @warn e
+            readline()
             delta =  w[xi.id, :]' * x + (param_rho / 2.0) * sum(e)
             @objective(mip_models[xi.id].model, 
                        Min, 
                        mip_models[xi.id].obj + delta)
 
-            solve!(mip_models[xi.id])
+            solve!(params, mip_models[xi.id])
 
             x_values[xi.id] = [value(mip_models[xi.id].x[k]) for k in inst.nb_J + 1:inst.nb_J + inst.nb_K]
 

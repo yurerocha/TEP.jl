@@ -15,7 +15,6 @@ using Random
 using SimpleWeightedGraphs
 # using Base.Iterators
 
-include("parameters.jl")
 include("data.jl")
 include("main.jl")
 
@@ -23,7 +22,7 @@ include("compact_model.jl")
 include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
-include("PH.jl")
+include("progressive_hedging.jl")
 include("utils.jl")
 
 end

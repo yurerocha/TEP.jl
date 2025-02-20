@@ -83,8 +83,8 @@ function build_bus_injections(inst::Instance)
     is_xi_req = isg(rhs_sum, 0.0)
     # @show rhs_sum, is_xi_req
 
-    g = Vector{VariableRef}(undef, inst.nb_I)
-    xi = Array{VariableRef}(undef, inst.nb_I)
+    g = Vector{JuMP.VariableRef}(undef, inst.nb_I)
+    xi = Array{JuMP.VariableRef}(undef, inst.nb_I)
     for i in inst.I
         # Some buses may not have generation
         if i in keys(inst.G)
@@ -169,16 +169,16 @@ Lower and upper bounds on flows.
 Slacks in the line allow for the capacity to be exceeded with penalization.
 """
 function flow_cons(inst::Instance, 
-                   md::GenericModel, 
+                   md::JuMP.Model, 
                    m::Int64, 
                    f::Vector{AffExpr})
-    s = Vector{VariableRef}(undef, m)
+    s = Vector{JuMP.VariableRef}(undef, m)
     # s = @variable(md, 
     #               lines_slack[l = 1:m], 
     #               lower_bound = 0.0, 
     #               upper_bound = 0.0)
-    f_lower_cons = Vector{ConstraintRef}(undef, m)
-    f_upper_cons = Vector{ConstraintRef}(undef, m)
+    f_lower_cons = Vector{JuMP.ConstraintRef}(undef, m)
+    f_upper_cons = Vector{JuMP.ConstraintRef}(undef, m)
     # f_lower_cons = @constraint(md, f_lower_cons[l = 1:m])
     # f_upper_cons = @constraint(md, f_lower_cons[l = 1:m])
     
@@ -281,9 +281,9 @@ end
 
 Compute the generation side of the balance constraints.
 """
-function comp_gen_balance(g::Vector{VariableRef}, 
+function comp_gen_balance(g::Vector{JuMP.VariableRef}, 
                           is_xi_req::Bool, 
-                          xi::Vector{VariableRef})
+                          xi::Vector{JuMP.VariableRef})
     if is_xi_req
         return g + xi
     else

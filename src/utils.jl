@@ -4,7 +4,7 @@
 Compute if a is less than b.
 """
 function isl(a::Float64, b::Float64)
-    return a < b - param_eps
+    return a < b - eps
 end
 
 """
@@ -13,7 +13,7 @@ end
 Compute if a is greater than b.
 """
 function isg(a::Float64, b::Float64)
-    return a > b + param_eps
+    return a > b + eps
 end
 
 """
@@ -22,7 +22,7 @@ end
 Compute if a is equal to b.
 """
 function iseq(a::Float64, b::Float64)
-    return abs(a - b) < param_eps
+    return abs(a - b) < eps
 end
 
 """
@@ -31,7 +31,7 @@ end
 Return true if matrices A and B are equal.
 """
 function iseq(A::Matrix{Float64}, B::Matrix{Float64})
-    return norm(A - B) < param_eps
+    return norm(A - B) < eps
 end
 
 function get_nb(s::Vector{String}, i::Int64)
@@ -81,7 +81,7 @@ end
 """
 Compute incidence matrix with existing and candidate circuits.
 """
-function comp_incidence_matrix(inst::Instance, f::Vector{VariableRef}, i::Int64)
+function comp_incidence_matrix(inst::Instance, f::Vector{JuMP.VariableRef}, i::Int64)
     e = 0
     for j in 1:inst.nb_J
         circ = inst.J[j]
@@ -108,8 +108,8 @@ end
 Compute incidence matrix with existing and candidate circuits.
 """
 function comp_incidence_matrix(inst::Instance,
-                               md::GenericModel, 
-                               f::Vector{VariableRef}, 
+                               md::JuMP.Model, 
+                               f::Vector{JuMP.VariableRef}, 
                                i::Int64, 
                                is_add_constrs::Bool,
                                is_cand_en::Bool,
@@ -153,13 +153,13 @@ end
 
 """
     comp_existing_incident_flows(inst::Instance,
-                                 f::Vector{VariableRef}, 
+                                 f::Vector{JuMP.VariableRef}, 
                                  i::Int64)
 
 Compute the incident flow at node i for the existing lines.
 """
 function comp_existing_incident_flows(inst::Instance,
-                                      f::Vector{VariableRef}, 
+                                      f::Vector{JuMP.VariableRef}, 
                                       i::Int64)
     e = AffExpr(0.0)
     for j in 1:inst.nb_J
@@ -175,13 +175,13 @@ end
 
 """
     comp_candidate_incident_flows(inst::Instance,
-                                  f::Vector{VariableRef}, 
+                                  f::Vector{JuMP.VariableRef}, 
                                   i::Int64)
 
 Compute the incident flow at node i for the candidate lines.
 """
 function comp_candidate_incident_flows(inst::Instance,
-                                       f::Vector{VariableRef}, 
+                                       f::Vector{JuMP.VariableRef}, 
                                        i::Int64)
     e = AffExpr(0.0)
     # for k in res_list
@@ -200,7 +200,8 @@ function comp_candidate_incident_flows(inst::Instance,
     return e
 end
 
-function populate_circuits(I::Set{Int64}, 
+function populate_circuits(params::Parameters, 
+                           I::Set{Int64}, 
                            circuits::Vector{Circuit}, 
                            gamma::Vector{Float64}, 
                            f_bar::Vector{Float64}, 
@@ -214,7 +215,7 @@ function populate_circuits(I::Set{Int64},
         d = split(s[i])
         circ = Circuit(parse(Int64, d[1]), parse(Int64, d[2]))
         if is_cand_en
-            nb = param_nb_candidates
+            nb = params.instance.nb_candidates
         else
             nb = parse(Int64, d[3])
         end
@@ -239,8 +240,8 @@ function populate_circuits(I::Set{Int64},
             bc = parse(Float64, d[6])
             c = bc
             if is_cand_en
-                rn = rand(rng, 1:param_max_rand)
-                c = bc / (param_nb_candidates + 1) + bc / rn
+                rn = rand(rng, 1:params.instance.max_rand)
+                c = bc / (params.instance.nb_candidates + 1) + bc / rn
             end
             push!(cost, c)
         end
@@ -444,7 +445,12 @@ function draw_cycles(inst::Instance,
 end
 
 """
-    draw_solution(inst, model, flows, violations, filename="solution")
+    draw_solution(inst::Instance, 
+                  params::Parameters, 
+                  md::T, 
+                  f::Vector{Float64}, 
+                  viols::Vector{Tuple{Float64, Int64}}, 
+                  filename::String = "solution") where T <: TepModel
 
 Draw the graph of a solution.
 
@@ -452,6 +458,7 @@ Each edge is labeled with the flow value and each vertex is labeled with
 "generation - demand".
 """
 function draw_solution(inst::Instance, 
+                       params::Parameters, 
                        md::T, 
                        f::Vector{Float64}, 
                        viols::Vector{Tuple{Float64, Int64}}, 
@@ -465,7 +472,7 @@ function draw_solution(inst::Instance,
         else
             flows[c] = value(f[l])
             # Shift to the candidates
-            k = inst.nb_J + 1 + param_nb_candidates * (l - 1)
+            k = inst.nb_J + 1 + params.nb_candidates * (l - 1)
             circuits[c] = k
         end
     end
@@ -548,12 +555,12 @@ function draw_solution(inst::Instance,
 end
 
 """
-    log(msg::String, is_warn::Bool = false)
+    log(params::Parameters, msg::String, is_info::Bool = false)
 
 Log message to console.
 """
-function log(msg::String, is_info::Bool = false)
-    if param_log_level >= 1
+function log(params::Parameters, msg::String, is_info::Bool = false)
+    if params.log_level >= 1
         if is_info
             @info msg
         else
@@ -563,21 +570,22 @@ function log(msg::String, is_info::Bool = false)
 end
 
 """
-    shift_to_existing_line(inst::Instance, k::Int64)
+    shift_to_existing_line(inst::Instance, params::Parameters, k::Int64)
 
 Map candidate line k to corresponding existing circuit.
 """
-function map_to_existing_line(inst::Instance, k::Int64)
-    return div(k - inst.nb_J + param_nb_candidates - 1, param_nb_candidates)
+function map_to_existing_line(inst::Instance, params::Parameters, k::Int64)
+    return div(k - inst.nb_J + params.instance.nb_candidates - 1, 
+               params.instance.nb_candidates)
 end
 
 """
-    map_to_first_cand(inst::Instance, j::Int64)
+    map_to_first_cand(inst::Instance, params::Parameters, j::Int64)
 
 Map existing line j to first corresponding candidate circuit.
 """
-function map_to_first_cand(inst::Instance, j::Int64)
-    return inst.nb_J + 1 + param_nb_candidates * (j - 1)
+function map_to_first_cand(inst::Instance, params::Parameters, j::Int64)
+    return inst.nb_J + 1 + params.instance.nb_candidates * (j - 1)
 end
 
 """
@@ -589,16 +597,17 @@ end
 Log neighborhood run.
 """
 function log_neigh_run(inst::Instance, 
+                       params::Parameters, 
                        best_val::Float64, 
                        new_val::Float64, 
                        rm_ins::Set{Int64}, 
                        runtime::Float64,
                        msg::String = "cost")
-    log("best_$msg:" * string(round(best_val, digits = 2)) *
-        " new_$msg:" * string(round(new_val, digits = 2)) *
-        " delta_perc:" * string(round(length(rm_ins) / 
-                                    inst.nb_K, digits = 2)) * 
-        " runtime:" * string(round(runtime, digits = 2)))
+    log(params, "best_$msg:" * string(round(best_val, digits = 2)) *
+                " new_$msg:" * string(round(new_val, digits = 2)) *
+                " delta_perc:" * string(round(length(rm_ins) / 
+                                            inst.nb_K, digits = 2)) * 
+                " runtime:" * string(round(runtime, digits = 2)))
 end
 
 """
@@ -660,6 +669,7 @@ end
 
 """
     comp_viols(inst::Instance, 
+               params::Parameters, 
                s::Vector{Float64}, 
                inserted::Set{Int64}, 
                candidates::Set{Int64})
@@ -667,12 +677,13 @@ end
 Compute the violations of the flow constraints in the existing lines.
 """
 function comp_viols(inst::Instance, 
+                    params::Parameters, 
                     s::Vector{Float64}, 
                     inserted::Set{Int64}, 
                     candidates::Set{Int64})
     viols = Vector{Tuple{Int64, Float64}}()
     for k in candidates
-        j = map_to_existing_line(inst, k)
+        j = map_to_existing_line(inst, params, k)
         if isg(s[k], 0.0)
             push!(viols, (k, s[k]))
         elseif isg(s[j], 0.0)

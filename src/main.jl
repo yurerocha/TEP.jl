@@ -8,21 +8,17 @@
 
 Solve all instances.
 """
-function run(logname::String = "log.md", 
-             gl_strategy::Int64 = 2, 
-             gl_ins::Float64 = 0.1, 
-             rnf_percent::Float64 = 0.8, 
-             rnf_delta::Float64 = 0.1, 
-             rnf_time_limit::Float64 = 5.0,
-             is_symmetry_en::Bool = false)
-    global param_gl_strategy = gl_strategy
-    global param_gl_ins = gl_ins
-    global param_rnf_percent = rnf_percent
-    global param_rnf_delta = rnf_delta
-    global param_rnf_time_limit = rnf_time_limit
-    global param_is_symmetry_en = is_symmetry_en
+# function run(logname::String = "log.md", 
+#              gl_strategy::Int64 = 2, 
+#              gl_ins::Float64 = 0.1, 
+#              rnf_percent::Float64 = 0.8, 
+#              rnf_delta::Float64 = 0.1, 
+#              rnf_time_limit::Float64 = 5.0,
+#              is_symmetry_en::Bool = false)
+function run(logname::String = "log.md")
+    params = Parameters()
 
-    logfile = "$param_dir/$param_dir_log/$logname"
+    logfile = "$(params.dir)/$(params.dir_log)/$logname"
     
     # Nb of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
@@ -31,7 +27,7 @@ function run(logname::String = "log.md",
 
     log_header(logfile)
 
-    files = readdir("$param_dir/input3")
+    files = readdir("$(params.dir)/input3")
     # Sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
     # Run solver with binary decision variables
@@ -49,17 +45,17 @@ function run(logname::String = "log.md",
     for file in files
         counter += 1
         if file in skip
-            log("Skipping instance $file nb $counter")
+            log(params, "Skipping instance $file nb $counter")
             continue
         end
-        log("Processing $file nb $counter", true)
+        log(params, "Processing $file nb $counter", true)
 
-        inputfile = "$param_dir/input3/$file"
-        logsolver = "$param_dir/$param_dir_log/$file"
+        inputfile = "$(params.dir)/input3/$file"
+        logsolver = "$(params.dir)/$(params.dir_log)/$file"
 
-        inst = read_instance(inputfile, rng)
-        if param_debugging_level == 1
-            @assert iseq(comp_gd_ratio(inst), 1.0 + param_g_slack)
+        inst = read_instance(params, inputfile, rng)
+        if params.debugging_level == 1
+            @assert iseq(comp_gd_ratio(inst), 1.0 + params.g_slack)
         end
 
         model = nothing
@@ -68,16 +64,16 @@ function run(logname::String = "log.md",
         ms_gap = 0.0
 
         # try
-        log("Build heuristic solution", true)
-        (start, report) = build_solution(inst, logsolver)
+        log(params, "Build heuristic solution", true)
+        (start, report) = build_solution(params, inst, logsolver)
 
-        log("Build full model", true)
+        log(params, "Build full model", true)
         build_time = @elapsed (model = build_mip_model(inst, logsolver))
 
-        log("Fix the start of the model", true)
+        log(params, "Fix the start of the model", true)
         start_time = @elapsed (fix_start!(inst, model, start))
 
-        log("Solve the model", true)
+        log(params, "Solve the model", true)
         results = solve!(model, true)
         ms_gap = results[end]
         results = results[1:end - 1]

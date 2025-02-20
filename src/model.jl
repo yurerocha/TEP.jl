@@ -1,27 +1,36 @@
 """
-    build_model(inst:::Instance, solver_logfile::String)
+    build_model(inst::Instance, 
+                params::Parameters, 
+                scenario_id::Int64, 
+                logfile::String = "TEP.jl/log/log.txt")
 
 Build mixed-integer linear programming model.
 """
 function build_mip_model(inst::Instance, 
+                         params::Parameters, 
                          scenario_id::Int64, 
                          logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
     # config(md, logfile)
-    if param_log_level >= 2
+    if params.log_level >= 2
         set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
     else
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
     end
     
-    x = Dict{Int, VariableRef}()
+    x = Dict{Int, JuMP.VariableRef}()
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         # Forcing to build candidates
-        x[k] = @variable(md, binary = true, base_name = "x[$k]")
+        # x[k] = @variable(md, binary = true, base_name = "x[$k]")
+        x[k] = @variable(md, 
+                         lower_bound = 0.0, 
+                         upper_bound = 1.0, 
+                         base_name = "x[$k]")
+
     end
 
-    if param_is_symmetry_en
+    if params.model.is_symmetry_en
         add_symmetry_constrs(inst, md, x)
     end
 
@@ -30,7 +39,7 @@ function build_mip_model(inst::Instance,
     # Flow variables
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
     # First Kirchhoff law
-    fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
+    fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering both existing and candidate lines
     add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
 
@@ -77,18 +86,22 @@ function build_mip_model(inst::Instance,
 end
 
 """
-    build_lp_model(inst::Instance, solver_logfile::String)
+    build_lp_model(inst::Instance, 
+                   params::Parameters, 
+                   scenario_id::Int64, 
+                   logfile::String = "TEP.jl/log/log.txt")
 
 Build linear programming model.
 
 The gamma values can be used to simulate building a candidate line.
 """
 function build_lp_model(inst::Instance, 
+                        params::Parameters, 
                         scenario_id::Int64, 
                         logfile::String = "TEP.jl/log/log.txt")
     md = Model(Gurobi.Optimizer)
     # config(md, logfile)
-    if param_log_level >= 3
+    if params.log_level >= 3
         set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
     else
@@ -111,7 +124,7 @@ function build_lp_model(inst::Instance,
     f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
 
     # First Kirchhoff law
-    fkl_cons = Vector{ConstraintRef}(undef, inst.nb_I)
+    fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.nb_I)
     # Add fkl constraints considering only existing lines
     add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
 
@@ -119,7 +132,7 @@ function build_lp_model(inst::Instance,
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
     Delta_theta = @variable(md, Delta_theta[j = 1:inst.nb_J], 
                             base_name = "Delta_theta")
-    f_cons = Vector{ConstraintRef}(undef, inst.nb_J + inst.nb_K)
+    f_cons = Vector{JuMP.ConstraintRef}(undef, inst.nb_J + inst.nb_K)
     # Ohm's law for existing circuits
     for j in 1:inst.nb_J
         c = inst.J[j]
@@ -129,7 +142,7 @@ function build_lp_model(inst::Instance,
                                 base_name = "ol$j")
     end
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        j = map_to_existing_line(inst, k)
+        j = map_to_existing_line(inst, params, k)
         f_cons[k] = @constraint(md, 
                                 f[k] == inst.gamma[k] * Delta_theta[j],
                                 base_name = "ol$k")
@@ -160,12 +173,12 @@ function build_lp_model(inst::Instance,
 end
 
 """
-    add_g_vars(inst::Instance, md::GenericModel)
+    add_g_vars(inst::Instance, md::JuMP.Model)
 
 Add generation variables.
 """
-function add_g_vars(inst::Instance, scenario_id::Int64, md::GenericModel)
-    gen = Dict{Int, VariableRef}()
+function add_g_vars(inst::Instance, scenario_id::Int64, md::JuMP.Model)
+    gen = Dict{Int, JuMP.VariableRef}()
     for i in inst.I
         # Some buses may not have load or generation
         if i in keys(inst.scenarios[scenario_id].G)
@@ -187,9 +200,9 @@ end
 Add flow variables for circuits in "lines".
 """
 function add_flow_variables(inst::Instance, 
-                            md::GenericModel, 
-                            f::Vector{VariableRef}, 
-                            s::Vector{VariableRef}, 
+                            md::JuMP.Model, 
+                            f::Vector{JuMP.VariableRef}, 
+                            s::Vector{JuMP.VariableRef}, 
                             lines::Vector{Int64})
     buses_involved = Set{Int64}()
     # buses_involved = Vector{Int64}()
@@ -211,10 +224,10 @@ end
 
 """
     add_fkl_constrs(inst::Instance,
-                    md::GenericModel, 
-                    f::Vector{VariableRef},
-                    gen::Dict{Int, VariableRef},
-                    fkl_cons::Vector{ConstraintRef},
+                    md::JuMP.Model, 
+                    f::Vector{JuMP.VariableRef},
+                    gen::Dict{Int, JuMP.VariableRef},
+                    fkl_cons::Vector{JuMP.ConstraintRef},
                     buses_involved::T)
 
 Add first Kirchhoff law constraints.
@@ -223,10 +236,10 @@ Set the node flow constraints considering the assigned candidate f variables.
 """
 function add_fkl_constrs(inst::Instance, 
                          scenario_id::Int64, 
-                         md::GenericModel, 
-                         f::Vector{VariableRef},
-                         gen::Dict{Int, VariableRef},
-                         fkl_cons::Vector{ConstraintRef},
+                         md::JuMP.Model, 
+                         f::Vector{JuMP.VariableRef},
+                         gen::Dict{Int, JuMP.VariableRef},
+                         fkl_cons::Vector{JuMP.ConstraintRef},
                          buses_involved::T) where T <: VectorSet
     for i in buses_involved
         if isassigned(fkl_cons, i)
@@ -251,8 +264,8 @@ end
 Set the objective to minimize the costs of expanding the network.
 """
 function set_obj(inst::Instance, 
-                 md::GenericModel,
-                 x::Dict{Int64, JuMP.VariableRef})
+                 md::JuMP.Model,
+                 x::Dict{Int64, JuMP.JuMP.VariableRef})
     e = AffExpr(0.0)
     for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
         # e += inst.cost[k] * x[k]
@@ -264,17 +277,17 @@ function set_obj(inst::Instance,
     return e
 end
 
-function solve!(model_data::MIPModel, is_mip_en::Bool = true)
+function solve!(params::Parameters, model_data::MIPModel)
     model = model_data.model
 
     set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
     set_attribute(model, 
                   MOI.RawOptimizerAttribute("TimeLimit"), 
-                  param_solver_time_limit)
+                  params.solver_time_limit)
     set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-6)
 
     rt_runtime = 0.0
-    incumbent_time = param_solver_time_limit
+    incumbent_time = params.solver_time_limit
     rt_best_bound = 0.0
     mip_start_gap = Inf64
     # Callback to get the root node best bound and runtime (if), and the time to 
@@ -299,7 +312,7 @@ function solve!(model_data::MIPModel, is_mip_en::Bool = true)
                 rt_best_bound = root_bound[]
             end
         elseif cb_where == GRB_CB_MIPSOL && 
-               iseq(incumbent_time, param_solver_time_limit)
+               iseq(incumbent_time, params.solver_time_limit)
             # Prevents incumbent_time from being updated after the first 
             # incumbent solution is found
             runtime = Ref{Cdouble}()
@@ -329,10 +342,18 @@ function solve!(model_data::MIPModel, is_mip_en::Bool = true)
 
     # If the solver found a solution
     if has_values(model)
-        if is_mip_en
+        if params.model.is_mip_en
             best_bound = dual_objective_value(model)
             obj = objective_value(model)
-            gap = 100.0 * relative_gap(model)
+            @warn obj, best_bound, termination_status(model)
+            try
+                gap = 100.0 * relative_gap(model)
+            catch e
+                println(e)
+                gap = (best_bound - obj) / obj
+            end
+            @warn obj, best_bound
+            readline()
         end
     else
         # if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
@@ -372,8 +393,9 @@ end
 
 """
     add_symmetry_constrs(inst::Instance, 
-                         md::GenericModel, 
-                         x::Vector{VariableRef})
+                         params::Parameters, 
+                         md::JuMP.Model, 
+                         x::Dict{Int64, JuMP.VariableRef})
 
 Add constraints to help breaking symmetry.
 
@@ -381,11 +403,12 @@ For candidates k, k + 1, ..., k + n with the same gamma, x_k >= x_{k + 1} >= ...
 >= x_{k + n}.
 """
 function add_symmetry_constrs(inst::Instance, 
-                              md::GenericModel, 
-                              x::Dict{Int64, VariableRef})
+                              params::Parameters, 
+                              md::JuMP.Model, 
+                              x::Dict{Int64, JuMP.VariableRef})
     for j in 1:inst.nb_J
         l = map_to_first_cand(inst, j)
-        for k in l:l + param_nb_candidates - 2
+        for k in l:l + params.instance.nb_candidates - 2
             if iseq(inst.gamma[k], inst.gamma[k + 1])
                 @constraint(md, x[k] >= x[k + 1], base_name = "sym")
             end
@@ -394,8 +417,8 @@ function add_symmetry_constrs(inst::Instance,
 end
 
 
-# function config(model::GenericModel, logfile::String)
-#     if param_log_level == 2
+# function config(model::JuMP.Model, logfile::String)
+#     if params.log_level == 2
 #         set_attribute(model, MOI.RawOptimizerAttribute("LogFile"), logfile)
 #         set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 1)
 #     else
