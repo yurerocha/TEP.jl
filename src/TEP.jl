@@ -17,12 +17,16 @@ using SimpleWeightedGraphs
 
 include("data.jl")
 include("main.jl")
+include("parameters.jl")
 
 include("compact_model.jl")
 include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
-include("progressive_hedging.jl")
 include("utils.jl")
+include("progressive_hedging/data.jl")
+include("progressive_hedging/progressive_hedging.jl")
+include("progressive_hedging/utils.jl")
+
 
 end

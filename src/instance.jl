@@ -6,56 +6,56 @@ function read_instance(params::Parameters,
     end
     I = Set{Int}()
     i = 1
-    nb_I = get_nb(s, i)
+    num_I = get_num(s, i)
     i += 2
 
     J = Vector{Circuit}(undef, 0)
     gamma = Vector{Float64}(undef, 0)
     f_bar = Vector{Float64}(undef, 0)
     cost = Vector{Float64}(undef, 0)
-    nb_ex_circs = get_nb(s, i)
+    num_ex_circs = get_num(s, i)
     i += 2
     try 
-        populate_circuits(params, I, J, gamma, f_bar, cost, s, i, nb_ex_circs)
+        populate_circuits(params, I, J, gamma, f_bar, cost, s, i, num_ex_circs)
     catch e
         throw(e)
     end
 
-    i += nb_ex_circs + 1
+    i += num_ex_circs + 1
 
     K = Array{Circuit}(undef, 0)
-    nb_ca_circs = get_nb(s, i)
+    num_ca_circs = get_num(s, i)
     i += 2
     try
         populate_circuits(params, I, K, gamma, f_bar, cost, 
-                          s, i, nb_ca_circs, true, rng)
+                          s, i, num_ca_circs, true, rng)
     catch e
         throw(e)
     end
-    i += nb_ca_circs + 1
+    i += num_ca_circs + 1
 
-    nb_scenarios = get_nb(s, i)
-    @show nb_scenarios
+    num_scenarios = get_num(s, i)
+    @show num_scenarios
     i += 2
 
     scenarios = Vector{Scenario}(undef, 0)
-    for _ in 1:nb_scenarios
-        id = get_nb(s, i)
+    for _ in 1:num_scenarios
+        id = get_num(s, i)
         i += 1
 
         P = parse(Float64, split(s[i], ":")[2])
         i += 1
 
-        nb_gen_dem = get_nb(s, i)
+        num_gen_dem = get_num(s, i)
         i += 2
 
-        D = zeros(nb_I)
+        D = zeros(num_I)
         G = Dict{Int, Float64}()
         # Update I here?
         sumG = 0.0
         sumD = 0.0
         # The demand is increased according to param_mult_load
-        for j in i:i + nb_gen_dem - 1
+        for j in i:i + num_gen_dem - 1
             v = split(s[j])
             bus = parse(Int64, v[1])
             g = parse(Float64, v[2])
@@ -77,18 +77,18 @@ function read_instance(params::Parameters,
             G[bus] = mult_gen * g
         end
 
-        scenarios = push!(scenarios, Scenario(id, P, D, G))
-        i += nb_gen_dem + 1
+        scenarios = push!(scenarios, Scenario(P, D, G))
+        i += num_gen_dem + 1
     end
     
     return Instance(I, gamma, 
                     f_bar, cost, 
                     J, K,
-                    nb_I, 
+                    num_I, 
                     length(J), 
                     length(K), 
                     scenarios, 
-                    nb_scenarios)
+                    num_scenarios)
 end
 
 """

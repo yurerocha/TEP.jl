@@ -19,16 +19,17 @@ function build_mip_model(inst::Instance,
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
     end
     
-    x = Dict{Int, JuMP.VariableRef}()
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        # Forcing to build candidates
-        # x[k] = @variable(md, binary = true, base_name = "x[$k]")
-        x[k] = @variable(md, 
-                         lower_bound = 0.0, 
-                         upper_bound = 1.0, 
-                         base_name = "x[$k]")
+    x = @variable(md, x[k = 1:inst.num_K], base_name = "x")
+    # x = Dict{Int, JuMP.VariableRef}()
+    # for k in inst.num_J + 1:inst.num_J + inst.num_K
+    #     # Forcing to build candidates
+    #     # x[k] = @variable(md, binary = true, base_name = "x[$k]")
+    #     x[k] = @variable(md, 
+    #                      lower_bound = 0.0, 
+    #                      upper_bound = 1.0, 
+    #                      base_name = "x[$k]")
 
-    end
+    # end
 
     if params.model.is_symmetry_en
         add_symmetry_constrs(inst, md, x)
@@ -37,18 +38,18 @@ function build_mip_model(inst::Instance,
     gen = add_g_vars(inst, scenario_id, md)
 
     # Flow variables
-    f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
+    f = @variable(md, f[l = 1:inst.num_J + inst.num_K], base_name = "f")
     # First Kirchhoff law
-    fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.nb_I)
+    fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.num_I)
     # Add fkl constraints considering both existing and candidate lines
     add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
-    Delta_theta = @variable(md, Delta_theta[l = 1:inst.nb_J + inst.nb_K], 
+    Delta_theta = @variable(md, Delta_theta[l = 1:inst.num_J + inst.num_K], 
                             base_name = "Delta_theta")
     # Ohm's law for existing circuits
-    for j in 1:inst.nb_J
+    for j in 1:inst.num_J
         c = inst.J[j]
         @constraint(md, Delta_theta[j] == theta[c.fr] - theta[c.to])
         @constraint(md, 
@@ -56,28 +57,32 @@ function build_mip_model(inst::Instance,
                     base_name = "ol$j")
     end
     # Ohm's law for candidate circuits
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
         @constraint(md, Delta_theta[k] == 
-                    theta[inst.K[k - inst.nb_J].fr] - 
-                    theta[inst.K[k - inst.nb_J].to])
+                    theta[inst.K[k - inst.num_J].fr] - 
+                    theta[inst.K[k - inst.num_J].to])
         y = f[k] - inst.gamma[k] * Delta_theta[k]
 
         bigM = comp_bigM(inst, k)
 
-        @constraint(md, y <= bigM * (1 - x[k]), base_name = "ol.p$k")
-        @constraint(md, -y <= bigM * (1 - x[k]), base_name = "ol.n$k")
+        @constraint(md, 
+                    y <= bigM * (1 - x[k - inst.num_J]), 
+                    base_name = "ol.p$k")
+        @constraint(md, 
+                    -y <= bigM * (1 - x[k - inst.num_J]), 
+                    base_name = "ol.n$k")
     end
 
     # Flow limits
     # Existing circuits
-    for j in 1:inst.nb_J
+    for j in 1:inst.num_J
         @constraint(md, f[j] <= inst.f_bar[j])
         @constraint(md, -f[j] <= inst.f_bar[j])
     end
     # Candidate circuits
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        @constraint(md, f[k] <= inst.f_bar[k] * x[k])
-        @constraint(md, -f[k] <= inst.f_bar[k] * x[k])
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
+        @constraint(md, f[k] <= inst.f_bar[k] * x[k - inst.num_J])
+        @constraint(md, -f[k] <= inst.f_bar[k] * x[k - inst.num_J])
     end
 
     obj = set_obj(inst, md, x)
@@ -121,27 +126,27 @@ function build_lp_model(inst::Instance,
     gen = add_g_vars(inst, scenario_id, md)
 
     # Flow variables
-    f = @variable(md, f[l = 1:inst.nb_J + inst.nb_K], base_name = "f")
+    f = @variable(md, f[l = 1:inst.num_J + inst.num_K], base_name = "f")
 
     # First Kirchhoff law
-    fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.nb_I)
+    fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.num_I)
     # Add fkl constraints considering only existing lines
     add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
-    Delta_theta = @variable(md, Delta_theta[j = 1:inst.nb_J], 
+    Delta_theta = @variable(md, Delta_theta[j = 1:inst.num_J], 
                             base_name = "Delta_theta")
-    f_cons = Vector{JuMP.ConstraintRef}(undef, inst.nb_J + inst.nb_K)
+    f_cons = Vector{JuMP.ConstraintRef}(undef, inst.num_J + inst.num_K)
     # Ohm's law for existing circuits
-    for j in 1:inst.nb_J
+    for j in 1:inst.num_J
         c = inst.J[j]
         @constraint(md, Delta_theta[j] == theta[c.fr] - theta[c.to])
         f_cons[j] = @constraint(md, 
                                 f[j] == inst.gamma[j] * Delta_theta[j],
                                 base_name = "ol$j")
     end
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
         j = map_to_existing_line(inst, params, k)
         f_cons[k] = @constraint(md, 
                                 f[k] == inst.gamma[k] * Delta_theta[j],
@@ -150,16 +155,16 @@ function build_lp_model(inst::Instance,
 
     # Flow limits
     s = @variable(md, 
-                  s[j = 1:inst.nb_J + inst.nb_K],
+                  s[j = 1:inst.num_J + inst.num_K],
                   lower_bound = 0.0,
                   base_name = "s")
     # Existing circuits
-    for j in 1:inst.nb_J
+    for j in 1:inst.num_J
         @constraint(md, f[j] - inst.f_bar[j] <= s[j])
         @constraint(md, -f[j] - inst.f_bar[j] <= s[j])
     end
     # Candidate circuits
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
         @constraint(md, f[k] - inst.f_bar[k] <= s[k])
         @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
         # fix(f[k], 0.0)
@@ -211,7 +216,7 @@ function add_flow_variables(inst::Instance,
             f[k] = @variable(md, base_name = "fc$k")
             @constraint(md, f[k] - inst.f_bar[k] <= s[k])
             @constraint(md, -f[k] - inst.f_bar[k] <= s[k])
-            c = inst.K[k - inst.nb_J]
+            c = inst.K[k - inst.num_J]
             for i in inst.I
                 if c.to == i || c.fr == i
                     push!(buses_involved, i)
@@ -265,11 +270,11 @@ Set the objective to minimize the costs of expanding the network.
 """
 function set_obj(inst::Instance, 
                  md::JuMP.Model,
-                 x::Dict{Int64, JuMP.JuMP.VariableRef})
+                 x::Vector{JuMP.JuMP.VariableRef})
     e = AffExpr(0.0)
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
         # e += inst.cost[k] * x[k]
-        add_to_expression!(e, inst.cost[k], x[k])
+        add_to_expression!(e, inst.cost[k], x[k - inst.num_J])
     end
 
     @objective(md, Min, e)
@@ -345,15 +350,14 @@ function solve!(params::Parameters, model_data::MIPModel)
         if params.model.is_mip_en
             best_bound = dual_objective_value(model)
             obj = objective_value(model)
-            @warn obj, best_bound, termination_status(model)
+            # @warn obj, best_bound, termination_status(model)
             try
                 gap = 100.0 * relative_gap(model)
             catch e
                 println(e)
                 gap = (best_bound - obj) / obj
             end
-            @warn obj, best_bound
-            readline()
+            # @warn obj, best_bound
         end
     else
         # if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
@@ -382,7 +386,7 @@ end
 Get g values from the model.
 """
 function get_g(inst::Instance, model_dt::MIPModel)
-    g = zeros(inst.nb_I)
+    g = zeros(inst.num_I)
     for i in inst.I
         if i in keys(inst.G)
             g[i] = value(model_dt.g[i])
@@ -395,7 +399,7 @@ end
     add_symmetry_constrs(inst::Instance, 
                          params::Parameters, 
                          md::JuMP.Model, 
-                         x::Dict{Int64, JuMP.VariableRef})
+                         x::Vector{JuMP.VariableRef})
 
 Add constraints to help breaking symmetry.
 
@@ -405,12 +409,14 @@ For candidates k, k + 1, ..., k + n with the same gamma, x_k >= x_{k + 1} >= ...
 function add_symmetry_constrs(inst::Instance, 
                               params::Parameters, 
                               md::JuMP.Model, 
-                              x::Dict{Int64, JuMP.VariableRef})
-    for j in 1:inst.nb_J
+                              x::Vector{JuMP.VariableRef})
+    for j in 1:inst.num_J
         l = map_to_first_cand(inst, j)
-        for k in l:l + params.instance.nb_candidates - 2
+        for k in l:l + params.instance.num_candidates - 2
             if iseq(inst.gamma[k], inst.gamma[k + 1])
-                @constraint(md, x[k] >= x[k + 1], base_name = "sym")
+                @constraint(md, 
+                            x[k - inst.num_J] >= x[k - inst.num_J + 1], 
+                            base_name = "sym")
             end
         end
     end

@@ -34,10 +34,10 @@ function build_compact(inst::Instance, logfile::String = "log_compact.txt")
 
     # Flow lower and upper bounds constra_ints
     line_slacks, e, f_lower_cons, f_upper_cons = 
-                                   flow_cons(inst, md, inst.nb_J + inst.nb_K, f)
+                                flow_cons(inst, md, inst.num_J + inst.num_K, f)
 
     # Load balance constraints
-    e_t = ones(inst.nb_I)'
+    e_t = ones(inst.num_I)'
     gl_lhs = comp_gen_balance(g, is_xi_req, xi)
     @constraint(md, e_t * gl_lhs == e_t * d, base_name = "load_balance")
 
@@ -83,8 +83,8 @@ function build_bus_injections(inst::Instance)
     is_xi_req = isg(rhs_sum, 0.0)
     # @show rhs_sum, is_xi_req
 
-    g = Vector{JuMP.VariableRef}(undef, inst.nb_I)
-    xi = Array{JuMP.VariableRef}(undef, inst.nb_I)
+    g = Vector{JuMP.VariableRef}(undef, inst.num_I)
+    xi = Array{JuMP.VariableRef}(undef, inst.num_I)
     for i in inst.I
         # Some buses may not have generation
         if i in keys(inst.G)
@@ -121,10 +121,10 @@ Build incidence matrix.
 Where incoming and outgoing lines are represented by 1 and -1, respectively.
 """
 function build_incidence_matrix(inst::Instance)
-    S = zeros(inst.nb_J + inst.nb_K, inst.nb_I)
+    S = zeros(inst.num_J + inst.num_K, inst.num_I)
 
     for i in inst.I
-        for j in 1:inst.nb_J
+        for j in 1:inst.num_J
             c = inst.J[j]
             if c.to == i
                 S[j, i] = 1
@@ -132,8 +132,8 @@ function build_incidence_matrix(inst::Instance)
                 S[j, i] = -1
             end
         end
-        for l in 1:inst.nb_K
-            k = l + inst.nb_J
+        for l in 1:inst.num_K
+            k = l + inst.num_J
             c = inst.K[l]
             if c.to == i
                 S[k, i] = 1
@@ -152,9 +152,9 @@ end
 Build the diagonal matrix of susceptances.
 """
 function build_susceptance_matrix(inst::Instance)
-    Gamma = zeros(inst.nb_J + inst.nb_K, inst.nb_J + inst.nb_K)
+    Gamma = zeros(inst.num_J + inst.num_K, inst.num_J + inst.num_K)
 
-    for l in 1:inst.nb_J + inst.nb_K
+    for l in 1:inst.num_J + inst.num_K
         Gamma[l, l] = inst.gamma[l]
     end
 
@@ -162,7 +162,7 @@ function build_susceptance_matrix(inst::Instance)
 end
 
 """
-    flow_cons(data, model, nb_lines, flows)
+    flow_cons(data, model, num_lines, flows)
 
 Lower and upper bounds on flows.
 
@@ -313,7 +313,7 @@ function update_beta!(inst::Instance,
     beta_i = md.beta[i, :]'
     # beta_i = gamma_i * a_i' * md.B_inv
     den = gamma_i / (gamma_star - gamma_i) + beta_i * a_i
-    for j in 1:inst.nb_J + inst.nb_K
+    for j in 1:inst.num_J + inst.num_K
         if j == i
             continue
         end

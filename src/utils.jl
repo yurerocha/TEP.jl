@@ -4,7 +4,7 @@
 Compute if a is less than b.
 """
 function isl(a::Float64, b::Float64)
-    return a < b - eps
+    return a < b - const_eps
 end
 
 """
@@ -13,7 +13,7 @@ end
 Compute if a is greater than b.
 """
 function isg(a::Float64, b::Float64)
-    return a > b + eps
+    return a > b + const_eps
 end
 
 """
@@ -22,7 +22,7 @@ end
 Compute if a is equal to b.
 """
 function iseq(a::Float64, b::Float64)
-    return abs(a - b) < eps
+    return abs(a - b) < const_eps
 end
 
 """
@@ -31,10 +31,10 @@ end
 Return true if matrices A and B are equal.
 """
 function iseq(A::Matrix{Float64}, B::Matrix{Float64})
-    return norm(A - B) < eps
+    return norm(A - B) < const_eps
 end
 
-function get_nb(s::Vector{String}, i::Int64)
+function get_num(s::Vector{String}, i::Int64)
     return parse(Int, split(s[i], ":")[2])
 end
 
@@ -63,15 +63,15 @@ end
 Return the circuit at position l.
 """
 function get_circuit(inst::Instance, l::Int64)
-    if l <= inst.nb_J
+    if l <= inst.num_J
         return inst.J[l]
     else
-        return inst.K[l - inst.nb_J]
+        return inst.K[l - inst.num_J]
     end
 end
 
 function get_cand(inst::Instance, l::Int64)
-    for i in 1:inst.nb_K
+    for i in 1:inst.num_K
         if inst.K[i].fr == l.fr && inst.K[i].to == l.to
             return i
         end
@@ -81,9 +81,11 @@ end
 """
 Compute incidence matrix with existing and candidate circuits.
 """
-function comp_incidence_matrix(inst::Instance, f::Vector{JuMP.VariableRef}, i::Int64)
+function comp_incidence_matrix(inst::Instance, 
+                               f::Vector{JuMP.VariableRef}, 
+                               i::Int64)
     e = 0
-    for j in 1:inst.nb_J
+    for j in 1:inst.num_J
         circ = inst.J[j]
         if circ.to == i
             e += f[j]
@@ -91,12 +93,12 @@ function comp_incidence_matrix(inst::Instance, f::Vector{JuMP.VariableRef}, i::I
             e -= f[j]
         end
     end
-    for k in 1:inst.nb_K
+    for k in 1:inst.num_K
         circ = inst.K[k]
         if circ.to == i
-            e += f[inst.nb_J + k]
+            e += f[inst.num_J + k]
         elseif circ.fr == i
-            e -= f[inst.nb_J + k]
+            e -= f[inst.num_J + k]
         end
     end
     return e
@@ -119,9 +121,9 @@ function comp_incidence_matrix(inst::Instance,
     is_constr_update_req = false
     if is_cand_en
         for l in lines
-            circ = inst.K[l - inst.nb_J]
+            circ = inst.K[l - inst.num_J]
 
-            # l = inst.nb_J + k
+            # l = inst.num_J + k
 
             if (circ.to == i || circ.fr == i) && !isdefined(f, l)
                 is_constr_update_req = true
@@ -138,7 +140,7 @@ function comp_incidence_matrix(inst::Instance,
 
     # Existing lines
     if is_add_constrs || is_constr_update_req
-        for j in 1:inst.nb_J
+        for j in 1:inst.num_J
             circ = inst.J[j]
             if circ.to == i
                 e += f[j]
@@ -162,7 +164,7 @@ function comp_existing_incident_flows(inst::Instance,
                                       f::Vector{JuMP.VariableRef}, 
                                       i::Int64)
     e = AffExpr(0.0)
-    for j in 1:inst.nb_J
+    for j in 1:inst.num_J
         c = inst.J[j]
         if c.to == i
             add_to_expression!(e, f[j])
@@ -185,12 +187,12 @@ function comp_candidate_incident_flows(inst::Instance,
                                        i::Int64)
     e = AffExpr(0.0)
     # for k in res_list
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
         # if !isassigned(f, k)
         #     continue
         # end
 
-        c = inst.K[k - inst.nb_J]
+        c = inst.K[k - inst.num_J]
         if c.to == i
             add_to_expression!(e, f[k])
         elseif c.fr == i
@@ -207,19 +209,18 @@ function populate_circuits(params::Parameters,
                            f_bar::Vector{Float64}, 
                            cost::Vector{Float64}, 
                            s::Vector{String}, 
-                           nb_line::Int64, 
-                           nb_circs::Int64, 
+                           num_line::Int64, 
+                           num_circs::Int64, 
                            is_cand_en::Bool = false, 
                            rng = Random.default_rng())
-    for i in nb_line:nb_line + nb_circs - 1
+    for i in num_line:num_line + num_circs - 1
         d = split(s[i])
         circ = Circuit(parse(Int64, d[1]), parse(Int64, d[2]))
-        if is_cand_en
-            nb = params.instance.nb_candidates
-        else
-            nb = parse(Int64, d[3])
+        num = params.instance.num_candidates
+        if !is_cand_en
+            num = parse(Int64, d[3])
         end
-        for _ in 1:nb
+        for _ in 1:num
             # Update the set of buses
             if !in(circ.fr, I)
                 push!(I, circ.fr)
@@ -241,7 +242,7 @@ function populate_circuits(params::Parameters,
             c = bc
             if is_cand_en
                 rn = rand(rng, 1:params.instance.max_rand)
-                c = bc / (params.instance.nb_candidates + 1) + bc / rn
+                c = bc / (params.instance.num_candidates + 1) + bc / rn
             end
             push!(cost, c)
         end
@@ -260,9 +261,10 @@ function log(file::String, msg::String)
 end
 
 function log_header(outputfile::String)
-    outstr = "| Instance | N | L | L/N | Build (s) | Solve (s) | Incumbent (s) \
-              | Status | Rt solve (s) | Rt best bound | Best bound | Cost \
-              | Gap (%) | Heur (s) | Heur rm (%) | Start (s) | \n"
+    outstr = "| Instance | N | L | L/N | Build (s) | Solve (s) " * 
+             "| Incumbent (s) | Status | Rt solve (s) | Rt best bound " * 
+             "| Best bound | Cost | Gap (%) | Heur (s) | Heur rm (%) " * 
+             "| Start (s) | \n"
     outstr *= "|:---"^16 * "| \n"
     log(outputfile, outstr)
 end
@@ -277,8 +279,8 @@ function log_instance(outputfile::String,
                       results::Tuple,
                       report::NeighReport,
                       start_time::Float64)
-    N = inst.nb_I
-    L = (inst.nb_K + inst.nb_J)
+    N = inst.num_I
+    L = (inst.num_K + inst.num_J)
     s = "| $inst_name | $N | $L | $(round(L / N, digits=2)) |" * 
         " $(round(build_time, digits=2)) |"
 
@@ -307,8 +309,8 @@ existing line conecting every two buses.
 function comp_bigM(inst::Instance, k::Int64)
     bigM = 1000000
     for (j, circuit) in enumerate(inst.J)
-        if circuit.fr == inst.K[k - inst.nb_J].fr && 
-           circuit.to == inst.K[k - inst.nb_J].to
+        if circuit.fr == inst.K[k - inst.num_J].fr && 
+           circuit.to == inst.K[k - inst.num_J].to
             tmp = inst.gamma[k] * 
                   (inst.f_bar[j] / inst.gamma[j])
             bigM = min(bigM, tmp)
@@ -393,7 +395,7 @@ function draw_cycles(inst::Instance,
                      filename::String)
     g = SimpleDiGraph(Graphs.SimpleEdge.(elist))
     flows = Dict{Circuit, Float64}()
-    for l in 1:inst.nb_J+inst.nb_K
+    for l in 1:inst.num_J+inst.num_K
         c = get_circuit(dt, l)
         if c in keys(flows)
             flows[c] += value(md.f[l])
@@ -402,7 +404,7 @@ function draw_cycles(inst::Instance,
         end
     end
     vertices = [round(Int, value(md.g[i]) - 
-                (i in keys(inst.D) ? inst.D[i] : 0.0)) for i in 1:inst.nb_I]
+                (i in keys(inst.D) ? inst.D[i] : 0.0)) for i in 1:inst.num_I]
     edgeweights = [round(Int, flows[Circuit(src(e), dst(e))]) for e in edges(g)]
     # Generate n maximally distinguishable colors in LCHab space.
     vertexfillc = distinguishable_colors(nv(g), colorant"blue")
@@ -465,19 +467,19 @@ function draw_solution(inst::Instance,
                        filename::String = "solution") where T <: TepModel
     flows = Dict{Circuit, Float64}()
     circuits = Dict{Circuit, Int64}()
-    for l in 1:inst.nb_J + inst.nb_K
+    for l in 1:inst.num_J + inst.num_K
         c = get_circuit(inst, l)
         if c in keys(flows)
             flows[c] += value(f[l])
         else
             flows[c] = value(f[l])
             # Shift to the candidates
-            k = inst.nb_J + 1 + params.nb_candidates * (l - 1)
+            k = inst.num_J + 1 + params.num_candidates * (l - 1)
             circuits[c] = k
         end
     end
     elist = []
-    for l in 1:inst.nb_J + inst.nb_K
+    for l in 1:inst.num_J + inst.num_K
         c = get_circuit(inst, l)
         push!(elist, (c.fr, c.to))
     end
@@ -496,8 +498,9 @@ function draw_solution(inst::Instance,
     end
 
     delta = [round(Int, (i in keys(md.g) ? value(md.g[i]) : 0.0) - 
-             (i in keys(inst.D) ? inst.D[i] : 0.0)) for i in 1:inst.nb_I]
-    # edgelabels = ["$(round(Int, flows[Circuit(src(e), dst(e))])):$" for e in edges(g)]
+             (i in keys(inst.D) ? inst.D[i] : 0.0)) for i in 1:inst.num_I]
+    # edgelabels = ["$(round(Int, flows[Circuit(src(e), dst(e))])):$" 
+    #               for e in edges(g)]
     edgelabels = []
     for e in edges(g)
         c = Circuit(src(e), dst(e))
@@ -575,8 +578,8 @@ end
 Map candidate line k to corresponding existing circuit.
 """
 function map_to_existing_line(inst::Instance, params::Parameters, k::Int64)
-    return div(k - inst.nb_J + params.instance.nb_candidates - 1, 
-               params.instance.nb_candidates)
+    return div(k - inst.num_J + params.instance.num_candidates - 1, 
+               params.instance.num_candidates)
 end
 
 """
@@ -585,7 +588,7 @@ end
 Map existing line j to first corresponding candidate circuit.
 """
 function map_to_first_cand(inst::Instance, params::Parameters, j::Int64)
-    return inst.nb_J + 1 + params.instance.nb_candidates * (j - 1)
+    return inst.num_J + 1 + params.instance.num_candidates * (j - 1)
 end
 
 """
@@ -606,7 +609,7 @@ function log_neigh_run(inst::Instance,
     log(params, "best_$msg:" * string(round(best_val, digits = 2)) *
                 " new_$msg:" * string(round(new_val, digits = 2)) *
                 " delta_perc:" * string(round(length(rm_ins) / 
-                                            inst.nb_K, digits = 2)) * 
+                                            inst.num_K, digits = 2)) * 
                 " runtime:" * string(round(runtime, digits = 2)))
 end
 
@@ -701,7 +704,7 @@ end
 Get values for g variables.
 """
 function get_g_values(inst::Instance, lp_model::LPModel)
-    g = Vector{Float64}(undef, inst.nb_I)
+    g = Vector{Float64}(undef, inst.num_I)
     for i in inst.I
         g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
     end

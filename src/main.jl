@@ -20,7 +20,7 @@ function run(logname::String = "log.md")
 
     logfile = "$(params.dir)/$(params.dir_log)/$logname"
     
-    # Nb of seconds since the Unix epoch
+    # Number of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
     # Random.seed!(seed)
     rng = Random.MersenneTwister(123)
@@ -45,10 +45,10 @@ function run(logname::String = "log.md")
     for file in files
         counter += 1
         if file in skip
-            log(params, "Skipping instance $file nb $counter")
+            log(params, "Skipping instance $file num $counter")
             continue
         end
-        log(params, "Processing $file nb $counter", true)
+        log(params, "Processing $file num $counter", true)
 
         inputfile = "$(params.dir)/input3/$file"
         logsolver = "$(params.dir)/$(params.dir_log)/$file"

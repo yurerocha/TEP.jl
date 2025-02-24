@@ -13,9 +13,9 @@ function build_solution(inst::Instance,
     # At the first it, there are no candidate lines
     lp_model = build_lp_model(inst, params, scenario_id, logfile)
 
-    lines = collect(inst.nb_J + 1:inst.nb_J + inst.nb_K)
+    lines = collect(inst.num_J + 1:inst.num_J + inst.num_K)
     inserted = Set{Int64}(lines)
-    existing = collect(1:inst.nb_J)
+    existing = collect(1:inst.num_J)
     removed = Set{Int64}()
 
     optimize!(lp_model.model)
@@ -47,7 +47,7 @@ function build_solution(inst::Instance,
     # end
 
     # f = value.(lp_model.f)
-    # g = Vector{Float64}(undef, inst.nb_I)
+    # g = Vector{Float64}(undef, inst.num_I)
     # theta = value.(lp_model.theta)
     # for i in inst.I
     #     g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
@@ -67,7 +67,7 @@ function rm_and_fix(inst::Instance,
     log(params, "Remove and fix", true)
 
     time_beg = time()
-    nb_rm_beg = length(removed)
+    num_rm_beg = length(removed)
 
     if params.debugging_level == 1
         @assert isdisjoint(inserted, removed)
@@ -79,9 +79,9 @@ function rm_and_fix(inst::Instance,
     lines = comp_f_residuals(inst, f, inserted)
     it = 1
     while true
-        nb_itens = round(Int64, rnf_percent * length(lines))
-        if nb_itens == 0
-            log(params, "Insufficient nb of lines")
+        num_itens = round(Int64, rnf_percent * length(lines))
+        if num_itens == 0
+            log(params, "Insufficient num of lines")
             break
         elseif iseq(best_cost, 0.0)
             log(params, "All candidates removed!")
@@ -98,7 +98,7 @@ function rm_and_fix(inst::Instance,
 
         log(params, "---------- It $it ----------", true)
 
-        rm = lines[1:min(nb_itens, length(lines))]
+        rm = lines[1:min(num_itens, length(lines))]
         
         rm_lines!(inst, params, lp_model, rm, true)
         rm_set = Set(rm)
@@ -147,7 +147,7 @@ function rm_and_fix(inst::Instance,
 
         if has_impr
             if params.debugging_level == 1
-                @assert length(inserted) + length(removed) == inst.nb_K
+                @assert length(inserted) + length(removed) == inst.num_K
                 lp_debug = build_lp_model(inst)
                 rm_lines!(inst, params, lp_debug, collect(removed), true)
                 @assert iseq(viol, objective_value(lp_debug.model))
@@ -180,9 +180,9 @@ function rm_and_fix(inst::Instance,
     log(params, "End remove and fix", true)
 
     delta_runtime = time() - time_beg
-    delta_rm = length(removed) - nb_rm_beg
+    delta_rm = length(removed) - num_rm_beg
 
-    report = NeighReport(delta_runtime, delta_rm / inst.nb_K, 0.0)
+    report = NeighReport(delta_runtime, delta_rm / inst.num_K, 0.0)
 
     return best_cost, Start(inserted, f, g), report
 end
@@ -215,7 +215,7 @@ function violated_flows_neigh!(inst::Instance,
     set_attribute(lp_model.model, Gurobi.CallbackFunction(), barrier_callback)
 
     time_beg = time()
-    nb_inserted_beg = length(inserted)
+    num_inserted_beg = length(inserted)
     viol_beg = best_viol
 
     if params.debugging_level == 1
@@ -232,12 +232,12 @@ function violated_flows_neigh!(inst::Instance,
     it = 1
     lambda = params.heuristic.vf_lambda_start
     while true
-        nb_itens = trunc(Int64, lambda * length(lines))
+        num_itens = trunc(Int64, lambda * length(lines))
         if iseq(best_viol, 0.0)
             log(params, "All viol removed!")
             break
-        elseif nb_itens == 0
-            log(params, "Insufficient nb of lines")
+        elseif num_itens == 0
+            log(params, "Insufficient num of lines")
             break
         elseif isg(time() - rnf_time_beg, params.heuristic.rnf_time_limit)
             log(params, "Reached time limit")
@@ -246,7 +246,7 @@ function violated_flows_neigh!(inst::Instance,
 
         log(params, "---------- VF it $it ----------", true)
         
-        insert = lines[1:min(nb_itens, length(lines))]
+        insert = lines[1:min(num_itens, length(lines))]
         
         add_lines!(inst, params, lp_model, insert)
 
@@ -275,7 +275,7 @@ function violated_flows_neigh!(inst::Instance,
                                removed)
 
             if params.debugging_level == 1
-                @assert length(inserted) + length(removed_all) == inst.nb_K
+                @assert length(inserted) + length(removed_all) == inst.num_K
                 lp_debug = build_lp_model(inst)
                 rm_lines!(inst, params, lp_debug, collect(removed_all), true)
                 @assert iseq(viol, objective_value(lp_debug.model))
@@ -291,11 +291,11 @@ function violated_flows_neigh!(inst::Instance,
         it += 1
     end
     delta_runtime = time() - time_beg
-    delta_inserted = length(inserted) - nb_inserted_beg
+    delta_inserted = length(inserted) - num_inserted_beg
     delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
-                         delta_inserted / inst.nb_K, 
+                         delta_inserted / inst.num_K, 
                          delta_viol / init_viol)
 
     return best_viol, report
@@ -330,7 +330,7 @@ function g_lines_neigh(inst::Instance,
     set_attribute(lp_model.model, Gurobi.CallbackFunction(), barrier_callback)
 
     time_beg = time()
-    nb_rm_beg = length(removed)
+    num_rm_beg = length(removed)
     viol_beg = best_viol
 
     if params.debugging_level == 1
@@ -406,7 +406,7 @@ function g_lines_neigh(inst::Instance,
             best_viol = viol
 
             if params.debugging_level == 1
-                @assert length(inserted) + length(removed_all) == inst.nb_K
+                @assert length(inserted) + length(removed_all) == inst.num_K
                 lp_debug = build_lp_model(inst)
                 rm_lines!(inst, params, lp_debug, collect(removed_all), true)
                 @assert iseq(viol, objective_value(lp_debug.model))
@@ -418,11 +418,11 @@ function g_lines_neigh(inst::Instance,
     log(params, "End g lines neigh")
 
     delta_runtime = time() - time_beg
-    delta_rm = length(removed) - nb_rm_beg
+    delta_rm = length(removed) - num_rm_beg
     delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
-                         delta_rm / inst.nb_K, 
+                         delta_rm / inst.num_K, 
                          delta_viol / init_viol)
 
     return best_viol, report
@@ -514,9 +514,9 @@ function fix_start!(inst::Instance,
 
     # For the symmetry constraints.
     if params.model.is_symmetry_en
-        for j in 1:inst.nb_J
+        for j in 1:inst.num_J
             l = map_to_first_cand(inst, j)
-            for k in l + params.instance.nb_candidates - 2:-1:l
+            for k in l + params.instance.num_candidates - 2:-1:l
                 if iseq(inst.gamma[k], inst.gamma[k + 1]) &&
                 !(k in start.inserted) && k + 1 in start.inserted
                     start.f[k], start.f[k + 1] = start.f[k + 1], start.f[k]
@@ -527,13 +527,13 @@ function fix_start!(inst::Instance,
         end
     end
 
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        fix(md.x[k], 0; force = true)
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
+        fix(md.x[k - inst.num_J], 0; force = true)
     end
     for k in start.inserted
-        fix(md.x[k], 1.0; force = true)
+        fix(md.x[k - inst.num_J], 1.0; force = true)
     end
-    for l in 1:inst.nb_J + inst.nb_K
+    for l in 1:inst.num_J + inst.num_K
         fix(md.f[l], start.f[l])
     end
     for i in inst.I
@@ -544,21 +544,21 @@ function fix_start!(inst::Instance,
     end
 
     # Count, for existing line, the number of candidates inserted
-    # nb_cands = zeros(Int64, inst.nb_J)
-    # for j in 1:inst.nb_J
+    # num_cands = zeros(Int64, inst.num_J)
+    # for j in 1:inst.num_J
     #     l = map_to_first_cand(inst, j)
-    #     for k in l:l + params.nb_candidates - 1
+    #     for k in l:l + params.num_candidates - 1
     #         if k in start.x
-    #             nb_cands[j] += 1
+    #             num_cands[j] += 1
     #         end
     #     end
     # end
     # Insert the first candidates for a given existing line (due to the symmetry 
     # constraints)
-    # for j in 1:inst.nb_J
+    # for j in 1:inst.num_J
     #     l = map_to_first_cand(inst, j)
-    #     for k in l:l + nb_cands[j] - 1
-    #         fix(md.x[k], 1; force = true)
+    #     for k in l:l + num_cands[j] - 1
+    #         fix(md.x[k - inst.num_J], 1; force = true)
     #     end
     # end
 
@@ -582,12 +582,12 @@ function fix_start!(inst::Instance,
         @assert is_feas
     end
 
-    for k in inst.nb_J + 1:inst.nb_J + inst.nb_K
-        unfix(md.x[k])
-        # set_lower_bound(md.x[k], 0.0)
-        # set_upper_bound(md.x[k], 1.0)
+    for k in inst.num_J + 1:inst.num_J + inst.num_K
+        unfix(md.x[k - inst.num_J])
+        # set_lower_bound(md.x[k - inst.num_J], 0.0)
+        # set_upper_bound(md.x[k - inst.num_J], 1.0)
     end
-    for l in 1:inst.nb_J + inst.nb_K
+    for l in 1:inst.num_J + inst.num_K
         unfix(md.f[l])
     end
     for i in inst.I
