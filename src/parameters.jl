@@ -37,7 +37,7 @@ Base.@kwdef mutable struct Parameters
     dir::String = "TEP.jl"
     dir_log::String = "log"
     debugging_level::Int64 = 0
-    log_level::Int64 = 2
+    log_level::Int64 = 0
     solver_time_limit::Float64 = 1.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()

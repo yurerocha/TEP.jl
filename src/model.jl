@@ -19,7 +19,7 @@ function build_mip_model(inst::Instance,
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
     end
     
-    x = @variable(md, x[k = 1:inst.num_K], base_name = "x")
+    x = @variable(md, binary = true, x[k = 1:inst.num_K], base_name = "x")
     # x = Dict{Int, JuMP.VariableRef}()
     # for k in inst.num_J + 1:inst.num_J + inst.num_K
     #     # Forcing to build candidates
@@ -271,7 +271,7 @@ Set the objective to minimize the costs of expanding the network.
 function set_obj(inst::Instance, 
                  md::JuMP.Model,
                  x::Vector{JuMP.JuMP.VariableRef})
-    e = AffExpr(0.0)
+    e::AffExpr = AffExpr(0.0)
     for k in inst.num_J + 1:inst.num_J + inst.num_K
         # e += inst.cost[k] * x[k]
         add_to_expression!(e, inst.cost[k], x[k - inst.num_J])

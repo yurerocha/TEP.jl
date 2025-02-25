@@ -9,6 +9,7 @@ using JuMP
 using Karnak
 using LinearAlgebra
 using LinearSolve
+using OrderedCollections # OrderedDict
 using Printf
 # using ProfileView
 using Random
@@ -24,6 +25,8 @@ include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
 include("utils.jl")
+include("deterministic/deterministic_equivalent.jl")
+include("deterministic/utils.jl")
 include("progressive_hedging/data.jl")
 include("progressive_hedging/progressive_hedging.jl")
 include("progressive_hedging/utils.jl")

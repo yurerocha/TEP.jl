@@ -1,5 +1,5 @@
 """
-    progressive_hedging()
+    run_progressive_hedging()
 
 Implementation of the sequential progressive hedging algorithm. 
 
@@ -9,7 +9,7 @@ Assumptions
     1. Binary first-stage variables.
 """
 # TODO: Consider non-binary first stage decision variables
-function progressive_hedging()
+function run_progressive_hedging!()
     params = Parameters()
 
     file = "pglib_opf_case5_pjm_stoc.txt"
@@ -34,12 +34,12 @@ function progressive_hedging()
                 # TODO: Change LP objective as well
                 # TODO: Run heuristic in every it
                 md = build_mip_model(inst, params, scen, logsolver)
+                set_state!(md.model, md.x)
+                
                 (start, _) = build_solution(inst, params, scen, logsolver)
-
                 fix_start!(inst, params, scen, md, start)
                 solve!(params, md)
 
-                set_state!(md.model, md.x)
                 # Store model at first it
                 models[scen] = md
                 @warn "Done", it, scen
@@ -50,22 +50,25 @@ function progressive_hedging()
                 md = models[scen]
                 delta_obj = comp_new_delta_objective(params, cache, 
                                                      md.model, scen)
+                @info delta_obj
                 @objective(md.model, Min, md.obj + delta_obj)
                 solve!(params, md)
             end
+            @warn value.(md.x)
             
             update_cache_incumbent!(cache, scen, md.model)
 
         end
+        readline()
         # Aggregation
         update_cache_x_hat!(inst, cache)
 
         # Price update
         update_cache_omega!(inst, params, cache)
 
-        update_cache_x_average!(inst, params, cache)
-
         # Termination criterion
+        update_cache_x_average!(inst, cache)
+
         update_cache_best_convergence_delta!(inst, cache, it)
 
         @warn it
