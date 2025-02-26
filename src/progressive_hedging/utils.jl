@@ -25,9 +25,7 @@ end
 
 function update_cache_incumbent!(cache::Cache, scen::Int64, md::JuMP.Model)
     incumbent = get_state_values(md)
-    @warn "Antes: $(cache.x[scen])"
     cache.x[scen] = incumbent.x
-    @warn "Depois: $(cache.x[scen])"
     cache.y[scen] = incumbent.y
     return nothing
 end
@@ -35,7 +33,6 @@ end
 function update_cache_x_hat!(inst::Instance, cache::Cache)
     cache.x_hat = sum(inst.scenarios[scen].p * cache.x[scen] 
                       for scen in 1:inst.num_scenarios)
-    @info "x_hat: $(cache.x_hat)"
     return nothing
 end
 
@@ -61,13 +58,9 @@ function update_cache_best_convergence_delta!(inst::Instance,
                                               it::Int64)
     conv_delta = 0.0
     for scen in 1:inst.num_scenarios
-        println(cache.x[scen], cache.x_average)
         delta = maximum(abs, cache.x[scen] - cache.x_average)
-        println(delta)
         conv_delta = max(conv_delta, delta)
     end
-    @warn "Conv delta: $conv_delta"
-    @warn "Best: $(cache.best_convergence_delta)"
     if isl(conv_delta, cache.best_convergence_delta)
         cache.best_convergence_delta = conv_delta
         cache.best_it = it

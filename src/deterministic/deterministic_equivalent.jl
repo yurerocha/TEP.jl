@@ -21,15 +21,26 @@ function solve_deterministic_equivalent!()
 
     # Initialization
     cache = Cache(inst.num_scenarios, inst.num_K)
-    models = Vector{MIPModel}(undef, inst.num_scenarios)
 
-    model = JuMP.Model()
+    mip_model = MIPModel(JuMP.Model(Gurobi.Optimizer), 
+                         Vector{JuMP.VariableRef}(), 
+                         Vector{JuMP.VariableRef}(), 
+                         Dict{Int, JuMP.VariableRef}(), 
+                         Vector{JuMP.VariableRef}(), 
+                         Vector{JuMP.VariableRef}(), 
+                         AffExpr(0.0))
+    subproblems = Vector{JuMP.Model}(undef, inst.num_scenarios)
     for scen in 1:inst.num_scenarios
         # TODO: Change LP objective as well
         # TODO: Run heuristic in every it
         subproblem = build_mip_model(inst, params, scen, logsolver)
         set_state!(subproblem.model, subproblem.x)
-        add_subproblem!(model, subproblem.model, scen)
+        add_subproblem!(mip_model.model, subproblem.model, scen)
+        subproblems[scen] = subproblem.model
     end
-    # Algoritmo
+    add_non_anticipativity_constrs!(inst, mip_model.model, subproblems)
+    solve!(params, mip_model)
+    for scen in 1:inst.num_scenarios
+        println("Scen#$(scen): $(value.(subproblems[scen].ext[:state].x))")
+    end
 end

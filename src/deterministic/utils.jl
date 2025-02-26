@@ -67,15 +67,35 @@ function build_expr(var::JuMP.VariableRef,
 end
 
 """
+    update_state_vars!(model::JuMP.Model, 
+                            subproblem::JuMP.Model, 
+                            var_in_model::Dict{JuMP.VariableRef, 
+                                               JuMP.VariableRef})
 
 Update the state variables of the subproblem with the state variables of the
 model.
 """
 function update_state_vars!(model::JuMP.Model, 
-                         subproblem::JuMP.Model, 
-                         var_in_model::Dict{JuMP.VariableRef, JuMP.VariableRef})
+                            subproblem::JuMP.Model, 
+                            var_in_model::Dict{JuMP.VariableRef, 
+                                               JuMP.VariableRef})
     x = [build_expr(x, var_in_model) for x in subproblem.ext[:state].x]
     y = [build_expr(y, var_in_model) for y in subproblem.ext[:state].y]
     subproblem.ext[:state] = Variables(x, y)
+    return nothing
+end
+
+"""
+
+Add constraints to make the first-stage decisions for all subproblems to be the
+same.
+"""
+function add_non_anticipativity_constrs!(inst::Instance, 
+                                         model::JuMP.Model, 
+                                         subproblems::Vector{JuMP.Model})
+    for scen in 2:inst.num_scenarios
+        @constraint(model, subproblems[1].ext[:state].x .== 
+                           subproblems[scen].ext[:state].x)
+    end
     return nothing
 end

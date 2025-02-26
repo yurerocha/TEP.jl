@@ -10,7 +10,7 @@ function build_mip_model(inst::Instance,
                          params::Parameters, 
                          scenario_id::Int64, 
                          logfile::String = "TEP.jl/log/log.txt")
-    md = Model(Gurobi.Optimizer)
+    md = JuMP.Model(Gurobi.Optimizer)
     # config(md, logfile)
     if params.log_level >= 2
         set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
@@ -104,7 +104,7 @@ function build_lp_model(inst::Instance,
                         params::Parameters, 
                         scenario_id::Int64, 
                         logfile::String = "TEP.jl/log/log.txt")
-    md = Model(Gurobi.Optimizer)
+    md = JuMP.Model(Gurobi.Optimizer)
     # config(md, logfile)
     if params.log_level >= 3
         set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)

@@ -164,3 +164,24 @@ Sem restrições de simetria
 - https://github.com/WISPO-POP/CATS-CaliforniaTestSystem
   - Pegar esses cenários e colocar nas nossas instâncias
 - https://ieeexplore.ieee.org/document/9678074
+
+[12:57, 11/02/2025] Joaquim Garcia: Os geradores podem ter um custo sim, achei que ja tivessemos.
+No nosso caso,
+1o estagio é a decisao dos investimentos 
+2o estagio é o resto: gerqcao fluxo e angulo por cenario. Vamos por coeficientes para custo de geracao sim, tem nas bases
+[13:00, 11/02/2025] Joaquim Garcia: Sobre os geradores, vamos apenas considerar o custo variavel deles, não vamos considerar investimento em geradores agora
+[13:01, 11/02/2025] Joaquim Garcia: Sobre as folgas nos arcos, acho excelente, temos que lembrar que precisa ter alguma penalidade associada pra não ficar bobo
+[13:02, 11/02/2025] Joaquim Garcia: QP tem duas coisas:
+1- linear por parte é uma coisa util
+2- as vezes as variaveis envolvidas são binarias, ai é facil porque x*x = x, ai simplifica
+
+## TODO
+- Implementar um progressive hedging genérico que resolva qualquer problema estocástico
+- Fix callbacks nested function definitions to use model.ext[:data]
+- Implementar de forma genérica, mas dar ao usuário a possibilidade de passar 
+  alguns dados extras e possivelmente melhorar a performance
+- Migrar as structs do LP e MIP model para o .ext
+- Pedir para JDG explicar melhor o determinístico equivalente
+- Add config file
+- Ler: https://docs.julialang.org/en/v1/manual/performance-tips/
+- Add log status
