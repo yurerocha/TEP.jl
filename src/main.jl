@@ -125,3 +125,31 @@ function tuning()
     #     count_exp += 1
     # end
 end
+
+function solve(file::String)
+    params = Parameters()
+    params.log_file *= "/" * get_inst_name(file) * ".txt"
+
+    # params.solution_strategy = Deterministic()
+
+    inst = nothing
+    if occursin("CATS-CaliforniaTestSystem", file)
+        # Read the CATS system, with multiple scenarios
+        inst = build_cats_system(params)
+    else
+        # Read the pglib-opf instances with single scenarios
+        mp_data = PowerModels.parse_file(file)
+        inst = build_instance(params, mp_data)
+    end
+
+    if params.solution_strategy isa Deterministic
+        log(params, "Deterministic solution strategy", true)
+        solve_deterministic!(inst, params)
+    elseif params.solution_strategy isa Serial
+        log(params, "Serial solution strategy", true)
+        run_serial_ph!(inst, params)
+    elseif params.solution_strategy isa Parallel
+        # TODO: Call Parallel PH
+        println("Parallel solution strategy", true)
+    end
+end

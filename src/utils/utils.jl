@@ -39,25 +39,6 @@ function get_num(s::Vector{String}, i::Int64)
 end
 
 """
-    get_filename(input::String)
-
-Return the filename without the path and the extension.
-"""
-function get_filename(input::String)
-    e = split(input, "/")[end]
-    return split(e, ".")[1]
-end
-
-"""
-    comp_gamma(x, r=0.0)
-
-Compute the susceptance of a circuit.
-"""
-function comp_gamma(x::Float64, r::Float64 = 0.0)
-    return x / (x^2 + r^2)
-end
-
-"""
     get_circuit(inst, l)
 
 Return the circuit at position l.
@@ -200,53 +181,6 @@ function comp_candidate_incident_flows(inst::Instance,
         end
     end
     return e
-end
-
-function populate_circuits(params::Parameters, 
-                           I::Set{Int64}, 
-                           circuits::Vector{Circuit}, 
-                           gamma::Vector{Float64}, 
-                           f_bar::Vector{Float64}, 
-                           cost::Vector{Float64}, 
-                           s::Vector{String}, 
-                           num_line::Int64, 
-                           num_circs::Int64, 
-                           is_cand_en::Bool = false, 
-                           rng = Random.default_rng())
-    for i in num_line:num_line + num_circs - 1
-        d = split(s[i])
-        circ = Circuit(parse(Int64, d[1]), parse(Int64, d[2]))
-        num = params.instance.num_candidates
-        if !is_cand_en
-            num = parse(Int64, d[3])
-        end
-        for _ in 1:num
-            # Update the set of buses
-            if !in(circ.fr, I)
-                push!(I, circ.fr)
-            end
-            if !in(circ.to, I)
-                push!(I, circ.to)
-            end
-
-            push!(circuits, circ)
-
-            x = parse(Float64, d[4])
-            if iseq(x, 0.0)
-                throw(ArgumentError("Reactance equal to zero."))
-            end
-
-            push!(gamma, comp_gamma(x))
-            push!(f_bar, parse(Float64, d[5]))
-            bc = parse(Float64, d[6])
-            c = bc
-            if is_cand_en
-                rn = rand(rng, 1:params.instance.max_rand)
-                c = bc / (params.instance.num_candidates + 1) + bc / rn
-            end
-            push!(cost, c)
-        end
-    end
 end
 
 """
@@ -621,7 +555,7 @@ Compute the cost of the solution.
 function comp_cost(inst::Instance, inserted::Set{Int64})
     cost = 0.0
     for k in inserted
-        cost += inst.cost[k]
+        cost += inst.cost[k - inst.num_J]
     end
     return cost
 end
@@ -638,7 +572,7 @@ function comp_new_cost(inst::Instance,
                        removed::Vector{Int64})
     new_cost = old_cost
     for k in removed
-        new_cost -= inst.cost[k]
+        new_cost -= inst.cost[k - inst.num_J]
     end
     return new_cost
 end
@@ -728,4 +662,29 @@ function comp_gd_ratio(inst::Instance)
         sum_d += d
     end
     return sum_g / sum_d
+end
+
+# TODO: Since it is also used in the deterministic equivalente, move the below
+# definition to another file
+function set_state!(md::JuMP.Model, 
+                    x::Vector{JuMP.VariableRef}, 
+                    y::Vector{JuMP.VariableRef} = Vector{JuMP.VariableRef}())
+    # In case the x is a single variable instead of a vector
+    if x isa JuMP.VariableRef
+        x = [x]
+    end
+    if y isa JuMP.VariableRef
+        y = [y]
+    end
+    if !(:state in keys(md.ext))
+        md.ext[:state] = []
+    end
+    md.ext[:state] = Variables(x, y)
+    return nothing
+end
+
+function get_state_values(md::JuMP.Model)
+    x = md.ext[:state].x
+    y = md.ext[:state].y
+    return Variables(value.(x), value.(y))
 end

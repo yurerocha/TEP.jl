@@ -1,111 +1,22 @@
-function read_instance(params::Parameters, 
-                       filename::String, 
-                       rng::MersenneTwister)
-    s = open(filename) do f
-        readlines(f)
-    end
-    I = Set{Int}()
-    i = 1
-    num_I = get_num(s, i)
-    i += 2
-
-    J = Vector{Circuit}(undef, 0)
-    gamma = Vector{Float64}(undef, 0)
-    f_bar = Vector{Float64}(undef, 0)
-    cost = Vector{Float64}(undef, 0)
-    num_ex_circs = get_num(s, i)
-    i += 2
-    try 
-        populate_circuits(params, I, J, gamma, f_bar, cost, s, i, num_ex_circs)
-    catch e
-        throw(e)
-    end
-
-    i += num_ex_circs + 1
-
-    K = Array{Circuit}(undef, 0)
-    num_ca_circs = get_num(s, i)
-    i += 2
-    try
-        populate_circuits(params, I, K, gamma, f_bar, cost, 
-                          s, i, num_ca_circs, true, rng)
-    catch e
-        throw(e)
-    end
-    i += num_ca_circs + 1
-
-    num_scenarios = get_num(s, i)
-    @show num_scenarios
-    i += 2
-
-    scenarios = Vector{Scenario}(undef, 0)
-    for _ in 1:num_scenarios
-        id = get_num(s, i)
-        i += 1
-
-        P = parse(Float64, split(s[i], ":")[2])
-        i += 1
-
-        num_gen_dem = get_num(s, i)
-        i += 2
-
-        D = zeros(num_I)
-        G = Dict{Int, Float64}()
-        # Update I here?
-        sumG = 0.0
-        sumD = 0.0
-        # The demand is increased according to param_mult_load
-        for j in i:i + num_gen_dem - 1
-            v = split(s[j])
-            bus = parse(Int64, v[1])
-            g = parse(Float64, v[2])
-            if !iseq(g, 0.0)
-                G[bus] = g
-                sumG += g
-            end
-            D[bus] = params.instance.load_mult * parse(Float64, v[3])
-            sumD += D[bus]
-        end
-        # The generation is increased according to the amount required to meet 
-        # the new demand with a given random slack between 0.05 and mult
-        # mult_gen = ((1.0 + gen_slack_percent) +
-        #             rand(rng) * gen_max_add_slack_percent) * (sumD / sumG)
-        # mult_gen = ceil((1.0 + param_g_slack) * (sumD / sumG))
-        mult_gen = (1.0 + params.instance.g_slack) * (sumD / sumG)
-
-        for (bus, g) in G
-            G[bus] = mult_gen * g
-        end
-
-        scenarios = push!(scenarios, Scenario(P, D, G))
-        i += num_gen_dem + 1
-    end
-    
-    return Instance(I, gamma, 
-                    f_bar, cost, 
-                    J, K,
-                    num_I, 
-                    length(J), 
-                    length(K), 
-                    scenarios, 
-                    num_scenarios)
-end
-
 """
-    comp_sum_d_sum_g(inst::Instance)
+    build_instance(params::Parameters, 
+                   mp_data::Dict{String, Any})
 
-Compute summation of demand and summation of generation.
+Parse a MATPOWER input file to an Instance data structure.
 """
-function comp_sum_d_sum_g(inst::Instance)
-    sum_d = 0.0
-    sum_g = 0.0
-    for i in inst.I
-        # Some buses may not have load or generation
-        d = inst.D[i]
-        g = i in keys(inst.G) ? inst.G[i] : 0.0
+function build_instance(params::Parameters, 
+                        mp_data::Dict{String, Any})
+    # TODO: Store index_in_vec in instance
+    index_in_vec = map_ids_to_indices(mp_data)
 
-        sum_d += d
-        sum_g += g
-    end
-    return sum_d, sum_g
+    I = Set(values(index_in_vec))
+    D = build_loads(mp_data, index_in_vec)
+    G = build_gens(mp_data, index_in_vec)
+    J, gamma, f_bar = build_existing_circuits(mp_data, index_in_vec)
+    K, cost = build_candidate_circuits!(params, J, gamma, f_bar)
+    scenarios = [Scenario(1.0, D, G)]
+
+    return Instance(I, J, K, gamma, f_bar, cost, 
+                    length(I), length(J), length(K), 
+                    scenarios, length(scenarios))
 end

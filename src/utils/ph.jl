@@ -1,28 +1,3 @@
-# TODO: Since it is also used in the deterministic equivalente, move the below
-# definition to another file
-function set_state!(md::JuMP.Model, 
-                    x::Vector{JuMP.VariableRef}, 
-                    y::Vector{JuMP.VariableRef} = Vector{JuMP.VariableRef}())
-    # In case the x is a single variable instead of a vector
-    if x isa JuMP.VariableRef
-        x = [x]
-    end
-    if y isa JuMP.VariableRef
-        y = [y]
-    end
-    if !(:state in keys(md.ext))
-        md.ext[:state] = []
-    end
-    md.ext[:state] = Variables(x, y)
-    return nothing
-end
-
-function get_state_values(md::JuMP.Model)
-    x = md.ext[:state].x
-    y = md.ext[:state].y
-    return Variables(value.(x), value.(y))
-end
-
 function update_cache_incumbent!(cache::Cache, scen::Int64, md::JuMP.Model)
     incumbent = get_state_values(md)
     cache.x[scen] = incumbent.x
@@ -70,6 +45,10 @@ function update_cache_best_convergence_delta!(inst::Instance,
 end
 
 """
+    comp_new_delta_objective(params::Parameters, 
+                             cache::Cache, 
+                             md::JuMP.Model, 
+                             scen::Int64)
 
 Compute the delta objective associated with the last progressive hedging 
 iteration to incorporate in the new objective function.

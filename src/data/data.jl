@@ -53,20 +53,20 @@ struct Circuit
     to::Int64 # "to" bus
 end
 
-struct Scenario
+mutable struct Scenario
     # id::Int64
     p::Float64 # Probability
     D::Vector{Float64} # Load
     G::Dict{Int64, Float64} # Generation
 end
 
-struct Instance
+mutable struct Instance
     I::Set{Int64} # Buses
-    gamma::Vector{Float64} # Susceptance of circuits
-    f_bar::Vector{Float64} # Capacity of circuits
-    cost::Vector{Float64}
     J::Vector{Circuit} # Existing circuits
     K::Vector{Circuit} # Candidate circuits
+    f_bar::Vector{Float64} # Capacity of circuits
+    gamma::Vector{Float64} # Susceptance of circuits
+    cost::Vector{Float64} # Cost of candidate circuits
     num_I::Int64 # Number of buses
     num_J::Int64 # Number of existing circuits
     num_K::Int64 # Number of candidate circuits
@@ -94,6 +94,31 @@ struct LPModel
     s::Vector{JuMP.VariableRef}
     f_cons::Vector{JuMP.ConstraintRef}
     fkl_cons::Vector{JuMP.ConstraintRef}
+end
+
+# ----------------------------- PH data structures -----------------------------
+mutable struct Cache
+    it::Int64
+    omega::Vector{Vector{Float64}}
+    x_hat::Vector{Float64}
+    x::Vector{Vector{Float64}}
+    y::Vector{Vector{Float64}}
+    x_average::Vector{Float64}
+    best_convergence_delta::Float64
+    best_it::Int64
+
+    Cache(num_scenarios, num_vars) = new(0, 
+                                     [zeros(num_vars) for _ in 1:num_scenarios], 
+                                     Vector{Float64}(), 
+                                     Vector{Vector{Float64}}(undef, num_vars), 
+                                     Vector{Vector{Float64}}(undef, num_vars), 
+                                     Vector{Float64}(), 
+                                     const_infinite, 0)
+end
+
+struct Variables
+    x::Vector{Union{Float64, JuMP.VariableRef}}
+    y::Vector{Union{Float64, JuMP.VariableRef}}
 end
 
 # ------------------------------ Type declarations -----------------------------

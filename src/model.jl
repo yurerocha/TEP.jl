@@ -1,19 +1,16 @@
 """
     build_model(inst::Instance, 
                 params::Parameters, 
-                scenario_id::Int64, 
-                logfile::String = "TEP.jl/log/log.txt")
+                scenario_id::Int64)
 
 Build mixed-integer linear programming model.
 """
 function build_mip_model(inst::Instance, 
                          params::Parameters, 
-                         scenario_id::Int64, 
-                         logfile::String = "TEP.jl/log/log.txt")
+                         scenario_id::Int64)
     md = JuMP.Model(Gurobi.Optimizer)
-    # config(md, logfile)
     if params.log_level >= 2
-        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
+        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
     else
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
@@ -93,8 +90,7 @@ end
 """
     build_lp_model(inst::Instance, 
                    params::Parameters, 
-                   scenario_id::Int64, 
-                   logfile::String = "TEP.jl/log/log.txt")
+                   scenario_id::Int64)
 
 Build linear programming model.
 
@@ -102,12 +98,10 @@ The gamma values can be used to simulate building a candidate line.
 """
 function build_lp_model(inst::Instance, 
                         params::Parameters, 
-                        scenario_id::Int64, 
-                        logfile::String = "TEP.jl/log/log.txt")
+                        scenario_id::Int64)
     md = JuMP.Model(Gurobi.Optimizer)
-    # config(md, logfile)
     if params.log_level >= 3
-        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
+        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
     else
         set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
@@ -274,7 +268,7 @@ function set_obj(inst::Instance,
     e::AffExpr = AffExpr(0.0)
     for k in inst.num_J + 1:inst.num_J + inst.num_K
         # e += inst.cost[k] * x[k]
-        add_to_expression!(e, inst.cost[k], x[k - inst.num_J])
+        add_to_expression!(e, inst.cost[k - inst.num_J], x[k - inst.num_J])
     end
 
     @objective(md, Min, e)
@@ -421,13 +415,3 @@ function add_symmetry_constrs(inst::Instance,
         end
     end
 end
-
-
-# function config(model::JuMP.Model, logfile::String)
-#     if params.log_level == 2
-#         set_attribute(model, MOI.RawOptimizerAttribute("LogFile"), logfile)
-#         set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-#     else
-#         set_attribute(model, MOI.RawOptimizerAttribute("LogToConsole"), 0)
-#     end
-# end

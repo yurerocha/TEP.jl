@@ -2,11 +2,20 @@ const const_eps = 1e-5
 const MAXINT = 2e9 # Gurobi MAXINT value
 const const_infinite = 2.0e9
 
+abstract type AbstractSolutionStrategy end
+
+struct Serial <: AbstractSolutionStrategy end
+
+struct Deterministic <: AbstractSolutionStrategy end
+
+struct Parallel <: AbstractSolutionStrategy end
+
 Base.@kwdef mutable struct InstanceParameters
-    load_mult = 2.0 # Multiplier for the load
-    g_slack = 0.15 # Generation slack with respect to the load
-    max_rand = 100 # Max random value for the new cost (see text)
-    num_candidates = 2 # Number of candidates available per existing line
+    load_mult::Float64 = 2.0 # Multiplier for the load
+    g_slack::Float64 = 0.15 # Generation slack with respect to the load
+    max_rand::Int64 = 100 # Max random value for the new cost (see text)
+    num_candidates::Int64 = 2 # Number of candidates available per existing line
+    cost_mult::Float64 = 100.0 # Value multiplied by gamma to build the costs
 end
 
 Base.@kwdef mutable struct ModelParameters
@@ -34,14 +43,15 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
 end
 
 Base.@kwdef mutable struct Parameters
-    dir::String = "TEP.jl"
-    dir_log::String = "log"
+    log_level::Int64 = 3
+    log_file::String = "TEP.jl/log"
     debugging_level::Int64 = 0
-    log_level::Int64 = 0
-    solver_time_limit::Float64 = 1.0
+    solver_time_limit::Float64 = 60.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()
     progressive_hedging::ProgressiveHedgingParameters = 
                                                   ProgressiveHedgingParameters()
+    rng::MersenneTwister = Random.MersenneTwister(123)
+    solution_strategy::AbstractSolutionStrategy = Serial()
 end

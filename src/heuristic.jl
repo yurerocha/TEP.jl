@@ -1,17 +1,15 @@
 """
     build_solution(inst::Instance, 
                    params::Parameters, 
-                   scenario_id::Int64, 
-                   logfile::String)
+                   scenario_id::Int64)
 
 Build solution with the full linear programming model.
 """
 function build_solution(inst::Instance, 
                         params::Parameters, 
-                        scenario_id::Int64, 
-                        logfile::String)
+                        scenario_id::Int64)
     # At the first it, there are no candidate lines
-    lp_model = build_lp_model(inst, params, scenario_id, logfile)
+    lp_model = build_lp_model(inst, params, scenario_id)
 
     lines = collect(inst.num_J + 1:inst.num_J + inst.num_K)
     inserted = Set{Int64}(lines)
