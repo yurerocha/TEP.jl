@@ -10,7 +10,8 @@ function build_cats_system(params::Parameters)
     save_to_JSON = false
     save_summary = false
     start_scen = 8649
-    N = 8760
+    # N = 8760
+    N = 8660
     # run for N hours (scenarios)
 
     # Specify solver
@@ -65,9 +66,10 @@ function build_cats_system(params::Parameters)
             # Change load buses' Pd and Qd for the current scenario
             update_loads!(k, load_scenarios, NetworkData, load_mapping)
 
-            D = build_loads(NetworkData, index_in_vec)
-            G = build_gens(NetworkData, index_in_vec)
-            push!(scenarios, Scenario(p, D, G))
+            D = build_loads(params, NetworkData, index_in_vec)
+            G = build_gens(params, NetworkData, index_in_vec)
+            gen_cost = build_gen_costs(NetworkData, index_in_vec)
+            push!(scenarios, Scenario(p, D, G, gen_cost))
 
             # Run power flow
             # solution = PowerModels.solve_opf(NetworkData, ACPPowerModel, solver)

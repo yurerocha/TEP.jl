@@ -130,7 +130,7 @@ function solve(file::String)
     params = Parameters()
     params.log_file *= "/" * get_inst_name(file) * ".txt"
 
-    # params.solution_strategy = Deterministic()
+    params.solution_strategy = Serial()
 
     inst = nothing
     if occursin("CATS-CaliforniaTestSystem", file)

@@ -41,17 +41,35 @@ function add_subproblem!(model::JuMP.Model, subproblem::JuMP.Model, scen::Int64)
 end
 
 """
-    build_expr(constr::JuMP.AffExpr, 
+    build_expr(constr::AffQuadExpr, 
                var_in_model::Dict{JuMP.VariableRef, JuMP.VariableRef})
 
 Build a new constraint equal to the one in the subproblem, but involving the 
 variables in the model.
 """
-function build_expr(constr::JuMP.AffExpr, 
-                    var_in_model::Dict{JuMP.VariableRef, JuMP.VariableRef})
-    return JuMP.AffExpr(constr.constant, 
-                        OrderedDict(var_in_model[var] => coef 
-                                    for (var, coef) in constr.terms))
+function build_expr(constr::T, 
+                var_in_model::Dict{JuMP.VariableRef, JuMP.VariableRef}) where 
+                                    T <: Union{AffQuadExpr, JuMP.VariableRef}
+    if constr isa JuMP.AffExpr
+        return JuMP.AffExpr(constr.constant, 
+                            OrderedDict(var_in_model[var] => coef 
+                                        for (var, coef) in constr.terms))
+    elseif constr isa JuMP.QuadExpr
+        # Build the aff expr with the vars in the model
+        e = AffExpr()
+        for (var, coef) in constr.aff.terms
+            add_to_expression!(e, coef, var_in_model[var])
+        end
+        terms = OrderedDict{UnorderedPair{JuMP.VariableRef}, Float64}()
+        for (var, coef) in constr.terms
+            p = UnorderedPair{JuMP.VariableRef}(var_in_model[var.a], 
+                                                var_in_model[var.b])
+            terms[p] = coef
+        end
+        return JuMP.QuadExpr(e, terms)
+    else
+        return var_in_model[var]
+    end
 end
 
 """

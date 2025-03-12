@@ -24,10 +24,10 @@ function run_serial_ph!(inst::Instance, params::Parameters)
                 # TODO: Change LP objective as well
                 # TODO: Run heuristic in every it
                 md = build_mip_model(inst, params, scen)
-                set_state!(md.model, md.x)
+                set_state!(md.model, md.x, collect(values(md.g)))
                 
-                (start, _) = build_solution(inst, params, scen)
-                fix_start!(inst, params, scen, md, start)
+                # (start, _) = build_solution(inst, params, scen)
+                # fix_start!(inst, params, scen, md, start)
                 solve!(params, md)
 
                 # Store model at first it

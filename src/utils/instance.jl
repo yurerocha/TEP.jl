@@ -4,7 +4,7 @@
 Compute the susceptance of a circuit.
 """
 function comp_gamma(x::Float64, r::Float64 = 0.0)
-    return x / (x^2 + r^2)
+    return -x / (r^2 + x^2)
 end
 
 """
@@ -48,35 +48,64 @@ function map_ids_to_indices(mp_data::Dict{String, Any})
 end
 
 """
-    build_loads(mp_data::Dict{String, Any}, index_in_vec::Dict{Int64, Int64})
+    build_loads(params::Parameters, 
+                mp_data::Dict{String, Any}, 
+                index_in_vec::Dict{Int64, Int64})
 
 Build Vector of loads (Pd) from the MATPOWER file.
 """
-function build_loads(mp_data::Dict{String, Any}, 
+function build_loads(params::Parameters, 
+                     mp_data::Dict{String, Any}, 
                      index_in_vec::Dict{Int64, Int64})
     D = zeros(length(index_in_vec))
     for l in mp_data["load"]
-        i = index_in_vec[l[2]["load_bus"]]
-        D[i] = l[2]["pd"]
+        # Disregard negative loads
+        if isg(l[2]["pd"], 0.0)
+            i = index_in_vec[l[2]["load_bus"]]
+            D[i] += params.instance.load_gen_mult * l[2]["pd"]
+        end
     end
     return D
 end
 
 """
-    build_gens(mp_data::Dict{String, Any}, index_in_vec::Dict{Int64, Int64})
+    build_gens(params::Parameters, 
+               mp_data::Dict{String, Any}, 
+               index_in_vec::Dict{Int64, Int64})
 
 Build Dict of generations (Pg) from MATPOWER file.
 """
-function build_gens(mp_data::Dict{String, Any}, 
+function build_gens(params::Parameters, 
+                    mp_data::Dict{String, Any}, 
                     index_in_vec::Dict{Int64, Int64})
-    G = Dict{Int64, Float64}()
+    G = Dict{Int64, Tuple{Int64, Float64}}()
     for g in mp_data["gen"]
-        i = index_in_vec[g[2]["gen_bus"]]
-        if !iseq(g[2]["pg"], 0.0)
-            G[i] = g[2]["pg"]
+        # Disregard negative generation capacities
+        if isg(g[2]["pmax"], 0.0)
+            i = g[2]["index"]
+            bus = index_in_vec[g[2]["gen_bus"]]
+            G[i] = (bus, params.instance.load_gen_mult * g[2]["pmax"])
         end
     end
     return G
+end
+
+"""
+    build_gen_costs(mp_data::Dict{String, Any}, 
+                    index_in_vec::Dict{Int64, Int64})
+
+Build Dict with unit costs of generation per bus.
+"""
+function build_gen_costs(mp_data::Dict{String, Any}, 
+                         index_in_vec::Dict{Int64, Int64})
+    gen_costs = Dict{Int64, Vector{Float64}}()
+    for g in mp_data["gen"]
+        if length(g[2]["cost"]) > 0
+            i = g[2]["index"]
+            gen_costs[i] = g[2]["cost"]
+        end
+    end
+    return gen_costs
 end
 
 """
@@ -91,27 +120,31 @@ function build_existing_circuits(mp_data::Dict{String, Any},
     J = Vector{Circuit}(undef, n)
     gamma = Vector{Float64}(undef, n)
     f_bar = Vector{Float64}(undef, n)
-    for (i, b) in enumerate(mp_data["branch"])
+    j = 1
+    for b in mp_data["branch"]
+        x = b[2]["br_x"]
+        r = b[2]["br_r"]
+
+        if iseq(x, 0.0)
+            fr = b[2]["f_bus"]
+            to = b[2]["t_bus"]
+            # @warn "x = 0.0 in circuit ($fr, $to)."
+            # throw(ArgumentError("Error: x = 0.0 in circuit ($fr, $to)."))
+            continue
+        end
         fr = index_in_vec[b[2]["f_bus"]]
         to = index_in_vec[b[2]["t_bus"]]
-        J[i] = Circuit(fr, to)
+        J[j] = Circuit(fr, to)
 
-        x = b[2]["br_x"]
-        # r = b[2]["br_r"]
-        if !iseq(x, 0.0)
-            # fr = b[2]["f_bus"]
-            # to = b[2]["t_bus"]
-            # throw(ArgumentError("Error: x = 0.0 in circuit ($fr, $to)."))
-            gamma[i] = comp_gamma(x)
-        # elseif !iseq(r, 0.0)
-        #     gamma[i] = comp_gamma(x, r)
-        else
-            @warn "Error: x = 0.0 in circuit ($fr, $to)."
-            gamma[i] = 0.0
-        end
-
-        f_bar[i] = b[2]["rate_a"]
+        f_bar[j] = b[2]["rate_a"]
+        gamma[j] = comp_gamma(x, r)
+        j += 1
     end
+    # Discard unused indices due to x = 0.0
+    J = J[1:j - 1]
+    f_bar = f_bar[1:j - 1]
+    gamma = gamma[1:j - 1]
+
     return J, gamma, f_bar
 end
 
@@ -141,6 +174,7 @@ function build_candidate_circuits!(params::Parameters,
             rand_num = rand(params.rng, 1:params.instance.max_rand)
             cost[l] = base_cost * (1.0 / (params.instance.num_candidates + 1) +
                                    1.0 / rand_num)
+            cost[l] = abs(cost[l])
             
             push!(gamma, gamma[j])
             push!(f_bar, f_bar[j])

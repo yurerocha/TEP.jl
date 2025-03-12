@@ -11,7 +11,7 @@ struct Deterministic <: AbstractSolutionStrategy end
 struct Parallel <: AbstractSolutionStrategy end
 
 Base.@kwdef mutable struct InstanceParameters
-    load_mult::Float64 = 2.0 # Multiplier for the load
+    load_gen_mult::Float64 = 1.0 # Multiplier for the load and generation
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
     max_rand::Int64 = 100 # Max random value for the new cost (see text)
     num_candidates::Int64 = 2 # Number of candidates available per existing line
@@ -21,7 +21,8 @@ end
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
     penalty::Float64 = 1e6
-    is_symmetry_en = false
+    is_symmetry_en::Bool = false
+    is_dcp_power_model_en::Bool = false # Build DCPPowerModel
 end
 
 Base.@kwdef mutable struct HeuristicParameters
@@ -36,6 +37,7 @@ Base.@kwdef mutable struct HeuristicParameters
     gl_strategy::Int64 = 3 
 end
 
+# TODO: ProgressiveHedging -> PH
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     rho::Float64 = 1.0
     max_it::Int64 = 10
@@ -46,7 +48,7 @@ Base.@kwdef mutable struct Parameters
     log_level::Int64 = 3
     log_file::String = "TEP.jl/log"
     debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 60.0
+    solver_time_limit::Float64 = 100.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()

@@ -1,3 +1,8 @@
+# ------------------------------ Type declarations -----------------------------
+const FloatVarRef = Union{Float64, JuMP.VariableRef}
+const VectorSet = Union{Vector{Int64}, Set{Int64}}
+const AffQuadExpr = Union{JuMP.AffExpr, JuMP.QuadExpr}
+
 # ------------------------ Compact model data structures -----------------------
 struct CompactModel
     model # ::JuMP.Model
@@ -57,7 +62,8 @@ mutable struct Scenario
     # id::Int64
     p::Float64 # Probability
     D::Vector{Float64} # Load
-    G::Dict{Int64, Float64} # Generation
+    G::Dict{Int64, Tuple{Int64, Float64}} # Dict of index -> (bus, cap) for gen
+    gen_costs::Dict{Int64, Vector{Float64}} # Generation costs
 end
 
 mutable struct Instance
@@ -66,7 +72,7 @@ mutable struct Instance
     K::Vector{Circuit} # Candidate circuits
     f_bar::Vector{Float64} # Capacity of circuits
     gamma::Vector{Float64} # Susceptance of circuits
-    cost::Vector{Float64} # Cost of candidate circuits
+    costs::Vector{Float64} # Cost of candidate circuits
     num_I::Int64 # Number of buses
     num_J::Int64 # Number of existing circuits
     num_K::Int64 # Number of candidate circuits
@@ -79,22 +85,25 @@ struct MIPModel
     model::JuMP.Model
     x::Vector{JuMP.VariableRef}
     f::Vector{JuMP.VariableRef}
-    g::Dict{Int, JuMP.VariableRef}
+    g::Dict{Int64, JuMP.VariableRef}
+    g_bus::Dict{Int64, JuMP.AffExpr}
     theta::Vector{JuMP.VariableRef}
     Delta_theta::Vector{JuMP.VariableRef}
-    obj::AffExpr
+    obj::AffQuadExpr
 end
 
 struct LPModel
     model::JuMP.Model
     f::Vector{JuMP.VariableRef}
-    g::Dict{Int64, JuMP.VariableRef}
+    g::Dict{Int64, Tuple{Int64, JuMP.VariableRef}}
     theta::Vector{JuMP.VariableRef}
     Delta_theta::Vector{JuMP.VariableRef}
     s::Vector{JuMP.VariableRef}
     f_cons::Vector{JuMP.ConstraintRef}
     fkl_cons::Vector{JuMP.ConstraintRef}
 end
+
+const TepModel = Union{MIPModel, LPModel}
 
 # ----------------------------- PH data structures -----------------------------
 mutable struct Cache
@@ -120,8 +129,3 @@ struct Variables
     x::Vector{Union{Float64, JuMP.VariableRef}}
     y::Vector{Union{Float64, JuMP.VariableRef}}
 end
-
-# ------------------------------ Type declarations -----------------------------
-const FloatVarRef = Union{Float64, JuMP.VariableRef}
-const VectorSet = Union{Vector{Int64}, Set{Int64}}
-const TepModel = Union{MIPModel, LPModel}

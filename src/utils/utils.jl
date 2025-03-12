@@ -241,7 +241,7 @@ The big-M is computed as discussed in Ghita's thesis, as there is at least one
 existing line conecting every two buses.
 """
 function comp_bigM(inst::Instance, k::Int64)
-    bigM = 1000000
+    bigM = const_infinite
     for (j, circuit) in enumerate(inst.J)
         if circuit.fr == inst.K[k - inst.num_J].fr && 
            circuit.to == inst.K[k - inst.num_J].to

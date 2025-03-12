@@ -1,13 +1,13 @@
 """
     build_model(inst::Instance, 
                 params::Parameters, 
-                scenario_id::Int64)
+                scen::Int64)
 
 Build mixed-integer linear programming model.
 """
 function build_mip_model(inst::Instance, 
                          params::Parameters, 
-                         scenario_id::Int64)
+                         scen::Int64)
     md = JuMP.Model(Gurobi.Optimizer)
     if params.log_level >= 2
         set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
@@ -32,14 +32,14 @@ function build_mip_model(inst::Instance,
         add_symmetry_constrs(inst, md, x)
     end
 
-    gen = add_g_vars(inst, scenario_id, md)
+    g, g_bus = add_g_vars(inst, scen, md)
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.num_J + inst.num_K], base_name = "f")
     # First Kirchhoff law
     fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.num_I)
     # Add fkl constraints considering both existing and candidate lines
-    add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
+    add_fkl_constrs(inst, scen, md, f, g_bus, fkl_cons, inst.I)
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
@@ -82,15 +82,15 @@ function build_mip_model(inst::Instance,
         @constraint(md, -f[k] <= inst.f_bar[k] * x[k - inst.num_J])
     end
 
-    obj = set_obj(inst, md, x)
+    obj = set_obj(inst, params, scen, md, x, g)
 
-    return MIPModel(md, x, f, gen, theta, Delta_theta, obj)
+    return MIPModel(md, x, f, g, g_bus, theta, Delta_theta, obj)
 end
 
 """
     build_lp_model(inst::Instance, 
                    params::Parameters, 
-                   scenario_id::Int64)
+                   scen::Int64)
 
 Build linear programming model.
 
@@ -98,7 +98,7 @@ The gamma values can be used to simulate building a candidate line.
 """
 function build_lp_model(inst::Instance, 
                         params::Parameters, 
-                        scenario_id::Int64)
+                        scen::Int64)
     md = JuMP.Model(Gurobi.Optimizer)
     if params.log_level >= 3
         set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
@@ -117,7 +117,7 @@ function build_lp_model(inst::Instance,
     # set_attribute(md, MOI.RawOptimizerAttribute("ScaleFlag"), 2)
     # set_attribute(md, MOI.RawOptimizerAttribute("BarConvTol"), 1e-6)
 
-    gen = add_g_vars(inst, scenario_id, md)
+    gen = add_g_vars(inst, scen, md)
 
     # Flow variables
     f = @variable(md, f[l = 1:inst.num_J + inst.num_K], base_name = "f")
@@ -125,7 +125,7 @@ function build_lp_model(inst::Instance,
     # First Kirchhoff law
     fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.num_I)
     # Add fkl constraints considering only existing lines
-    add_fkl_constrs(inst, scenario_id, md, f, gen, fkl_cons, inst.I)
+    add_fkl_constrs(inst, scen, md, f, gen, fkl_cons, inst.I)
 
     # Angle variables
     theta = @variable(md, theta[i = inst.I], base_name = "theta")
@@ -172,25 +172,30 @@ function build_lp_model(inst::Instance,
 end
 
 """
-    add_g_vars(inst::Instance, md::JuMP.Model)
+    add_g_vars(inst::Instance, scen::Int64, md::JuMP.Model)
 
 Add generation variables.
 """
-function add_g_vars(inst::Instance, scenario_id::Int64, md::JuMP.Model)
-    gen = Dict{Int, JuMP.VariableRef}()
-    for i in inst.I
-        # Some buses may not have load or generation
-        if i in keys(inst.scenarios[scenario_id].G)
-            g_max = inst.scenarios[scenario_id].G[i]
-            if isl(g_max, 0.0)
-                @show g_max, i
-            end
-            gen[i] = @variable(md, lower_bound = 0.0, 
-                               upper_bound = g_max, 
-                               base_name = "g$i")
+function add_g_vars(inst::Instance, scen::Int64, md::JuMP.Model)
+    g = Dict{Int64, JuMP.VariableRef}()
+    g_bus = Dict{Int64, JuMP.AffExpr}()
+    # Some buses may not have load or generation
+    for k in keys(inst.scenarios[scen].G)
+        bus, g_max = inst.scenarios[scen].G[k]
+        if isl(g_max, 0.0)
+            @show g_max, i
+        end
+        g[k] = @variable(md, lower_bound = 0.0, 
+                         upper_bound = g_max, 
+                         base_name = "g$k")
+
+        if bus in keys(g_bus)
+            g_bus[bus] += g[k]
+        else
+            g_bus[bus] = g[k]
         end
     end
-    return gen
+    return g, g_bus
 end
 
 """
@@ -222,22 +227,23 @@ function add_flow_variables(inst::Instance,
 end
 
 """
-    add_fkl_constrs(inst::Instance,
+    add_fkl_constrs(inst::Instance, 
+                    scen::Int64, 
                     md::JuMP.Model, 
                     f::Vector{JuMP.VariableRef},
-                    gen::Dict{Int, JuMP.VariableRef},
+                    g_bus::Dict{Int64, JuMP.AffExpr},
                     fkl_cons::Vector{JuMP.ConstraintRef},
-                    buses_involved::T)
+                    buses_involved::T) where T <: VectorSet
 
 Add first Kirchhoff law constraints.
 
 Set the node flow constraints considering the assigned candidate f variables.
 """
 function add_fkl_constrs(inst::Instance, 
-                         scenario_id::Int64, 
+                         scen::Int64, 
                          md::JuMP.Model, 
                          f::Vector{JuMP.VariableRef},
-                         gen::Dict{Int, JuMP.VariableRef},
+                         g_bus::Dict{Int64, JuMP.AffExpr},
                          fkl_cons::Vector{JuMP.ConstraintRef},
                          buses_involved::T) where T <: VectorSet
     for i in buses_involved
@@ -250,25 +256,57 @@ function add_fkl_constrs(inst::Instance,
         add_to_expression!(e, comp_existing_incident_flows(inst, f, i))
         
         # Some buses may not have load or generation
-        d = inst.scenarios[scenario_id].D[i]
-        g = i in keys(inst.scenarios[scenario_id].G) ? gen[i] : AffExpr(0.0)
+        d = inst.scenarios[scen].D[i]
+        g = i in keys(g_bus) ? g_bus[i] : AffExpr(0.0)
 
         fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl$i")
     end
 end
 
 """
-    set_obj(inst, md, x)
+    set_obj(inst::Instance, 
+            params::Parameters, 
+            scen::Int64, 
+            md::JuMP.Model,
+            x::Vector{JuMP.VariableRef}, 
+            gen::Dict{Int64, JuMP.VariableRef})
 
 Set the objective to minimize the costs of expanding the network.
 """
 function set_obj(inst::Instance, 
+                 params::Parameters, 
+                 scen::Int64, 
                  md::JuMP.Model,
-                 x::Vector{JuMP.JuMP.VariableRef})
-    e::AffExpr = AffExpr(0.0)
+                 x::Vector{JuMP.VariableRef}, 
+                 gen::Dict{Int64, JuMP.VariableRef})
+    e = AffExpr()
+    if params.model.is_dcp_power_model_en
+        e = QuadExpr()
+    end
+    # Cost of building new candidate lines
     for k in inst.num_J + 1:inst.num_J + inst.num_K
         # e += inst.cost[k] * x[k]
-        add_to_expression!(e, inst.cost[k - inst.num_J], x[k - inst.num_J])
+        c = inst.costs[k - inst.num_J]
+        # Large penalty to avoid constructing candidates
+        if params.model.is_dcp_power_model_en
+            c = const_infinite
+        end
+        add_to_expression!(e, c, x[k - inst.num_J])
+    end
+    # Generation costs
+    for k in keys(gen)
+        c = inst.scenarios[scen].gen_costs
+        if k in keys(c)
+            for i in eachindex(c[k])
+                # For n > 1
+                if !params.model.is_dcp_power_model_en && i > 2
+                    break
+                end
+                # Access coefficients from last (degree 0) to first (degree 2)
+                j = length(c[k]) - i + 1
+                add_to_expression!(e, c[k][j], gen[k]^(i - 1))
+            end
+        end
     end
 
     @objective(md, Min, e)
@@ -353,14 +391,13 @@ function solve!(params::Parameters, model_data::MIPModel)
             end
             # @warn obj, best_bound
         end
-    else
-        # if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
-        # # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
-        # compute_conflict!(model)
-        # if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-        #     iis_model, _ = copy_conflict(model)
-        #     print(iis_model)
-        # end
+    elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
+        # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
+        compute_conflict!(model)
+        if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
+            iis_model, _ = copy_conflict(model)
+            print(iis_model)
+        end
     end
 
     return solve_time(model), 
@@ -380,11 +417,9 @@ end
 Get g values from the model.
 """
 function get_g(inst::Instance, model_dt::MIPModel)
-    g = zeros(inst.num_I)
-    for i in inst.I
-        if i in keys(inst.G)
-            g[i] = value(model_dt.g[i])
-        end
+    g = Dict{Tuple{Int64, Int64}, Float64}
+    for k in keys(inst.G)
+        g[i] = value(model_dt.g[i])
     end
     return g
 end

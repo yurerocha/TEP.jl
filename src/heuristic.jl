@@ -534,10 +534,8 @@ function fix_start!(inst::Instance,
     for l in 1:inst.num_J + inst.num_K
         fix(md.f[l], start.f[l])
     end
-    for i in inst.I
-        if i in keys(inst.scenarios[scenario_id].G)
-            fix(md.g[i], start.g[i]; force = true)
-        end
+    for k in keys(inst.scenarios[scenario_id].G)
+        fix(md.g[k], start.g[k]; force = true)
         # fix(md.theta[i], start.theta[i])
     end
 
@@ -588,14 +586,12 @@ function fix_start!(inst::Instance,
     for l in 1:inst.num_J + inst.num_K
         unfix(md.f[l])
     end
-    for i in inst.I
-        # Some buses may not have generation
-        if i in keys(inst.scenarios[scenario_id].G)
-            unfix(md.g[i])
-            g_max = inst.scenarios[scenario_id].G[i]
-            set_lower_bound(md.g[i], 0.0)
-            set_upper_bound(md.g[i], g_max)
-        end
+    # Some buses may not have generation
+    for k in keys(inst.scenarios[scenario_id].G)
+        unfix(md.g[k])
+        g_max = inst.scenarios[scenario_id].G[k]
+        set_lower_bound(md.g[k], 0.0)
+        set_upper_bound(md.g[k], g_max)
         # unfix(md.theta[i])
     end
 end
