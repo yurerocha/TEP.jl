@@ -8,12 +8,14 @@ Build mixed-integer linear programming model.
 function build_mip_model(inst::Instance, 
                          params::Parameters, 
                          scen::Int64)
-    md = JuMP.Model(Gurobi.Optimizer)
-    if params.log_level >= 2
-        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
-        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-    else
-        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+    md = JuMP.Model(params.model.optimizer)
+    if params.model.optimizer == Gurobi.Optimizer
+        if params.log_level >= 2
+            set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
+            set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
+        else
+            set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+        end
     end
     
     x = @variable(md, binary = true, x[k = 1:inst.num_K], base_name = "x")
@@ -82,6 +84,16 @@ function build_mip_model(inst::Instance,
         @constraint(md, -f[k] <= inst.f_bar[k] * x[k - inst.num_J])
     end
 
+    if params.model.is_dcp_power_model_en
+        for j in 1:inst.num_J
+            c = get_circuit(inst, j)
+            @constraint(md, inst.delta_theta_limits[j][1] <= 
+                            theta[c.fr] - theta[c.to])
+            @constraint(md, theta[c.fr] - theta[c.to] <= 
+                            inst.delta_theta_limits[j][2])
+        end
+    end
+
     obj = set_obj(inst, params, scen, md, x, g)
 
     return MIPModel(md, x, f, g, g_bus, theta, Delta_theta, obj)
@@ -99,20 +111,24 @@ The gamma values can be used to simulate building a candidate line.
 function build_lp_model(inst::Instance, 
                         params::Parameters, 
                         scen::Int64)
-    md = JuMP.Model(Gurobi.Optimizer)
-    if params.log_level >= 3
-        set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
-        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-    else
-        set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+    md = JuMP.Model(params.model.optimizer)
+    if params.model.optimizer == Gurobi.Optimizer
+        if params.log_level >= 3
+            set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
+            set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
+        else
+            set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
+        end
     end
     # https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parametercrossover
     # https://support.gurobi.com/hc/en-us/community/posts/360043330491-The-role-of-crossover-in-linear-programming
     # https://support.gurobi.com/hc/en-us/community/posts/360043463792-How-to-terminate-once-barrier-solves-problem
     # https://support.gurobi.com/hc/en-us/community/posts/28806723752849-Terminate-once-barrier-solves-problem
     # Turn off Gurobi crossover
-    set_attribute(md, MOI.RawOptimizerAttribute("Method"), 2)
-    set_attribute(md, MOI.RawOptimizerAttribute("Crossover"), 0)
+    if params.model.optimizer == Gurobi.Optimizer
+        set_attribute(md, MOI.RawOptimizerAttribute("Method"), 2)
+        set_attribute(md, MOI.RawOptimizerAttribute("Crossover"), 0)
+    end
     # set_attribute(md, MOI.RawOptimizerAttribute("Sifting"), 2)
     # set_attribute(md, MOI.RawOptimizerAttribute("ScaleFlag"), 2)
     # set_attribute(md, MOI.RawOptimizerAttribute("BarConvTol"), 1e-6)
@@ -181,12 +197,15 @@ function add_g_vars(inst::Instance, scen::Int64, md::JuMP.Model)
     g_bus = Dict{Int64, JuMP.AffExpr}()
     # Some buses may not have load or generation
     for k in keys(inst.scenarios[scen].G)
-        bus, g_max = inst.scenarios[scen].G[k]
-        if isl(g_max, 0.0)
-            @show g_max, i
+        bus = inst.scenarios[scen].G[k].bus
+        lb = inst.scenarios[scen].G[k].lower_bound
+        ub = inst.scenarios[scen].G[k].upper_bound
+        if isl(ub, 0.0)
+            @show ub, i
         end
-        g[k] = @variable(md, lower_bound = 0.0, 
-                         upper_bound = g_max, 
+        g[k] = @variable(md, 
+                         lower_bound = lb, 
+                         upper_bound = ub, 
                          base_name = "g$k")
 
         if bus in keys(g_bus)
@@ -295,17 +314,15 @@ function set_obj(inst::Instance,
     end
     # Generation costs
     for k in keys(gen)
-        c = inst.scenarios[scen].gen_costs
-        if k in keys(c)
-            for i in eachindex(c[k])
-                # For n > 1
-                if !params.model.is_dcp_power_model_en && i > 2
-                    break
-                end
-                # Access coefficients from last (degree 0) to first (degree 2)
-                j = length(c[k]) - i + 1
-                add_to_expression!(e, c[k][j], gen[k]^(i - 1))
+        c = inst.scenarios[scen].G[k].costs
+        for i in eachindex(c)
+            # For n > 1
+            if !params.model.is_dcp_power_model_en && i > 2
+                break
             end
+            # Access coefficients from last (degree 0) to first (degree 2)
+            j = length(c) - i + 1
+            add_to_expression!(e, c[j], gen[k]^(i - 1))
         end
     end
 
@@ -317,11 +334,13 @@ end
 function solve!(params::Parameters, model_data::MIPModel)
     model = model_data.model
 
-    set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
-    set_attribute(model, 
-                  MOI.RawOptimizerAttribute("TimeLimit"), 
-                  params.solver_time_limit)
-    set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-6)
+    if params.model.optimizer == Gurobi.Optimizer
+        set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
+        set_attribute(model, 
+                    MOI.RawOptimizerAttribute("TimeLimit"), 
+                    params.solver_time_limit)
+        set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-6)
+    end
 
     rt_runtime = 0.0
     incumbent_time = params.solver_time_limit
@@ -367,7 +386,9 @@ function solve!(params::Parameters, model_data::MIPModel)
             # end
         end
     end
-    set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
+    if params.model.optimizer == Gurobi.Optimizer
+        set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
+    end
     
     optimize!(model)
 
@@ -386,18 +407,18 @@ function solve!(params::Parameters, model_data::MIPModel)
             try
                 gap = 100.0 * relative_gap(model)
             catch e
-                println(e)
+                # println(e)
                 gap = (best_bound - obj) / obj
             end
             # @warn obj, best_bound
         end
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
-        compute_conflict!(model)
-        if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-            iis_model, _ = copy_conflict(model)
-            print(iis_model)
-        end
+        # compute_conflict!(model)
+        # if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
+        #     iis_model, _ = copy_conflict(model)
+        #     print(iis_model)
+        # end
     end
 
     return solve_time(model), 

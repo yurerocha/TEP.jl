@@ -53,6 +53,13 @@ struct NeighReport
 end
 
 # -------------------------- Instance data structures --------------------------
+struct GeneratorInfo
+    bus::Int64
+    lower_bound::Float64
+    upper_bound::Float64
+    costs::Vector{Float64}
+end
+
 struct Circuit
     fr::Int64 # "from" bus
     to::Int64 # "to" bus
@@ -62,8 +69,7 @@ mutable struct Scenario
     # id::Int64
     p::Float64 # Probability
     D::Vector{Float64} # Load
-    G::Dict{Int64, Tuple{Int64, Float64}} # Dict of index -> (bus, cap) for gen
-    gen_costs::Dict{Int64, Vector{Float64}} # Generation costs
+    G::Dict{Int64, GeneratorInfo}
 end
 
 mutable struct Instance
@@ -72,6 +78,7 @@ mutable struct Instance
     K::Vector{Circuit} # Candidate circuits
     f_bar::Vector{Float64} # Capacity of circuits
     gamma::Vector{Float64} # Susceptance of circuits
+    delta_theta_limits::Vector{Tuple{Float64, Float64}} 
     costs::Vector{Float64} # Cost of candidate circuits
     num_I::Int64 # Number of buses
     num_J::Int64 # Number of existing circuits
@@ -86,7 +93,7 @@ struct MIPModel
     x::Vector{JuMP.VariableRef}
     f::Vector{JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
-    g_bus::Dict{Int64, JuMP.AffExpr}
+    g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
     theta::Vector{JuMP.VariableRef}
     Delta_theta::Vector{JuMP.VariableRef}
     obj::AffQuadExpr

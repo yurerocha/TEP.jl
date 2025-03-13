@@ -41,7 +41,6 @@ function run(logname::String = "log.md")
         "pglib_opf_case78484_epigrids.txt" # Infeasible with all candidates
     ]
     counter = 1
-    files = ["pglib_opf_case5_pjm_stoc.txt"]
     for file in files
         counter += 1
         if file in skip
@@ -134,8 +133,8 @@ function solve(file::String)
 
     inst = nothing
     if occursin("CATS-CaliforniaTestSystem", file)
-        # Read the CATS system, with multiple scenarios
-        inst = build_cats_system(params)
+        # Read the CATS instance, with multiple scenarios
+        inst = build_cats_instance(params)
     else
         # Read the pglib-opf instances with single scenarios
         mp_data = PowerModels.parse_file(file)

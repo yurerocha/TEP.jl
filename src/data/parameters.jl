@@ -23,6 +23,7 @@ Base.@kwdef mutable struct ModelParameters
     penalty::Float64 = 1e6
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
+    optimizer = Gurobi.Optimizer
 end
 
 Base.@kwdef mutable struct HeuristicParameters

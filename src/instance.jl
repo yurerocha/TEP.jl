@@ -17,13 +17,14 @@ function build_instance(params::Parameters,
         @assert isl(sum(D), sum([g[2] for g in values(G)]))
     end
 
-    J, gamma, f_bar = build_existing_circuits(mp_data, index_in_vec)
-    K, cost = build_candidate_circuits!(params, J, gamma, f_bar)
-    gen_costs = build_gen_costs(mp_data, index_in_vec)
+    J, f_bar, gamma, delta_theta_limits = 
+                                  build_existing_circuits(mp_data, index_in_vec)
+    K, costs = build_candidate_circuits!(params, J, gamma, f_bar)
 
-    scenarios = [Scenario(1.0, D, G, gen_costs)]
+    scenarios = [Scenario(1.0, D, G)]
 
-    return Instance(I, J, K, f_bar, gamma, cost, 
+    return Instance(I, J, K, f_bar, gamma, 
+                    delta_theta_limits, costs, 
                     length(I), length(J), length(K), 
                     scenarios, length(scenarios))
 end

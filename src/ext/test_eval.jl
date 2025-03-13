@@ -4,7 +4,7 @@
 # using DataFrames
 # using Gurobi, Ipopt
 
-function build_cats_system(params::Parameters)
+function build_cats_instance(params::Parameters)
     #println(Threads.nthreads())
     # User input
     save_to_JSON = false

@@ -7,7 +7,7 @@ function solve_deterministic!(inst::Instance, params::Parameters)
     # Initialization
     cache = Cache(inst.num_scenarios, inst.num_K)
 
-    mip_model = MIPModel(JuMP.Model(Gurobi.Optimizer), 
+    mip_model = MIPModel(JuMP.Model(params.model.optimizer), 
                          Vector{JuMP.VariableRef}(), 
                          Vector{JuMP.VariableRef}(), 
                          Dict{Int, JuMP.VariableRef}(), 
