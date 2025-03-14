@@ -7,7 +7,7 @@ Parse a MATPOWER input file to an Instance data structure.
 function build_instance(params::Parameters, 
                         mp_data::Dict{String, Any})
     # TODO: Store index_in_vec in instance
-    index_in_vec = map_ids_to_indices(mp_data)
+    index_in_vec, id_in_vec = map_ids_to_indices(mp_data)
 
     I = Set(values(index_in_vec))
     D = build_loads(params, mp_data, index_in_vec)
@@ -26,5 +26,6 @@ function build_instance(params::Parameters,
     return Instance(I, J, K, f_bar, gamma, 
                     delta_theta_limits, costs, 
                     length(I), length(J), length(K), 
-                    scenarios, length(scenarios))
+                    scenarios, length(scenarios), 
+                    index_in_vec, id_in_vec)
 end

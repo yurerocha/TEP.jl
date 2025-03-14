@@ -38,19 +38,6 @@ function get_num(s::Vector{String}, i::Int64)
     return parse(Int, split(s[i], ":")[2])
 end
 
-"""
-    get_circuit(inst, l)
-
-Return the circuit at position l.
-"""
-function get_circuit(inst::Instance, l::Int64)
-    if l <= inst.num_J
-        return inst.J[l]
-    else
-        return inst.K[l - inst.num_J]
-    end
-end
-
 function get_cand(inst::Instance, l::Int64)
     for i in 1:inst.num_K
         if inst.K[i].fr == l.fr && inst.K[i].to == l.to

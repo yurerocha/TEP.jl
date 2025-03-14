@@ -8,6 +8,19 @@ function comp_gamma(x::Float64, r::Float64 = 0.0)
 end
 
 """
+    get_circuit(inst, l)
+
+Return the circuit at position l.
+"""
+function get_circuit(inst::Instance, l::Int64)
+    if l <= inst.num_J
+        return inst.J[l]
+    else
+        return inst.K[l - inst.num_J]
+    end
+end
+
+"""
     get_inst_name(input::String)
 
 Return the filename without the path and the extension.
@@ -40,11 +53,13 @@ function map_ids_to_indices(mp_data::Dict{String, Any})
     ids = collect(ids)
     sort!(ids)
     index_in_vec = Dict{Int64, Int64}()
+    id_in_vec = Dict{Int64, Int64}()
     for (i, id) in enumerate(ids)
         index_in_vec[id] = i
+        id_in_vec[i] = id
     end
 
-    return index_in_vec
+    return index_in_vec, id_in_vec
 end
 
 """
@@ -62,6 +77,13 @@ function build_loads(params::Parameters,
         i = index_in_vec[l[2]["load_bus"]]
         D[i] += params.instance.load_gen_mult * l[2]["pd"]
     end
+    if params.model.is_dcp_power_model_en
+        for s in mp_data["shunt"]
+            i = index_in_vec[s[2]["shunt_bus"]]
+            D[i] += s[2]["gs"]
+        end
+    end
+
     return D
 end
 
@@ -77,15 +99,20 @@ function build_gens(params::Parameters,
                     index_in_vec::Dict{Int64, Int64})
     G = Dict{Int64, GeneratorInfo}()
     for g in mp_data["gen"]
-        # Disregard negative generation capacities
-        if isg(g[2]["pmax"], 0.0)
-            i = g[2]["index"]
-            bus = index_in_vec[g[2]["gen_bus"]]
-            lb = params.instance.load_gen_mult * g[2]["pmin"]
-            ub = params.instance.load_gen_mult * g[2]["pmax"]
-            c = g[2]["cost"]
-            G[i] = GeneratorInfo(bus, lb, ub, c)
+        dt = g[2]
+        # Machine our of service
+        if dt["gen_status"] <= 0
+            continue
         end
+        # Disregard negative generation capacities
+        # if isg(g[2]["pmax"], 0.0)
+        i = dt["index"]
+        bus = index_in_vec[dt["gen_bus"]]
+        lb = params.instance.load_gen_mult * dt["pmin"]
+        ub = params.instance.load_gen_mult * dt["pmax"]
+        c = dt["cost"]
+        G[i] = GeneratorInfo(bus, lb, ub, c)
+        # end
     end
     return G
 end
@@ -105,24 +132,30 @@ function build_existing_circuits(mp_data::Dict{String, Any},
     delta_theta_limits = Vector{Tuple{Float64, Float64}}(undef, n)
     j = 1
     for b in mp_data["branch"]
-        x = b[2]["br_x"]
-        r = b[2]["br_r"]
+        dt = b[2]
+        # Branch out of service
+        if dt["br_status"] <= 0
+            continue
+        end
+        
+        x = dt["br_x"]
+        r = dt["br_r"]
 
         if iseq(x, 0.0)
-            fr = b[2]["f_bus"]
-            to = b[2]["t_bus"]
+            fr = dt["f_bus"]
+            to = dt["t_bus"]
             @warn "x = 0.0 in circuit ($fr, $to)."
             # throw(ArgumentError("Error: x = 0.0 in circuit ($fr, $to)."))
             continue
         end
-        fr = index_in_vec[b[2]["f_bus"]]
-        to = index_in_vec[b[2]["t_bus"]]
+        fr = index_in_vec[dt["f_bus"]]
+        to = index_in_vec[dt["t_bus"]]
         J[j] = Circuit(fr, to)
 
-        f_bar[j] = b[2]["rate_a"]
+        f_bar[j] = dt["rate_a"]
         gamma[j] = comp_gamma(x, r)
 
-        delta_theta_limits[j] = (b[2]["angmin"], b[2]["angmax"])
+        delta_theta_limits[j] = (dt["angmin"], dt["angmax"])
         j += 1
     end
     # Discard unused indices due to x = 0.0

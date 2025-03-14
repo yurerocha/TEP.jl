@@ -11,6 +11,7 @@ struct CompactModel
     S::Matrix{Float64} # m x n adjacency matrix
     Gamma::Matrix{Float64} # m x m matrix of susceptances
     d::Vector{Float64} # n vector of demands
+    shunt_gamma::Vector{Float64} # n vector of shunt susceptances
     g::Vector{JuMP.VariableRef} # n vector of generation variables
     B::Matrix{Float64} # n x n matrix, where B = S'ΓS
     B_inv::Matrix{Float64} # n x n inverse of matrix B
@@ -85,6 +86,8 @@ mutable struct Instance
     num_K::Int64 # Number of candidate circuits
     scenarios::Vector{Scenario}
     num_scenarios::Int64
+    index_in_vec::Dict{Int64, Int64} # Map ids in matpower file to indices
+    id_in_vec::Dict{Int64, Int64} # Map indices to ids in matpower file
 end
 
 # ---------------------------- Model data structures ---------------------------

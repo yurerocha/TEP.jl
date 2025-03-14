@@ -11,7 +11,9 @@ function build_mip_model(inst::Instance,
     md = JuMP.Model(params.model.optimizer)
     if params.model.optimizer == Gurobi.Optimizer
         if params.log_level >= 2
-            set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
+            set_attribute(md, 
+                          MOI.RawOptimizerAttribute("LogFile"), 
+                          params.log_file)
             set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
         else
             set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
@@ -49,50 +51,53 @@ function build_mip_model(inst::Instance,
                             base_name = "Delta_theta")
     # Ohm's law for existing circuits
     for j in 1:inst.num_J
-        c = inst.J[j]
-        @constraint(md, Delta_theta[j] == theta[c.fr] - theta[c.to])
+        c = get_circuit(inst, j)
+        # @constraint(md, Delta_theta[j] == theta[c.fr] - theta[c.to])
+        # @constraint(md, 
+        #             f[j] == inst.gamma[j] * Delta_theta[j],
+        #             base_name = "ol$j")
         @constraint(md, 
-                    f[j] == inst.gamma[j] * Delta_theta[j],
-                    base_name = "ol$j")
+                    f[j] == inst.gamma[j] * (theta[c.fr] - theta[c.to]),
+                    base_name = "ol[$j]")
     end
     # Ohm's law for candidate circuits
     for k in inst.num_J + 1:inst.num_J + inst.num_K
-        @constraint(md, Delta_theta[k] == 
-                    theta[inst.K[k - inst.num_J].fr] - 
-                    theta[inst.K[k - inst.num_J].to])
-        y = f[k] - inst.gamma[k] * Delta_theta[k]
+        c = get_circuit(inst, k)
+        # @constraint(md, Delta_theta[k] == theta[c.fr] - theta[c.to])
+        # y = f[k] - inst.gamma[k] * Delta_theta[k]
+        y = f[k] - inst.gamma[k] * (theta[c.fr] - theta[c.to])
 
         bigM = comp_bigM(inst, k)
 
         @constraint(md, 
                     y <= bigM * (1 - x[k - inst.num_J]), 
-                    base_name = "ol.p$k")
+                    base_name = "ol.p[$k]")
         @constraint(md, 
                     -y <= bigM * (1 - x[k - inst.num_J]), 
-                    base_name = "ol.n$k")
+                    base_name = "ol.n[$k]")
     end
 
     # Flow limits
     # Existing circuits
     for j in 1:inst.num_J
+        @constraint(md, -inst.f_bar[j] <= f[j])
         @constraint(md, f[j] <= inst.f_bar[j])
-        @constraint(md, -f[j] <= inst.f_bar[j])
     end
     # Candidate circuits
     for k in inst.num_J + 1:inst.num_J + inst.num_K
+        @constraint(md, -inst.f_bar[k] * x[k - inst.num_J] <= f[k])
         @constraint(md, f[k] <= inst.f_bar[k] * x[k - inst.num_J])
-        @constraint(md, -f[k] <= inst.f_bar[k] * x[k - inst.num_J])
     end
 
-    if params.model.is_dcp_power_model_en
-        for j in 1:inst.num_J
-            c = get_circuit(inst, j)
-            @constraint(md, inst.delta_theta_limits[j][1] <= 
-                            theta[c.fr] - theta[c.to])
-            @constraint(md, theta[c.fr] - theta[c.to] <= 
-                            inst.delta_theta_limits[j][2])
-        end
-    end
+    # if params.model.is_dcp_power_model_en
+    #     for j in 1:inst.num_J
+    #         c = get_circuit(inst, j)
+    #         @constraint(md, inst.delta_theta_limits[j][1] <= 
+    #                         theta[c.fr] - theta[c.to])
+    #         @constraint(md, theta[c.fr] - theta[c.to] <= 
+    #                         inst.delta_theta_limits[j][2])
+    #     end
+    # end
 
     obj = set_obj(inst, params, scen, md, x, g)
 
@@ -114,7 +119,9 @@ function build_lp_model(inst::Instance,
     md = JuMP.Model(params.model.optimizer)
     if params.model.optimizer == Gurobi.Optimizer
         if params.log_level >= 3
-            set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), params.log_file)
+            set_attribute(md, 
+                          MOI.RawOptimizerAttribute("LogFile"), 
+                          params.log_file)
             set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
         else
             set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 0)
@@ -206,8 +213,7 @@ function add_g_vars(inst::Instance, scen::Int64, md::JuMP.Model)
         g[k] = @variable(md, 
                          lower_bound = lb, 
                          upper_bound = ub, 
-                         base_name = "g$k")
-
+                         base_name = "g[$k]")
         if bus in keys(g_bus)
             g_bus[bus] += g[k]
         else
@@ -278,7 +284,7 @@ function add_fkl_constrs(inst::Instance,
         d = inst.scenarios[scen].D[i]
         g = i in keys(g_bus) ? g_bus[i] : AffExpr(0.0)
 
-        fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl$i")
+        fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl[$i]")
     end
 end
 
@@ -413,12 +419,13 @@ function solve!(params::Parameters, model_data::MIPModel)
             # @warn obj, best_bound
         end
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
+        # TODO: Add param to compute conflict when infeasible
         # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
-        # compute_conflict!(model)
-        # if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-        #     iis_model, _ = copy_conflict(model)
-        #     print(iis_model)
-        # end
+        compute_conflict!(model)
+        if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
+            iis_model, _ = copy_conflict(model)
+            print(iis_model)
+        end
     end
 
     return solve_time(model), 
