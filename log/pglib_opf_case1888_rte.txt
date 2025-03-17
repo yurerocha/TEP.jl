@@ -1,0 +1,661 @@
+
+Gurobi 12.0.1 (linux64) logging started Wed Mar 12 15:53:52 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Wed Mar 12 15:53:52 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 12012 rows, 7246 columns and 23075 nonzeros
+Model fingerprint: 0xfd07be7d
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 11365 rows and 6304 columns
+Presolve time: 0.02s
+Presolved: 647 rows, 942 columns, 3643 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+Warning: switch to quad precision
+     514    1.3348954e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 514 iterations and 0.06 seconds (0.05 work units)
+Optimal objective  1.334895351e+06
+
+User-callback calls 591, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Wed Mar 12 16:01:01 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Wed Mar 12 16:01:01 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 12012 rows, 7246 columns and 23075 nonzeros
+Model fingerprint: 0xfd07be7d
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 11365 rows and 6304 columns
+Presolve time: 0.01s
+Presolved: 647 rows, 942 columns, 3643 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+Warning: switch to quad precision
+     514    1.3348954e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 514 iterations and 0.06 seconds (0.05 work units)
+Optimal objective  1.334895351e+06
+
+User-callback calls 591, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Thu Mar 13 23:59:31 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Thu Mar 13 23:59:31 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 7240 columns and 18007 nonzeros
+Model fingerprint: 0xefceffc5
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8835 rows and 6304 columns
+Presolve time: 0.01s
+Presolved: 646 rows, 936 columns, 3649 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     390    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 390 iterations and 0.05 seconds (0.04 work units)
+Optimal objective  1.352871750e+06
+
+User-callback calls 463, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Fri Mar 14 03:19:16 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Fri Mar 14 03:19:16 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 7240 columns and 18007 nonzeros
+Model fingerprint: 0xefceffc5
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8835 rows and 6304 columns
+Presolve time: 0.01s
+Presolved: 646 rows, 936 columns, 3649 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     390    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 390 iterations and 0.04 seconds (0.04 work units)
+Optimal objective  1.352871750e+06
+
+User-callback calls 463, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Fri Mar 14 03:19:54 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Fri Mar 14 03:19:54 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 7240 columns and 18007 nonzeros
+Model fingerprint: 0xefceffc5
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8835 rows and 6304 columns
+Presolve time: 0.01s
+Presolved: 646 rows, 936 columns, 3649 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     390    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 390 iterations and 0.04 seconds (0.04 work units)
+Optimal objective  1.352871750e+06
+
+User-callback calls 463, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Fri Mar 14 18:31:21 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Fri Mar 14 18:31:21 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 7240 columns and 18007 nonzeros
+Model fingerprint: 0x6d944ecf
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8833 rows and 6302 columns
+Presolve time: 0.01s
+Presolved: 648 rows, 938 columns, 3652 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+
+Solved in 380 iterations and 0.04 seconds (0.04 work units)
+Infeasible model
+
+User-callback calls 449, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+Gurobi 12.0.1 (linux64) logging started Sat Mar 15 16:02:57 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Sat Mar 15 16:02:57 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 7240 columns and 18007 nonzeros
+Model fingerprint: 0x6d944ecf
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8833 rows and 6302 columns
+Presolve time: 0.01s
+Presolved: 648 rows, 938 columns, 3652 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+
+Solved in 380 iterations and 0.04 seconds (0.04 work units)
+Infeasible model
+
+User-callback calls 449, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+Gurobi 12.0.1 (linux64) logging started Sat Mar 15 16:03:08 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Sat Mar 15 16:03:08 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 7240 columns and 18007 nonzeros
+Model fingerprint: 0x6d944ecf
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8833 rows and 6302 columns
+Presolve time: 0.01s
+Presolved: 648 rows, 938 columns, 3652 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+
+Solved in 380 iterations and 0.04 seconds (0.04 work units)
+Infeasible model
+
+User-callback calls 449, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+Gurobi 12.0.1 (linux64) logging started Sat Mar 15 16:03:37 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Sat Mar 15 16:03:37 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 7240 columns and 18007 nonzeros
+Model fingerprint: 0x6d944ecf
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8833 rows and 6302 columns
+Presolve time: 0.01s
+Presolved: 648 rows, 938 columns, 3652 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+
+Solved in 380 iterations and 0.04 seconds (0.04 work units)
+Infeasible model
+
+User-callback calls 449, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 19:36:53 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 19:36:53 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9771 rows, 4709 columns and 18297 nonzeros
+Model fingerprint: 0xcaa99b20
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 9142 rows and 4080 columns
+Presolve time: 0.01s
+Presolved: 629 rows, 629 columns, 3209 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     359    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 359 iterations and 0.04 seconds (0.03 work units)
+Optimal objective  1.352871750e+06
+
+User-callback calls 442, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 19:37:45 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 19:37:45 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 11659 rows, 4709 columns and 20185 nonzeros
+Model fingerprint: 0xcaaa764d
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [2e-04, 3e+03]
+Presolve removed 11659 rows and 4709 columns
+Presolve time: 0.00s
+Presolve: All rows and columns removed
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 0 iterations and 0.01 seconds (0.00 work units)
+Optimal objective  1.352871750e+06
+
+User-callback calls 36, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 20:09:15 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 20:09:15 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 4709 columns and 18007 nonzeros
+Model fingerprint: 0xfa4e2577
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8834 rows and 3772 columns
+Presolve time: 0.01s
+Presolved: 647 rows, 937 columns, 3624 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     382    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 382 iterations and 0.05 seconds (0.04 work units)
+Optimal objective  1.352871750e+06
+Warning: unscaled dual violation = 1.34883e-06 and residual = 5.46372e-07
+
+User-callback calls 463, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 20:10:24 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 20:10:25 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 4709 columns and 18007 nonzeros
+Model fingerprint: 0xfa4e2577
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8834 rows and 3772 columns
+Presolve time: 0.01s
+Presolved: 647 rows, 937 columns, 3624 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     382    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 382 iterations and 0.05 seconds (0.04 work units)
+Optimal objective  1.352871750e+06
+Warning: unscaled dual violation = 1.34883e-06 and residual = 5.46372e-07
+
+User-callback calls 463, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 20:10:56 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 20:10:57 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 9481 rows, 4709 columns and 18007 nonzeros
+Model fingerprint: 0xfa4e2577
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 2e+01]
+  RHS range        [1e-03, 3e+03]
+Presolve removed 8834 rows and 3772 columns
+Presolve time: 0.01s
+Presolved: 647 rows, 937 columns, 3624 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     382    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 382 iterations and 0.05 seconds (0.04 work units)
+Optimal objective  1.352871750e+06
+Warning: unscaled dual violation = 1.34883e-06 and residual = 5.46372e-07
+
+User-callback calls 463, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 23:20:33 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 23:20:33 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 6950 rows, 7240 columns and 20538 nonzeros
+Model fingerprint: 0x24d97a9a
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 3e+03]
+  RHS range        [1e-03, 7e+00]
+Presolve removed 5774 rows and 5775 columns
+Presolve time: 0.02s
+Presolved: 1176 rows, 1465 columns, 5883 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     562    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 562 iterations and 0.08 seconds (0.07 work units)
+Optimal objective  1.352871750e+06
+
+User-callback calls 643, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 23:21:06 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+
+Gurobi 12.0.1 (linux64) logging started Sun Mar 16 23:21:06 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 6950 rows, 7240 columns and 20538 nonzeros
+Model fingerprint: 0x24d97a9a
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 3e+03]
+  RHS range        [1e-03, 7e+00]
+Presolve removed 5774 rows and 5775 columns
+Presolve time: 0.02s
+Presolved: 1176 rows, 1465 columns, 5883 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+     562    1.3528718e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 562 iterations and 0.08 seconds (0.07 work units)
+Optimal objective  1.352871750e+06
+
+User-callback calls 643, time in user-callback 0.00 sec
+
+Gurobi 12.0.1 (linux64) logging started Mon Mar 17 17:51:32 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Set parameter LogToConsole to value 1
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 100
+Set parameter FeasibilityTol to value 1e-06
+
+Gurobi 12.0.1 (linux64) logging started Mon Mar 17 17:51:32 2025
+
+Set parameter LogFile to value "TEP.jl/log/pglib_opf_case1888_rte.txt"
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
+
+CPU model: Intel(R) Xeon(R) Silver 4316 CPU @ 2.30GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 40 physical cores, 80 logical processors, using up to 32 threads
+
+Non-default parameters:
+TimeLimit  100
+
+Optimize a model with 6727 rows, 7017 columns and 19869 nonzeros
+Model fingerprint: 0x9e5e6b92
+Coefficient statistics:
+  Matrix range     [1e+00, 2e+04]
+  Objective range  [3e+02, 1e+04]
+  Bounds range     [8e-03, 3e+03]
+  RHS range        [1e-03, 7e+00]
+Presolve removed 5629 rows and 5630 columns
+Presolve time: 0.02s
+Presolved: 1098 rows, 1387 columns, 5667 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0      handle free variables                          0s
+
+Solved in 564 iterations and 0.06 seconds (0.06 work units)
+Infeasible model
+
+User-callback calls 637, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 22.04.3 LTS")
