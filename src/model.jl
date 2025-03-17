@@ -20,7 +20,7 @@ function build_mip_model(inst::Instance,
         end
     end
     
-    x = @variable(md, binary = true, x[k = 1:inst.num_K], base_name = "x")
+    x = @variable(md, binary = true, x[keys(inst.K)], base_name = "x")
     # x = Dict{Int, JuMP.VariableRef}()
     # for k in inst.num_J + 1:inst.num_J + inst.num_K
     #     # Forcing to build candidates
@@ -39,69 +39,95 @@ function build_mip_model(inst::Instance,
     g, g_bus = add_g_vars(inst, scen, md)
 
     # Flow variables
-    f = @variable(md, f[l = 1:inst.num_J + inst.num_K], base_name = "f")
+    # f = @variable(md, f[l = vcat(keys(inst.J), keys(inst.K))], base_name = "f")
+    f = Dict{Any, JuMP.VariableRef}()
+    for j in keys(inst.J)
+        f[j] = @variable(md, 
+                         lower_bound = -inst.J[j].f_bar, 
+                         upper_bound = inst.J[j].f_bar, 
+                         base_name = "f[$j]")
+    end
+    for k in keys(inst.K)
+        f[k] = @variable(md, 
+                         lower_bound = -inst.K[k].f_bar, 
+                         upper_bound = inst.K[k].f_bar, 
+                         base_name = "f[$k]")
+    end
+    
     # First Kirchhoff law
-    fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.num_I)
+    # fkl_cons = Vector{JuMP.ConstraintRef}(undef, inst.num_I)
+    # fkl_constrs = @variable(md, 
+    #                         fkl_constrs[inst.I], 
+    #                         base_name = "fkl_constrs")
+    fkl_constrs = Dict{Int64, JuMP.ConstraintRef}()
     # Add fkl constraints considering both existing and candidate lines
-    add_fkl_constrs(inst, scen, md, f, g_bus, fkl_cons, inst.I)
+    add_fkl_constrs(inst, scen, md, f, g_bus, fkl_constrs, inst.I)
 
     # Angle variables
-    theta = @variable(md, theta[i = inst.I], base_name = "theta")
-    Delta_theta = @variable(md, Delta_theta[l = 1:inst.num_J + inst.num_K], 
-                            base_name = "Delta_theta")
+    theta = @variable(md, theta[inst.I], base_name = "theta")
+    # TODO: Set reference bus
     # Ohm's law for existing circuits
-    for j in 1:inst.num_J
-        c = get_circuit(inst, j)
+    for j in keys(inst.J)
+        # c = get_circuit(inst, j)
         # @constraint(md, Delta_theta[j] == theta[c.fr] - theta[c.to])
         # @constraint(md, 
         #             f[j] == inst.gamma[j] * Delta_theta[j],
         #             base_name = "ol$j")
         @constraint(md, 
-                    f[j] == inst.gamma[j] * (theta[c.fr] - theta[c.to]),
+                    f[j] == inst.J[j].gamma * (theta[j[2]] - theta[j[3]]),
                     base_name = "ol[$j]")
     end
     # Ohm's law for candidate circuits
-    for k in inst.num_J + 1:inst.num_J + inst.num_K
-        c = get_circuit(inst, k)
+    for k in keys(inst.K)
+        # c = get_circuit(inst, k)
         # @constraint(md, Delta_theta[k] == theta[c.fr] - theta[c.to])
         # y = f[k] - inst.gamma[k] * Delta_theta[k]
-        y = f[k] - inst.gamma[k] * (theta[c.fr] - theta[c.to])
+        y = f[k] - J[k] * (theta[k[1][1]] - theta[k[1][2]])
 
-        bigM = comp_bigM(inst, k)
+        bigM = comp_bigM(inst, k[1])
 
         @constraint(md, 
-                    y <= bigM * (1 - x[k - inst.num_J]), 
+                    -bigM * (1 - x[k - inst.num_J]) <= y <= 
+                    bigM * (1 - x[k - inst.num_J]), 
                     base_name = "ol.p[$k]")
-        @constraint(md, 
-                    -y <= bigM * (1 - x[k - inst.num_J]), 
-                    base_name = "ol.n[$k]")
     end
 
     # Flow limits
     # Existing circuits
-    for j in 1:inst.num_J
-        @constraint(md, -inst.f_bar[j] <= f[j])
-        @constraint(md, f[j] <= inst.f_bar[j])
-    end
-    # Candidate circuits
-    for k in inst.num_J + 1:inst.num_J + inst.num_K
-        @constraint(md, -inst.f_bar[k] * x[k - inst.num_J] <= f[k])
-        @constraint(md, f[k] <= inst.f_bar[k] * x[k - inst.num_J])
-    end
-
-    # if params.model.is_dcp_power_model_en
-    #     for j in 1:inst.num_J
-    #         c = get_circuit(inst, j)
-    #         @constraint(md, inst.delta_theta_limits[j][1] <= 
-    #                         theta[c.fr] - theta[c.to])
-    #         @constraint(md, theta[c.fr] - theta[c.to] <= 
-    #                         inst.delta_theta_limits[j][2])
-    #     end
+    # for j in keys(inst.J)
+    #     # @constraint(md, -inst.J[j].f_bar <= f[j] <= inst.J[j].f_bar)
+    #     @constraint(md, f[j] >= -inst.J[j].f_bar)
+    #     @constraint(md, f[j] <= inst.J[j].f_bar)
     # end
+    # Candidate circuits
+    # for k in keys(inst.K)
+    #     @constraint(md, 
+    #                 -inst.K[k].f_bar * x[k] <= f[k] <= inst.K[k].f_bar * x[k])
+    # end
+
+    if params.model.is_dcp_power_model_en
+        inserted = Set{Tuple{Int64, Int64}}()
+        # TODO: Add for the candidate lines
+        # TODO: Treat the cases where the same pair (fr, to) has multiple
+        # existing or candidate lines
+        for j in keys(inst.J)
+            if iseq(inst.J[j].delta_theta_limits[1], 0.0) &&
+               iseq(inst.J[j].delta_theta_limits[2], 0.0)
+                continue
+            end
+            if !in((j[2], j[3]), inserted)
+                @constraint(md, 
+                            inst.J[j].delta_theta_limits[1] <= 
+                            theta[j[2]] - theta[j[3]] <= 
+                            inst.J[j].delta_theta_limits[2])
+                push!(inserted, (j[2], j[3]))
+            end
+        end
+    end
 
     obj = set_obj(inst, params, scen, md, x, g)
 
-    return MIPModel(md, x, f, g, g_bus, theta, Delta_theta, obj)
+    return MIPModel(md, x, f, g, g_bus, theta, obj)
 end
 
 """
@@ -258,7 +284,7 @@ end
                     f::Vector{JuMP.VariableRef},
                     g_bus::Dict{Int64, JuMP.AffExpr},
                     fkl_cons::Vector{JuMP.ConstraintRef},
-                    buses_involved::T) where T <: VectorSet
+                    buses_involved::Vector{Int64})
 
 Add first Kirchhoff law constraints.
 
@@ -267,13 +293,13 @@ Set the node flow constraints considering the assigned candidate f variables.
 function add_fkl_constrs(inst::Instance, 
                          scen::Int64, 
                          md::JuMP.Model, 
-                         f::Vector{JuMP.VariableRef},
+                         f,
                          g_bus::Dict{Int64, JuMP.AffExpr},
-                         fkl_cons::Vector{JuMP.ConstraintRef},
-                         buses_involved::T) where T <: VectorSet
+                         fkl_constrs,
+                         buses_involved::Set{Int64})
     for i in buses_involved
-        if isassigned(fkl_cons, i)
-            delete(md, fkl_cons[i])
+        if i in keys(fkl_constrs)
+            delete(md, fkl_constrs[i])
         end
 
         e = comp_candidate_incident_flows(inst, f, i)
@@ -281,10 +307,10 @@ function add_fkl_constrs(inst::Instance,
         add_to_expression!(e, comp_existing_incident_flows(inst, f, i))
         
         # Some buses may not have load or generation
-        d = inst.scenarios[scen].D[i]
+        d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
         g = i in keys(g_bus) ? g_bus[i] : AffExpr(0.0)
 
-        fkl_cons[i] = @constraint(md, e + g == d, base_name = "fkl[$i]")
+        fkl_constrs[i] = @constraint(md, e + g == d, base_name = "fkl[$i]")
     end
 end
 
@@ -302,21 +328,16 @@ function set_obj(inst::Instance,
                  params::Parameters, 
                  scen::Int64, 
                  md::JuMP.Model,
-                 x::Vector{JuMP.VariableRef}, 
+                 x, 
                  gen::Dict{Int64, JuMP.VariableRef})
     e = AffExpr()
     if params.model.is_dcp_power_model_en
         e = QuadExpr()
     end
     # Cost of building new candidate lines
-    for k in inst.num_J + 1:inst.num_J + inst.num_K
+    for k in keys(inst.K)
         # e += inst.cost[k] * x[k]
-        c = inst.costs[k - inst.num_J]
-        # Large penalty to avoid constructing candidates
-        if params.model.is_dcp_power_model_en
-            c = const_infinite
-        end
-        add_to_expression!(e, c, x[k - inst.num_J])
+        add_to_expression!(e, inst.K[k].cost, x[k])
     end
     # Generation costs
     for k in keys(gen)
@@ -343,8 +364,8 @@ function solve!(params::Parameters, model_data::MIPModel)
     if params.model.optimizer == Gurobi.Optimizer
         set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
         set_attribute(model, 
-                    MOI.RawOptimizerAttribute("TimeLimit"), 
-                    params.solver_time_limit)
+                      MOI.RawOptimizerAttribute("TimeLimit"), 
+                      params.solver_time_limit)
         set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-6)
     end
 
@@ -405,7 +426,7 @@ function solve!(params::Parameters, model_data::MIPModel)
     gap = "-"
 
     # If the solver found a solution
-    if has_values(model)
+    if result_count(model) > 0
         if params.model.is_mip_en
             best_bound = dual_objective_value(model)
             obj = objective_value(model)

@@ -128,16 +128,13 @@ end
 
 Compute the incident flow at node i for the existing lines.
 """
-function comp_existing_incident_flows(inst::Instance,
-                                      f::Vector{JuMP.VariableRef}, 
-                                      i::Int64)
+function comp_existing_incident_flows(inst::Instance, f, i::Int64)
     e = AffExpr(0.0)
-    for j in 1:inst.num_J
-        c = inst.J[j]
-        if c.to == i
-            add_to_expression!(e, f[j])
-        elseif c.fr == i
+    for j in keys(inst.J)
+        if j[2] == i
             add_to_expression!(e, -1.0, f[j])
+        elseif j[3] == i
+            add_to_expression!(e, 1.0, f[j])
         end
     end
     return e
@@ -150,21 +147,13 @@ end
 
 Compute the incident flow at node i for the candidate lines.
 """
-function comp_candidate_incident_flows(inst::Instance,
-                                       f::Vector{JuMP.VariableRef}, 
-                                       i::Int64)
+function comp_candidate_incident_flows(inst::Instance, f,  i::Int64)
     e = AffExpr(0.0)
-    # for k in res_list
-    for k in inst.num_J + 1:inst.num_J + inst.num_K
-        # if !isassigned(f, k)
-        #     continue
-        # end
-
-        c = inst.K[k - inst.num_J]
-        if c.to == i
-            add_to_expression!(e, f[k])
-        elseif c.fr == i
+    for k in keys(inst.K)
+        if k[1][2] == i
             add_to_expression!(e, -1.0, f[k])
+        elseif k[1][3] == i
+            add_to_expression!(e, 1.0, f[k])
         end
     end
     return e
@@ -220,20 +209,18 @@ function log_instance(outputfile::String,
 end
 
 """
-    comp_bigM(inst)
+    comp_bigM(inst, k::Tuple{Int64, Int64, Int64})
 
 Compute the big-M value for the model. 
 
 The big-M is computed as discussed in Ghita's thesis, as there is at least one
 existing line conecting every two buses.
 """
-function comp_bigM(inst::Instance, k::Int64)
+function comp_bigM(inst::Instance, k::Tuple{Int64, Int64, Int64})
     bigM = const_infinite
-    for (j, circuit) in enumerate(inst.J)
-        if circuit.fr == inst.K[k - inst.num_J].fr && 
-           circuit.to == inst.K[k - inst.num_J].to
-            tmp = inst.gamma[k] * 
-                  (inst.f_bar[j] / inst.gamma[j])
+    for j in keys(inst.J)
+        if j[2] == k[2] && j[3]== k[3]
+            tmp = inst.K[k].gamma * (inst.J[j].f_bar / inst.J[j].gamma)
             bigM = min(bigM, tmp)
         end
     end

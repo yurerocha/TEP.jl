@@ -61,44 +61,48 @@ struct GeneratorInfo
     costs::Vector{Float64}
 end
 
-struct Circuit
-    fr::Int64 # "from" bus
-    to::Int64 # "to" bus
-end
+# struct Circuit
+#     fr::Int64 # "from" bus
+#     to::Int64 # "to" bus
+# end
 
 mutable struct Scenario
     # id::Int64
     p::Float64 # Probability
-    D::Vector{Float64} # Load
+    D::Dict{Int64, Float64} # Load
     G::Dict{Int64, GeneratorInfo}
+end
+
+mutable struct BranchInfo
+    f_bar::Float64 # Capacity of circuits
+    gamma::Float64 # Susceptance of circuits
+    cost::Float64 # Cost of candidate circuits
+    delta_theta_limits::Tuple{Float64, Float64}
 end
 
 mutable struct Instance
     I::Set{Int64} # Buses
-    J::Vector{Circuit} # Existing circuits
-    K::Vector{Circuit} # Candidate circuits
-    f_bar::Vector{Float64} # Capacity of circuits
-    gamma::Vector{Float64} # Susceptance of circuits
-    delta_theta_limits::Vector{Tuple{Float64, Float64}} 
-    costs::Vector{Float64} # Cost of candidate circuits
+    J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo} # Existing lines
+    K::Dict{Tuple{Tuple{Int64, Int64, Int64}, Int64}, BranchInfo} # Candidates
+    # f_bar::Vector{Float64} # Capacity of circuits
+    # gamma::Vector{Float64} # Susceptance of circuits
+    # delta_theta_limits::Vector{Tuple{Float64, Float64}} 
+    # costs::Vector{Float64} # Cost of candidate circuits
     num_I::Int64 # Number of buses
     num_J::Int64 # Number of existing circuits
     num_K::Int64 # Number of candidate circuits
     scenarios::Vector{Scenario}
     num_scenarios::Int64
-    index_in_vec::Dict{Int64, Int64} # Map ids in matpower file to indices
-    id_in_vec::Dict{Int64, Int64} # Map indices to ids in matpower file
 end
 
 # ---------------------------- Model data structures ---------------------------
 struct MIPModel
     model::JuMP.Model
-    x::Vector{JuMP.VariableRef}
-    f::Vector{JuMP.VariableRef}
+    x
+    f
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
-    theta::Vector{JuMP.VariableRef}
-    Delta_theta::Vector{JuMP.VariableRef}
+    theta
     obj::AffQuadExpr
 end
 
