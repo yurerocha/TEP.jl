@@ -31,6 +31,13 @@ jobs:
           - x64
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true  # Automatically updates submodules
+          fetch-depth: 0  # Ensures full commit history for submodules
+
+      - name: Manually Update Submodules (Optional)
+        run: git submodule update --init --recursive
+
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
