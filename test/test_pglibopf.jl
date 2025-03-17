@@ -56,7 +56,7 @@ function print_constrs(model::JuMP.Model, filename::String)
     end
 end
 
-path = "TEP.jl/input/pglib-opf/"
+path = "TEP.jl/submodules/pglib-opf/"
 num_tests = 20
 files = select_files(path, num_tests)
 
