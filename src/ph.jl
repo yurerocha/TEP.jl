@@ -19,30 +19,30 @@ function run_serial_ph!(inst::Instance, params::Parameters)
         # TODO: Cenários como um vector, pois pode ser mais difícil causar erros
         # Imagine se o usuário dá um id que não corresponde a um índice válido
         for scen in 1:inst.num_scenarios
-            md = JuMP.Model()
+            mip = nothing
             if it == 1
                 # TODO: Change LP objective as well
                 # TODO: Run heuristic in every it
-                md = build_mip_model(inst, params, scen)
-                set_state!(md.model, md.x, collect(values(md.g)))
+                mip = build_mip(inst, params, scen)
+                set_state!(mip, mip.x, mip.g)
+
+                update_cache_src_obj!(cache, scen, mip)
                 
-                # (start, _) = build_solution(inst, params, scen)
-                # fix_start!(inst, params, scen, md, start)
-                solve!(params, md)
+                (start, _) = build_solution(inst, params, scen)
+                fix_start!(inst, params, scen, mip, start)
+                solve!(params, mip)
 
                 # Store model at first it
-                models[scen] = md
+                models[scen] = mip
             else
-                # TODO: Let the user define the sense (min or max)
-                # TODO: Add generation costs
-                md = models[scen]
-                delta_obj = comp_new_delta_objective(params, cache, 
-                                                     md.model, scen)
-                @objective(md.model, Min, md.obj + delta_obj)
-                solve!(params, md)
+                mip = models[scen]
+
+                update_model_obj!(params, cache, scen, mip)
+
+                solve!(params, mip)
             end
             
-            update_cache_incumbent!(cache, scen, md.model)
+            update_cache_incumbent!(cache, scen, mip)
 
         end
         # Aggregation
@@ -64,6 +64,14 @@ function run_serial_ph!(inst::Instance, params::Parameters)
     end
 
     for scen in 1:inst.num_scenarios
-        println("Scen#$(scen): $(value.(models[scen].model.ext[:state].x))")
+        v = get_state_values(models[scen])
+        println("Scen#$(scen): $(v.x)")
+    end
+
+    for (k, x) in models[1].x
+        v = value(x)
+        if isg(v, 0.0)
+            @warn k, v
+        end
     end
 end

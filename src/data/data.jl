@@ -1,5 +1,6 @@
 # ------------------------------ Type declarations -----------------------------
 const FloatVarRef = Union{Float64, JuMP.VariableRef}
+# const VectorSet{T <: Number} = Union{Vector{T}, Set{T}}
 const VectorSet = Union{Vector{Int64}, Set{Int64}}
 const AffQuadExpr = Union{JuMP.AffExpr, JuMP.QuadExpr}
 
@@ -34,9 +35,9 @@ end
 
 # -------------------------- Heuristic data structures -------------------------
 struct Start
-    inserted::Set{Int64}
-    f::Vector{Float64}
-    g::Vector{Float64}
+    inserted::Set{Any}
+    f::Dict{Any, Float64}
+    g::Dict{Int, Float64}
     # theta::Vector{Float64}
 end
 
@@ -54,6 +55,8 @@ struct NeighReport
 end
 
 # -------------------------- Instance data structures --------------------------
+const Tuple3I = Tuple{Int64, Int64, Int64}
+
 struct GeneratorInfo
     bus::Int64
     lower_bound::Float64
@@ -77,13 +80,13 @@ mutable struct BranchInfo
     f_bar::Float64 # Capacity of circuits
     gamma::Float64 # Susceptance of circuits
     cost::Float64 # Cost of candidate circuits
-    delta_theta_limits::Tuple{Float64, Float64}
+    delta_theta_bounds::Tuple{Float64, Float64}
 end
 
 mutable struct Instance
     I::Set{Int64} # Buses
-    J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo} # Existing lines
-    K::Dict{Tuple{Tuple{Int64, Int64, Int64}, Int64}, BranchInfo} # Candidates
+    J::Dict{Tuple3I, BranchInfo} # Existing lines
+    K::Dict{Tuple{Tuple3I, Int64}, BranchInfo} # Candidates
     # f_bar::Vector{Float64} # Capacity of circuits
     # gamma::Vector{Float64} # Susceptance of circuits
     # delta_theta_limits::Vector{Tuple{Float64, Float64}} 
@@ -96,47 +99,79 @@ mutable struct Instance
 end
 
 # ---------------------------- Model data structures ---------------------------
-struct MIPModel
-    model::JuMP.Model
-    x
-    f
+abstract type TEPModel end
+
+struct MIPModel <: TEPModel
+    jump_model::JuMP.GenericModel
+    x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}
+    f::Dict{Any, JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
-    theta
-    obj::AffQuadExpr
+    theta::Dict{Int64, JuMP.VariableRef}
+
+    MIPModel(jump_model::JuMP.GenericModel) = 
+                            new(jump_model, 
+                                Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}(), 
+                                Dict{Any, JuMP.VariableRef}(), 
+                                Dict{Int64, JuMP.VariableRef}(), 
+                                Dict{Int64, JuMP.AffExpr}(), 
+                                Dict{Int64, JuMP.VariableRef}())
 end
 
-struct LPModel
-    model::JuMP.Model
-    f::Vector{JuMP.VariableRef}
-    g::Dict{Int64, Tuple{Int64, JuMP.VariableRef}}
-    theta::Vector{JuMP.VariableRef}
-    Delta_theta::Vector{JuMP.VariableRef}
-    s::Vector{JuMP.VariableRef}
-    f_cons::Vector{JuMP.ConstraintRef}
-    fkl_cons::Vector{JuMP.ConstraintRef}
+struct LPModel <: TEPModel
+    jump_model::JuMP.Model
+    s::Dict{Any, JuMP.VariableRef}
+    f::Dict{Any, JuMP.VariableRef}
+    g::Dict{Int64, JuMP.VariableRef}
+    g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
+    theta::Dict{Int64, JuMP.VariableRef}
+    f_cons::Dict{Any, JuMP.ConstraintRef}
+
+    LPModel(jump_model::JuMP.GenericModel) = 
+                                        new(jump_model, 
+                                            Dict{Any, JuMP.VariableRef}(), 
+                                            Dict{Any, JuMP.VariableRef}(), 
+                                            Dict{Int64, JuMP.VariableRef}(), 
+                                            Dict{Int64, JuMP.AffExpr}(), 
+                                            Dict{Int64, JuMP.VariableRef}(), 
+                                            Dict{Any, JuMP.ConstraintRef}())
 end
 
 const TepModel = Union{MIPModel, LPModel}
 
 # ----------------------------- PH data structures -----------------------------
+
+mutable struct ScenarioCache
+    src_obj::AffExpr
+    omega::Vector{Float64}
+    x::Vector{Float64}
+    y::Vector{Float64}
+end
+
 mutable struct Cache
     it::Int64
-    omega::Vector{Vector{Float64}}
+    scenarios::Vector{ScenarioCache}
+    # src_obj::Vector{AffExpr}
+    # omega::Vector{Vector{Float64}}
+    # x::Vector{Vector{Float64}}
+    # y::Vector{Vector{Float64}}
     x_hat::Vector{Float64}
-    x::Vector{Vector{Float64}}
-    y::Vector{Vector{Float64}}
     x_average::Vector{Float64}
     best_convergence_delta::Float64
     best_it::Int64
 
-    Cache(num_scenarios, num_vars) = new(0, 
-                                     [zeros(num_vars) for _ in 1:num_scenarios], 
-                                     Vector{Float64}(), 
-                                     Vector{Vector{Float64}}(undef, num_vars), 
-                                     Vector{Vector{Float64}}(undef, num_vars), 
-                                     Vector{Float64}(), 
-                                     const_infinite, 0)
+    Cache(num_scenarios::Int64, num_vars::Int64) = 
+                new(0, 
+                    [ScenarioCache(AffExpr(0.0), 
+                                   zeros(num_vars), 
+                                   Vector{Float64}(), 
+                                   Vector{Float64}()) for _ in 1:num_scenarios],
+                    # [zeros(num_vars) for _ in 1:num_scenarios], 
+                    # Vector{Vector{Float64}}(undef, num_vars), 
+                    # Vector{Vector{Float64}}(undef, num_vars), 
+                    Vector{Float64}(), 
+                    Vector{Float64}(), 
+                    const_infinite, 0)
 end
 
 struct Variables

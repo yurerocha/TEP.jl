@@ -209,17 +209,17 @@ function log_instance(outputfile::String,
 end
 
 """
-    comp_bigM(inst, k::Tuple{Int64, Int64, Int64})
+    comp_bigM(inst, k::Tuple{Tuple3I, Int64})
 
 Compute the big-M value for the model. 
 
 The big-M is computed as discussed in Ghita's thesis, as there is at least one
 existing line conecting every two buses.
 """
-function comp_bigM(inst::Instance, k::Tuple{Int64, Int64, Int64})
+function comp_bigM(inst::Instance, k::Tuple{Tuple3I, Int64})
     bigM = const_infinite
     for j in keys(inst.J)
-        if j[2] == k[2] && j[3]== k[3]
+        if j[2] == k[1][2] && j[3]== k[1][3]
             tmp = inst.K[k].gamma * (inst.J[j].f_bar / inst.J[j].gamma)
             bigM = min(bigM, tmp)
         end
@@ -273,19 +273,13 @@ function map_to_existing_line(inst::Instance, params::Parameters, k::Int64)
 end
 
 """
-    map_to_first_cand(inst::Instance, params::Parameters, j::Int64)
-
-Map existing line j to first corresponding candidate circuit.
-"""
-function map_to_first_cand(inst::Instance, params::Parameters, j::Int64)
-    return inst.num_J + 1 + params.instance.num_candidates * (j - 1)
-end
-
-"""
     log_neigh_run(inst::Instance, 
-                  best_viol::Float64, 
-                  new_viol::Float64, 
-                  inserted_candidates::Set{Int64})
+                  params::Parameters, 
+                  best_val::Float64, 
+                  new_val::Float64, 
+                  rm_ins::Set{Any}, 
+                  runtime::Float64,
+                  msg::String = "cost")
 
 Log neighborhood run.
 """
@@ -293,7 +287,7 @@ function log_neigh_run(inst::Instance,
                        params::Parameters, 
                        best_val::Float64, 
                        new_val::Float64, 
-                       rm_ins::Set{Int64}, 
+                       rm_ins::Set{Any}, 
                        runtime::Float64,
                        msg::String = "cost")
     log(params, "best_$msg:" * string(round(best_val, digits = 2)) *
@@ -304,14 +298,14 @@ function log_neigh_run(inst::Instance,
 end
 
 """
-    comp_cost(inst::Instance, inserted::Set{Int64})
+    comp_cost(inst::Instance, inserted::Set{Any})
 
 Compute the cost of the solution.
 """
-function comp_cost(inst::Instance, inserted::Set{Int64})
+function comp_cost(inst::Instance, inserted::Set{Any})
     cost = 0.0
     for k in inserted
-        cost += inst.cost[k - inst.num_J]
+        cost += inst.K[k].cost
     end
     return cost
 end
@@ -319,37 +313,37 @@ end
 """
     comp_new_cost(inst::Instance, 
                   old_cost::Float64, 
-                  removed::Vector{Int64})
+                  removed::Vector{Tuple{Tuple3I, Int64}})
 
 Compute the new cost after removing some candidate circuits.
 """
 function comp_new_cost(inst::Instance, 
                        old_cost::Float64, 
-                       removed::Vector{Int64})
+                       removed::Vector{Tuple{Tuple3I, Int64}})
     new_cost = old_cost
     for k in removed
-        new_cost -= inst.cost[k - inst.num_J]
+        new_cost -= inst.K[k].cost
     end
     return new_cost
 end
 
 """
     comp_f_residuals(inst::Instance, 
-                     f::Vector{Float64}, 
-                     inserted::Set{Int64})
+                     f::Dict{Any, Float64}, 
+                     inserted::Set{Any})
 
 Compute the residuals of the line flows.
 """
 function comp_f_residuals(inst::Instance, 
-                          f::Vector{Float64}, 
-                          inserted::Set{Int64})
-    f_residuals = Vector{Tuple{Int64, Float64}}()
+                          f::Dict{Any, Float64}, 
+                          inserted::Set{Any})
+    f_residuals = Vector{Tuple{Any, Float64}}()
     for k in inserted
         # Shift to the existing lines
         # j = map_to_existing_line(inst, k)
-        diff = inst.f_bar[k] - abs(f[k])
+        diff = inst.K[k].f_bar - abs(f[k])
         # if !isl(diff, 0.0) # diff >= 0.0
-        r = diff / inst.f_bar[k]
+        r = diff / inst.K[k].f_bar
         push!(f_residuals, (k, r))
         # end
     end
@@ -363,20 +357,20 @@ end
 """
     comp_viols(inst::Instance, 
                params::Parameters, 
-               s::Vector{Float64}, 
-               inserted::Set{Int64}, 
-               candidates::Set{Int64})
+               s::Dict{Any, Float64}, 
+               inserted::Set{Any}, 
+               candidates::Set{Any})
 
 Compute the violations of the flow constraints in the existing lines.
 """
 function comp_viols(inst::Instance, 
                     params::Parameters, 
-                    s::Vector{Float64}, 
-                    inserted::Set{Int64}, 
-                    candidates::Set{Int64})
-    viols = Vector{Tuple{Int64, Float64}}()
+                    s::Dict{Any, Float64}, 
+                    inserted::Set{Any}, 
+                    candidates::Set{Any})
+    viols = Vector{Tuple{Any, Float64}}()
     for k in candidates
-        j = map_to_existing_line(inst, params, k)
+        j = k[1]
         if isg(s[k], 0.0)
             push!(viols, (k, s[k]))
         elseif isg(s[j], 0.0)
@@ -389,16 +383,17 @@ function comp_viols(inst::Instance,
 end
 
 """
-    get_g_values(inst::Instance, lp_model::LPModel)
+    get_values(vars::Dict{Any, JuMP.VariableRef})
 
-Get values for g variables.
+Get values of vars variables.
 """
-function get_g_values(inst::Instance, lp_model::LPModel)
-    g = Vector{Float64}(undef, inst.num_I)
-    for i in inst.I
-        g[i] = i in keys(lp_model.g) ? value(lp_model.g[i]) : 0.0
+function get_values(vars::Dict{T, JuMP.VariableRef}) where 
+                                                        T <: Union{Int64, Any}
+    vals = Dict{Any, Float64}()
+    for (k, v) in vars
+        vals[k] = value(v)
     end
-    return g
+    return vals
 end
 
 """
@@ -420,27 +415,54 @@ function comp_gd_ratio(inst::Instance)
     return sum_g / sum_d
 end
 
-# TODO: Since it is also used in the deterministic equivalente, move the below
-# definition to another file
-function set_state!(md::JuMP.Model, 
-                    x::Vector{JuMP.VariableRef}, 
-                    y::Vector{JuMP.VariableRef} = Vector{JuMP.VariableRef}())
+"""
+    fix_for_symmetry_contrs!(inst::Instance, 
+                             params::Parameters, 
+                             mip::MIPModel, 
+                             start::Start)
+
+Fix the start solution considering the symmetry constraints.
+"""
+function fix_for_symmetry_contrs!(inst::Instance, 
+                                  params::Parameters, 
+                                  mip::MIPModel, 
+                                  start::Start)
+    if params.model.is_symmetry_en
+        for j in keys(inst.J)
+            for l in params.instance.num_candidates:-1:1
+                k = (j, l)
+                k_plus = (j, l + 1)
+                if iseq(inst.K[key].gamma, inst.K[k_plus].gamma) &&
+                   !in(k, start.inserted) && in(kplus, start.inserted)
+                    start.f[k], start.f[k_plus] = start.f[k_plus], start.f[k]
+                    delete!(start.inserted, k_plus)
+                    push!(start.inserted, k)
+                end
+            end
+        end
+    end
+end
+
+function set_state!(mip::MIPModel, 
+                    x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}, 
+                    y::Dict{Int64, JuMP.VariableRef})
     # In case the x is a single variable instead of a vector
-    if x isa JuMP.VariableRef
-        x = [x]
-    end
-    if y isa JuMP.VariableRef
-        y = [y]
-    end
-    if !(:state in keys(md.ext))
-        md.ext[:state] = []
-    end
-    md.ext[:state] = Variables(x, y)
+    # if x isa JuMP.VariableRef
+    #     x = [x]
+    # end
+    # if y isa JuMP.VariableRef
+    #     y = [y]
+    # end
+    # if !(:state in keys(md.ext))
+    #     md.ext[:state] = []
+    # end
+    mip.jump_model.ext[:state] = Variables([x for (_, x) in x], 
+                                           [g for (_, g) in y])
     return nothing
 end
 
-function get_state_values(md::JuMP.Model)
-    x = md.ext[:state].x
-    y = md.ext[:state].y
+function get_state_values(mip::MIPModel)
+    x = mip.jump_model.ext[:state].x
+    y = mip.jump_model.ext[:state].y
     return Variables(value.(x), value.(y))
 end

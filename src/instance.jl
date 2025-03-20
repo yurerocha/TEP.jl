@@ -10,8 +10,13 @@ function build_instance(params::Parameters,
     D = build_loads(params, mp_data)
     G = build_gens(params, mp_data)
 
+    sumD = sum(d for d in values(D))
+    sumG = sum([g.upper_bound for g in values(G)])
+    
+    @warn sumD, sumG, sumD / sumG
     if params.debugging_level == 1
-        @assert isl(sum(d for d in values(D)), sum([g[2] for g in values(G)]))
+        @assert isl(sum(d for d in values(D)), 
+                    sum([g.upper_bound for g in values(G)]))
     end
 
     J = build_existing_circuits(mp_data)

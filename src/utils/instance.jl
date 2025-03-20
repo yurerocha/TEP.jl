@@ -147,22 +147,20 @@ Build candidate circuits based on exsting lines.
 """
 function build_candidate_circuits(params::Parameters, 
                                 J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo})
-    param_cost_mult = 100.0
-    k = 1
-    K = Dict{Tuple{Int64, Int64, Int64}, BranchInfo}()
-    for (key, val) in pairs(J)
+    # TODO: K and J with the same key format
+    K = Dict{Tuple{Tuple3I, Int64}, BranchInfo}()
+    for (j, v) in J
         # Candidate circuits are copies of the existing ones
-        for l in k:k + params.instance.num_candidates - 1
+        for l in 1:params.instance.num_candidates
             # Compute the new costs based on the gamma values
-            base_cost = param_cost_mult * gamma[j]
+            base_cost = params.instance.cost_mult * v.gamma
             rand_num = rand(params.rng, 1:params.instance.max_rand)
-            costs[l] = base_cost * (1.0 / (params.instance.num_candidates + 1) +
-                                   1.0 / rand_num)
+            new_cost = base_cost * (1.0 / (params.instance.num_candidates + 1) +
+                                    1.0 / rand_num)
 
-            K[(key, l - k + 1)] = val
-            K[(key, l - k + 1)].cost = abs(costs[l])
+            K[(j, l)] = v
+            K[(j, l)].cost = abs(new_cost)
         end
-        k += params.instance.num_candidates
     end
     return K
 end

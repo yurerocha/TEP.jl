@@ -32,6 +32,7 @@ include("ext/test_eval.jl")
 include("utils/deterministic.jl")
 # include("utils/drawing.jl")
 include("utils/instance.jl")
+include("utils/model.jl")
 include("utils/ph.jl")
 include("utils/utils.jl")
 

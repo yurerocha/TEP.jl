@@ -11,7 +11,7 @@ struct Deterministic <: AbstractSolutionStrategy end
 struct Parallel <: AbstractSolutionStrategy end
 
 Base.@kwdef mutable struct InstanceParameters
-    load_gen_mult::Float64 = 1.0 # Multiplier for the load and generation
+    load_gen_mult::Float64 = 2.0 # Multiplier for the load and generation
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
     max_rand::Int64 = 100 # Max random value for the new cost (see text)
     num_candidates::Int64 = 2 # Number of candidates available per existing line

@@ -65,13 +65,9 @@ params.instance.num_candidates = 0
 params.model.is_dcp_power_model_en = true
 # params.model.optimizer = Ipopt.Optimizer
 # params.log_level = 0
-
 eps = 0.1
 
-# files = ["pglib_opf_case500_goc.m", "pglib_opf_case2000_goc.m"]
-
-# TODO: Os dados em BASELINE.md não contêm precisão. Resolver o modelo e
-# comparar com o nosso
+# BASELINE.md solution costs do not have precision
 
 @testset begin
     for (i, file) in enumerate(files)
@@ -86,17 +82,16 @@ eps = 0.1
         
         # Run TEP
         inst = TEP.build_instance(params, mp_data)
-        model = TEP.build_mip_model(inst, params, 1)
-        # force_solution(inst, model, sol["solution"], mp_data)
-        # print_constrs(model.model, "TEP.jl/model1.lp")
+        mip = TEP.build_mip(inst, params, 1)
+        # force_solution(inst, mip, sol["solution"], mp_data)
+        # print_constrs(mip.jump_model, "TEP.jl/model1.lp")
         @info "Test $i $file"
         # pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
         # print_constrs(pm.model, "TEP.jl/model2.lp")
-        results = TEP.solve!(params, model)
+        results = TEP.solve!(params, mip)
         
         @test abs(results[7] - sol["objective"]) < eps
         @info results[7], sol["objective"]
-        # readline()
     end
 end
 
