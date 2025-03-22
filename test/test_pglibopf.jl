@@ -38,24 +38,6 @@ function force_solution(inst::TEP.Instance,
     end
 end
 
-function print_constrs(model::JuMP.Model, filename::String)
-    open(filename, "w") do f
-        println(f, model)
-        i = 1
-        for (F, S) in JuMP.list_of_constraint_types(model)
-            if i == 0
-                @warn F, S
-                readline()
-                for cref in JuMP.all_constraints(model, F, S)
-                    println(f, cref)
-                end
-                break
-            end
-            i += 1
-        end
-    end
-end
-
 path = "TEP.jl/submodules/pglib-opf/"
 num_tests = 20
 files = select_files(path, num_tests)
@@ -70,10 +52,13 @@ eps = 0.1
 # BASELINE.md solution costs do not have precision
 
 @testset begin
-    for (i, file) in enumerate(files)
+    for (i, file) in enumerate(files[2:2])
         @info "Test $i $file"
         params.log_file = "TEP.jl/log/" * TEP.get_inst_name(file) * ".txt"
         mp_data = PowerModels.parse_file(path * file)
+        @info "Test $i $file"
+        pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
+        print_constrs(pm.model, "TEP.jl/model2.lp")
         # Run DC-OPF
         sol = PowerModels.solve_opf(mp_data, 
                                     DCPPowerModel, 
@@ -86,8 +71,8 @@ eps = 0.1
         # force_solution(inst, mip, sol["solution"], mp_data)
         # print_constrs(mip.jump_model, "TEP.jl/model1.lp")
         @info "Test $i $file"
-        # pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
-        # print_constrs(pm.model, "TEP.jl/model2.lp")
+        pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
+        print_constrs(pm.model, "TEP.jl/model2.lp")
         results = TEP.solve!(params, mip)
         
         @test abs(results[7] - sol["objective"]) < eps

@@ -118,19 +118,18 @@ function solve!(params::Parameters, mip::MIPModel)
     obj = "-"
     gap = "-"
 
+    @warn status
+
     # If the solver found a solution
     if result_count(model) > 0
-        if params.model.is_mip_en
+        if status == MOI.OPTIMAL
+            best_bound = objective_value(model)
+            obj = objective_value(model)
+            gap = 0.0
+        elseif status == MOI.TIME_LIMIT
             best_bound = dual_objective_value(model)
             obj = objective_value(model)
-            # @warn obj, best_bound, termination_status(model)
-            try
-                gap = 100.0 * relative_gap(model)
-            catch e
-                # println(e)
-                gap = (best_bound - obj) / obj
-            end
-            # @warn obj, best_bound
+            gap = 100.0 * relative_gap(model)
         end
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         # TODO: Add param to compute conflict when infeasible

@@ -67,11 +67,4 @@ function run_serial_ph!(inst::Instance, params::Parameters)
         v = get_state_values(models[scen])
         println("Scen#$(scen): $(v.x)")
     end
-
-    for (k, x) in models[1].x
-        v = value(x)
-        if isg(v, 0.0)
-            @warn k, v
-        end
-    end
 end

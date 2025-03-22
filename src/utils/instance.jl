@@ -1,10 +1,14 @@
 """
-    comp_gamma(x, r = 0.0)
+    comp_gamma(params::Parameters, x::Float64, r::Float64 = 0.0)
 
 Compute the susceptance of a circuit.
 """
-function comp_gamma(x::Float64, r::Float64 = 0.0)
-    return -x / (r^2 + x^2)
+function comp_gamma(params::Parameters, x::Float64, r::Float64 = 0.0)
+    if params.model.is_dcp_power_model_en
+        return -x / (r^2 + x^2)
+    else
+        return 1.0 / (x^2)
+    end
 end
 
 """
@@ -102,15 +106,16 @@ function build_gens(params::Parameters,
         ub = params.instance.load_gen_mult * dt["pmax"]
         G[dt["index"]] = GeneratorInfo(dt["gen_bus"], lb, ub, dt["cost"])
     end
+
     return G
 end
 
 """
-    build_existing_circuits(mp_data::Dict{String, Any})
+    build_existing_circuits(params::Parameters, mp_data::Dict{String, Any})
 
 Build existing lines, gamma values and capacities of circuits.
 """
-function build_existing_circuits(mp_data::Dict{String, Any})
+function build_existing_circuits(params::Parameters, mp_data::Dict{String, Any})
     J = Dict{Tuple{Int64, Int64, Int64}, BranchInfo}()
     for b in mp_data["branch"]
         dt = b[2]
@@ -125,14 +130,14 @@ function build_existing_circuits(mp_data::Dict{String, Any})
         if iseq(x, 0.0)
             fr = dt["f_bus"]
             to = dt["t_bus"]
-            @warn "x = 0.0 in circuit ($fr, $to)."
+            log(params, "x = 0.0 in circuit ($fr, $to).")
             # throw(ArgumentError("Error: x = 0.0 in circuit ($fr, $to)."))
             continue
         end
 
         j = (dt["index"], dt["f_bus"], dt["t_bus"])
         J[j] = BranchInfo(dt["rate_a"], 
-                          comp_gamma(x, r), 0.0, 
+                          comp_gamma(params, x, r), 0.0, 
                           (dt["angmin"], dt["angmax"]))
     end
 

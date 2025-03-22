@@ -19,7 +19,7 @@ function build_instance(params::Parameters,
                     sum([g.upper_bound for g in values(G)]))
     end
 
-    J = build_existing_circuits(mp_data)
+    J = build_existing_circuits(params, mp_data)
     K = build_candidate_circuits(params, J)
 
     scenarios = [Scenario(1.0, D, G)]

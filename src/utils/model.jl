@@ -148,8 +148,8 @@ function add_thermal_limits_constrs!(inst::Instance, tep::TEPModel)
     end
     # Candidates
     for k in keys(inst.K)
-        JuMP.set_lower_bound(tep.f[k], -inst.K[k].f_bar)
-        JuMP.set_upper_bound(tep.f[k], inst.K[k].f_bar)
+        @constraint(tep.jump_model, -inst.K[k].f_bar * tep.x[k] <= tep.f[k])
+        @constraint(tep.jump_model, tep.f[k] <= inst.K[k].f_bar * tep.x[k])
     end
 
     return nothing
@@ -165,12 +165,12 @@ function add_thermal_limits_constrs!(inst::Instance, lp::LPModel)
     # Existing lines
     for j in keys(inst.J)
         @constraint(lp.jump_model, lp.f[j] - inst.J[j].f_bar <= lp.s[j])
-        @constraint(lp.jump_model, lp.s[j] <= lp.f[j] + inst.J[j].f_bar)
+        @constraint(lp.jump_model, -lp.f[j] - inst.J[j].f_bar <= lp.s[j])
     end
     # Candidates
     for k in keys(inst.K)
         @constraint(lp.jump_model, lp.f[k] - inst.K[k].f_bar <= lp.s[k])
-        @constraint(lp.jump_model, lp.s[k] <= lp.f[k] + inst.K[k].f_bar)
+        @constraint(lp.jump_model, -lp.f[k] - inst.K[k].f_bar <= lp.s[k])
     end
 
     return nothing
@@ -348,5 +348,19 @@ function comp_obj_g(params::Parameters,
                 true)
         end
         return costs[1] + costs[2]*g + costs[3]*g^2
+    end
+end
+
+"""
+    print_constrs(model::JuMP.Model, filename::String)
+Print model constraints according to their types.
+"""
+function print_constrs(model::JuMP.Model, filename::String)
+    open(filename, "w") do f
+        for (F, S) in JuMP.list_of_constraint_types(model)
+            for cref in JuMP.all_constraints(model, F, S)
+                println(f, cref)
+            end
+        end
     end
 end

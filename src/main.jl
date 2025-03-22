@@ -151,4 +151,6 @@ function solve(file::String)
         # TODO: Call Parallel PH
         println("Parallel solution strategy", true)
     end
+
+    return nothing
 end
