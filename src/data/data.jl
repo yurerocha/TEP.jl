@@ -142,7 +142,7 @@ const TepModel = Union{MIPModel, LPModel}
 # ----------------------------- PH data structures -----------------------------
 
 mutable struct ScenarioCache
-    src_obj::AffExpr
+    src_obj::AffQuadExpr
     omega::Vector{Float64}
     x::Vector{Float64}
     y::Vector{Float64}

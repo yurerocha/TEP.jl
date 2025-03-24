@@ -125,16 +125,16 @@ function tuning()
     # end
 end
 
-function solve(file::String)
+function solve(file::String, num_scenarios::Int64 = 1)
     params = Parameters()
     params.log_file *= "/" * get_inst_name(file) * ".txt"
 
-    params.solution_strategy = Parallel()
+    params.solution_strategy = Serial()
 
     inst = nothing
     if occursin("CATS-CaliforniaTestSystem", file)
         # Read the CATS instance, with multiple scenarios
-        inst = build_cats_instance(params)
+        inst, _ = build_cats_instance(params, num_scenarios)
     else
         # Read the pglib-opf instances with single scenarios
         mp_data = PowerModels.parse_file(file)

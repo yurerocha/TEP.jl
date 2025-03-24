@@ -31,7 +31,9 @@ function build_model(inst::Instance,
     add_vars!(inst, scen, tep)
     add_g_vars!(inst, scen, tep)
     
-    if params.model.is_symmetry_en && tep isa MIPModel
+    if params.model.is_symmetry_en && 
+       !params.model.is_dcp_power_model_en && 
+       tep isa MIPModel
         add_symmetry_constrs!(inst, tep)
     end
 
@@ -135,21 +137,20 @@ function solve!(params::Parameters, mip::MIPModel)
         # TODO: Add param to compute conflict when infeasible
         # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
         compute_conflict!(model)
-        @warn get_attribute(model, MOI.ConflictStatus())
         if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
             iis_model, _ = copy_conflict(model)
-            print(iis_model)
+            println(iis_model)
         end
     end
 
     return solve_time(model), 
-           incumbent_time,
-           status,
+           incumbent_time, 
+           status, 
            rt_runtime, 
            rt_best_bound, 
            best_bound, 
            obj, 
-           gap,
+           gap, 
            mip_start_gap
 end
 

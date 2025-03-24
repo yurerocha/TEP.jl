@@ -3,6 +3,7 @@ module TEP
 using Dates
 using Gurobi
 using JuMP
+using MPI
 using OrderedCollections # OrderedDict
 using PowerModels
 # using ProfileView

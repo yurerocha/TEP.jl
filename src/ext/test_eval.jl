@@ -4,14 +4,14 @@
 # using DataFrames
 # using Gurobi, Ipopt
 
-function build_cats_instance(params::Parameters)
+function build_cats_instance(params::Parameters, num_scenarios::Int64 = 111)
     #println(Threads.nthreads())
     # User input
     save_to_JSON = false
     save_summary = false
     start_scen = 8649
+    N = start_scen + num_scenarios - 1
     # N = 8760
-    N = 8660
     # run for N hours (scenarios)
 
     # Specify solver
@@ -21,7 +21,7 @@ function build_cats_instance(params::Parameters)
     # const IPOPT_ENV = Ipopt.Env()
     # solver = Ipopt.Optimizer #JuMP.optimizer_with_attributes(() -> Ipopt.Optimizer(), "print_level" => 1)
 
-    dir = "TEP.jl/input/CATS-CaliforniaTestSystem"
+    dir = "TEP.jl/submodules/CATS-CaliforniaTestSystem"
 
     # include("test_eval_functions.jl")
     load_scenarios = CSV.read("$dir/Data/Load_Agg_Post_Assignment_v3_latest.csv",header = false, DataFrame)
@@ -51,13 +51,15 @@ function build_cats_instance(params::Parameters)
 
     inst = build_instance(params, NetworkData)
     scenarios = Vector{Scenario}()
-    p = 1.0 / (N - start_scen + 1)
-    index_in_vec = map_ids_to_indices(NetworkData)
+    p = 1.0 / (num_scenarios)
+
+    results = Vector{Float64}()
 
     @time begin
         #Threads.@threads
         for k = start_scen:N
-            #println("k = $k on thread $(Threads.threadid())")
+            # println("k = $k on thread $(Threads.threadid())")
+            println("k = $k")
             # println(k)
             # Change renewable generators' pg for the current scenario
             update_rgen!(k,NetworkData,gen_data,SolarGeneration,WindGeneration,PMaxOG,SolarCap,WindCap)
@@ -66,14 +68,17 @@ function build_cats_instance(params::Parameters)
             # Change load buses' Pd and Qd for the current scenario
             update_loads!(k, load_scenarios, NetworkData, load_mapping)
 
-            D = build_loads(params, NetworkData, index_in_vec)
-            G = build_gens(params, NetworkData, index_in_vec)
-            gen_cost = build_gen_costs(NetworkData, index_in_vec)
-            push!(scenarios, Scenario(p, D, G, gen_cost))
+            D = build_loads(params, NetworkData)
+            G = build_gens(params, NetworkData)
+            push!(scenarios, Scenario(p, D, G))
 
-            # Run power flow
-            # solution = PowerModels.solve_opf(NetworkData, ACPPowerModel, solver)
-            #push!(results, (renewable_scenarios[!,1][k], solution["termination_status"]))
+            # if params.model.is_dcp_power_model_en
+            if false
+                # Run power flow
+                solution = PowerModels.solve_opf(NetworkData, DCPPowerModel, params.model.optimizer)
+                # push!(results, (renewable_scenarios[!,1][k], solution["termination_status"]))
+                push!(results, solution["objective"])
+            end
 
             #Save solution dictionary to JSON
             # if save_to_JSON == true
@@ -103,5 +108,5 @@ function build_cats_instance(params::Parameters)
     # end
 
     inst.scenarios = scenarios
-    return inst
+    return inst, results
 end

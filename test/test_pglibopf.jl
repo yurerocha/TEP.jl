@@ -44,6 +44,7 @@ files = select_files(path, num_tests)
 
 params = TEP.Parameters()
 params.instance.num_candidates = 0
+params.instance.load_gen_mult = 1.0
 params.model.is_dcp_power_model_en = true
 # params.model.optimizer = Ipopt.Optimizer
 # params.log_level = 0
@@ -52,13 +53,12 @@ eps = 0.1
 # BASELINE.md solution costs do not have precision
 
 @testset begin
-    for (i, file) in enumerate(files[2:2])
+    for (i, file) in enumerate(files)
         @info "Test $i $file"
         params.log_file = "TEP.jl/log/" * TEP.get_inst_name(file) * ".txt"
         mp_data = PowerModels.parse_file(path * file)
-        @info "Test $i $file"
-        pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
-        print_constrs(pm.model, "TEP.jl/model2.lp")
+        # pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
+        # TEP.print_constrs(pm.model, "TEP.jl/model2.lp")
         # Run DC-OPF
         sol = PowerModels.solve_opf(mp_data, 
                                     DCPPowerModel, 
@@ -69,10 +69,7 @@ eps = 0.1
         inst = TEP.build_instance(params, mp_data)
         mip = TEP.build_mip(inst, params, 1)
         # force_solution(inst, mip, sol["solution"], mp_data)
-        # print_constrs(mip.jump_model, "TEP.jl/model1.lp")
-        @info "Test $i $file"
-        pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
-        print_constrs(pm.model, "TEP.jl/model2.lp")
+        # TEP.print_constrs(mip.jump_model, "TEP.jl/model1.lp")
         results = TEP.solve!(params, mip)
         
         @test abs(results[7] - sol["objective"]) < eps
