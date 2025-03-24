@@ -1,3 +1,4 @@
+# --------------------------- Parallel and Serial PH ---------------------------
 function update_cache_src_obj!(cache::Cache, scen::Int64, mip::MIPModel)
     cache.scenarios[scen].src_obj = JuMP.objective_function(mip.jump_model)
     return nothing
@@ -92,4 +93,10 @@ function comp_new_delta_obj(params::Parameters,
     penalty::Float64 = params.progressive_hedging.rho / 2.0
 
     return cache.scenarios[scen].omega' * x + penalty * sum(squared_twonorm)
+end
+
+# --------------------------------- Parallel PH --------------------------------
+function has_finished_all_jobs(controller::JobQueueMPI.Controller)
+    return JobQueueMPI.is_job_queue_empty(controller) && 
+           !JobQueueMPI.any_pending_jobs(controller)
 end

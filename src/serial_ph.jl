@@ -4,9 +4,6 @@
 Implementation of the sequential progressive hedging algorithm. 
 
 Associated paper: https://link.springer.com/article/10.1007/s10107-016-1000-z
-
-Assumptions
-    1. Binary first-stage variables.
 """
 # TODO: Consider non-binary first stage decision variables
 function run_serial_ph!(inst::Instance, params::Parameters)
@@ -43,7 +40,6 @@ function run_serial_ph!(inst::Instance, params::Parameters)
             end
             
             update_cache_incumbent!(cache, scen, mip)
-
         end
         # Aggregation
         update_cache_x_hat!(inst, cache)

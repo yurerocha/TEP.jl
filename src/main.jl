@@ -129,7 +129,7 @@ function solve(file::String)
     params = Parameters()
     params.log_file *= "/" * get_inst_name(file) * ".txt"
 
-    params.solution_strategy = Serial()
+    params.solution_strategy = Parallel()
 
     inst = nothing
     if occursin("CATS-CaliforniaTestSystem", file)
@@ -148,8 +148,8 @@ function solve(file::String)
         log(params, "Serial solution strategy", true)
         run_serial_ph!(inst, params)
     elseif params.solution_strategy isa Parallel
-        # TODO: Call Parallel PH
-        println("Parallel solution strategy", true)
+        log(params, "Parallel solution strategy", true)
+        run_parallel_ph!(inst, params)
     end
 
     return nothing

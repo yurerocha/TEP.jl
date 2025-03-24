@@ -10,6 +10,7 @@ using Random
 # External files in instance/ext
 using CSV, JSON
 using DataFrames
+using JobQueueMPI
 
 # utils/drawing.jl
 # using Colors
@@ -23,8 +24,8 @@ using DataFrames
 # using LinearAlgebra
 # using LinearSolve
 
-include("data/data.jl")
 include("data/parameters.jl")
+include("data/data.jl")
 
 include("ext/test_eval_functions.jl")
 include("ext/test_eval.jl")
@@ -43,6 +44,7 @@ include("deterministic.jl")
 include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
-include("ph.jl")
+include("parallel_ph.jl")
+include("serial_ph.jl")
 
 end

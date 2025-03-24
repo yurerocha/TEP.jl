@@ -178,3 +178,12 @@ struct Variables
     x::Vector{Union{Float64, JuMP.VariableRef}}
     y::Vector{Union{Float64, JuMP.VariableRef}}
 end
+
+mutable struct Message
+    inst::Instance
+    params::Parameters
+    cache::Cache
+    models::Vector{MIPModel}
+    it::Int64
+    scen::Int64
+end
