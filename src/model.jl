@@ -120,8 +120,6 @@ function solve!(params::Parameters, mip::MIPModel)
     obj = "-"
     gap = "-"
 
-    @warn status
-
     # If the solver found a solution
     if result_count(model) > 0
         if status == MOI.OPTIMAL

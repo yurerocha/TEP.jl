@@ -13,7 +13,7 @@ function build_instance(params::Parameters,
     sumD = sum(d for d in values(D))
     sumG = sum([g.upper_bound for g in values(G)])
     
-    @warn sumD, sumG, sumD / sumG
+    log(params, "$sumD, $sumG, $(sumD / sumG)", true)
     if params.debugging_level == 1
         @assert isl(sum(d for d in values(D)), 
                     sum([g.upper_bound for g in values(G)]))

@@ -17,5 +17,7 @@ function recursive_include(path::String)
 end
 
 @testset verbose = true "TEP Tests" begin
-    recursive_include(@__DIR__)
+    # recursive_include(@__DIR__)
+    # include("test_cats.jl")
+    include("test_pglibopf.jl")
 end

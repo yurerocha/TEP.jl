@@ -49,11 +49,15 @@ function build_cats_instance(params::Parameters, num_scenarios::Int64 = 111)
     # Create dataframe to store results
     # results = []
 
+    if params.model.is_dcp_power_model_en
+        rm_g_nonlinear_coeffs!(NetworkData)
+    end
+
     inst = build_instance(params, NetworkData)
     scenarios = Vector{Scenario}()
     p = 1.0 / (num_scenarios)
 
-    results = Vector{Float64}()
+    results = Vector{Dict{String, Any}}()
 
     @time begin
         #Threads.@threads
@@ -72,12 +76,12 @@ function build_cats_instance(params::Parameters, num_scenarios::Int64 = 111)
             G = build_gens(params, NetworkData)
             push!(scenarios, Scenario(p, D, G))
 
-            # if params.model.is_dcp_power_model_en
-            if false
+            if params.model.is_dcp_power_model_en
+                rm_g_nonlinear_coeffs!(NetworkData)
                 # Run power flow
                 solution = PowerModels.solve_opf(NetworkData, DCPPowerModel, params.model.optimizer)
                 # push!(results, (renewable_scenarios[!,1][k], solution["termination_status"]))
-                push!(results, solution["objective"])
+                push!(results, solution)
             end
 
             #Save solution dictionary to JSON

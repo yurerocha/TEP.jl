@@ -169,3 +169,19 @@ function build_candidate_circuits(params::Parameters,
     end
     return K
 end
+
+"""
+    function rm_g_quadratic_coeffs!(mp_data)
+
+Remove nonlinear coefficients of the generation terms to be used in the 
+objective function.
+"""
+function rm_g_nonlinear_coeffs!(mp_data::Dict{String, Any})
+    for (i, g) in mp_data["gen"]
+        if length(g["cost"]) > 0
+            new_g = reverse(g["cost"])[1:2]
+            mp_data["gen"][i]["cost"] = reverse(new_g)
+        end
+    end
+    return nothing
+end

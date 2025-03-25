@@ -32,11 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true  # Automatically updates submodules
-          fetch-depth: 0  # Ensures full commit history for submodules
-
-      - name: Manually Update Submodules (Optional)
-        run: git submodule update --init --recursive
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN }}
 
       - uses: julia-actions/setup-julia@v2
         with:

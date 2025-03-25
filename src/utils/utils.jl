@@ -466,3 +466,16 @@ function get_state_values(mip::MIPModel)
     y = mip.jump_model.ext[:state].y
     return Variables(value.(x), value.(y))
 end
+
+"""
+    config_dcp_pm_tests!(params::Parameters)
+
+Configure the parameters for tests against the DCP Power Models.
+"""
+function config_dcp_pm_tests!(params::Parameters)
+    params.instance.num_candidates = 0
+    params.instance.load_gen_mult = 1.0
+    params.model.is_dcp_power_model_en = true
+    params.log_level = 0
+    # params.model.optimizer = Ipopt.Optimizer
+end

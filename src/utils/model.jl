@@ -208,14 +208,14 @@ function add_ohms_law_constrs!(inst::Instance, lp::LPModel)
         delta_theta = lp.theta[j[2]] - lp.theta[j[3]]
         lp.f_cons[j] = @constraint(lp.jump_model, 
                                    lp.f[j] == inst.J[j].gamma * delta_theta,
-                                   base_name = "ol[$j]")
+                                   base_name = "ol.j[$j]")
     end
     # Ohm's law for candidate circuits
     for k in keys(inst.K)
         delta_theta = lp.theta[k[1][2]] - lp.theta[k[1][3]]
         lp.f_cons[k] = @constraint(lp.jump_model, 
                                    lp.f[k] == inst.K[k].gamma * delta_theta,
-                                   base_name = "ol[$k]")
+                                   base_name = "ol.k[$k]")
     end
 
     return nothing
@@ -362,5 +362,25 @@ function print_constrs(model::JuMP.Model, filename::String)
                 println(f, cref)
             end
         end
+    end
+end
+
+"""
+    enforce_sol(inst::Instance, 
+                tep::TEPModel, 
+                sol::Dict{String, Any})
+
+Enforce solution as constraints within the model.
+"""
+function enforce_sol(inst::Instance, 
+                     tep::TEPModel, 
+                     sol::Dict{String, Any})
+    # for b in sol["bus"]
+    #     i = parse(Int64, b[1])
+    #     @constraint(tep.jump_model, tep.theta[i] == -b[2]["va"])
+    # end
+    for g in sol["gen"]
+        i = parse(Int64, g[1])
+        @constraint(tep.jump_model, tep.g[i] == g[2]["pg"])
     end
 end
