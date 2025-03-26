@@ -1,6 +1,7 @@
 module TEP
 
 using Dates
+using Distributions
 using Gurobi
 using JuMP
 using MPI

@@ -57,7 +57,7 @@ end
 # -------------------------- Instance data structures --------------------------
 const Tuple3I = Tuple{Int64, Int64, Int64}
 
-struct GeneratorInfo
+mutable struct GeneratorInfo
     bus::Int64
     lower_bound::Float64
     upper_bound::Float64
@@ -179,11 +179,14 @@ struct Variables
     y::Vector{Union{Float64, JuMP.VariableRef}}
 end
 
-mutable struct Message
+mutable struct ControllerMessage
     inst::Instance
     params::Parameters
     cache::Cache
     models::Vector{MIPModel}
     it::Int64
     scen::Int64
+end
+
+mutable struct WorkerMessage
 end

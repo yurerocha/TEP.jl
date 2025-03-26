@@ -20,6 +20,7 @@ end
 function update_cache_omega!(inst::Instance, params::Parameters, cache::Cache)
     for scen in 1:inst.num_scenarios
         delta = cache.scenarios[scen].x - cache.x_hat
+        @warn cache.scenarios[scen].x, cache.x_hat
         cache.scenarios[scen].omega += params.progressive_hedging.rho * delta
     end
     return nothing
@@ -65,7 +66,7 @@ function update_model_obj!(params::Parameters,
                            mip::MIPModel)
     delta_obj = comp_new_delta_obj(params, cache, scen, mip)
 
-    @objective(mip.model, Min, cache.scenarios[scen].src_obj + delta_obj)
+    @objective(mip.jump_model, Min, cache.scenarios[scen].src_obj + delta_obj)
 
     return nothing
 end

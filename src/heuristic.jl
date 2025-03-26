@@ -8,6 +8,7 @@ Build solution with the full linear programming model.
 function build_solution(inst::Instance, 
                         params::Parameters, 
                         scen::Int64)
+    log(params, "Start heuristic to build initial solution", true)
     # At the first it, there are no candidate lines
     lp = build_lp(inst, params, scen)
 

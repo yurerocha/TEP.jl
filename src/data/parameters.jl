@@ -22,7 +22,7 @@ Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
     penalty::Float64 = 1e6
     is_symmetry_en::Bool = false
-    is_dcp_power_model_en::Bool = true # Build DCPPowerModel
+    is_dcp_power_model_en::Bool = false # Build DCPPowerModel
     optimizer = Gurobi.Optimizer
 end
 
@@ -47,9 +47,9 @@ end
 
 Base.@kwdef mutable struct Parameters
     log_level::Int64 = 3
-    log_file::String = "TEP.jl/log"
-    debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 100.0
+    log_file::String = "log"
+    debugging_level::Int64 = 1
+    solver_time_limit::Float64 = 600.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()

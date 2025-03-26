@@ -7,7 +7,7 @@ using Gurobi, Ipopt
 using PowerModels
 using Markdown, DataFrames
 
-file = "TEP.jl/submodules/CATS-CaliforniaTestSystem/MATPOWER/CaliforniaTestSystem.m"
+file = "submodules/CATS-CaliforniaTestSystem/MATPOWER/CaliforniaTestSystem.m"
 num_scenarios = 10
 
 params = TEP.Parameters()
@@ -20,14 +20,14 @@ eps = 0.5
 # constraints within the TEP model, the OVFs equal. This is probably due to the 
 # quadractic terms in the objective function
 
-@testset begin
+@testset "California Test System" begin
     # Read scenarios and solve coresponding DCP PMs
     TEP.log(params, "Build instances and solve corresponding DCP PMs", true)
     inst, sols = TEP.build_cats_instance(params, num_scenarios)
 
     for scen in 1:num_scenarios
         TEP.log(params, "Test $scen $file")
-        params.log_file = "TEP.jl/log/" * TEP.get_inst_name(file) * "_$scen.txt"
+        params.log_file = "log/" * TEP.get_inst_name(file) * "_$scen.txt"
         
         # Run TEP
         mip = TEP.build_mip(inst, params, scen)

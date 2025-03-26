@@ -21,7 +21,7 @@ function build_cats_instance(params::Parameters, num_scenarios::Int64 = 111)
     # const IPOPT_ENV = Ipopt.Env()
     # solver = Ipopt.Optimizer #JuMP.optimizer_with_attributes(() -> Ipopt.Optimizer(), "print_level" => 1)
 
-    dir = "TEP.jl/submodules/CATS-CaliforniaTestSystem"
+    dir = "submodules/CATS-CaliforniaTestSystem"
 
     # include("test_eval_functions.jl")
     load_scenarios = CSV.read("$dir/Data/Load_Agg_Post_Assignment_v3_latest.csv",header = false, DataFrame)

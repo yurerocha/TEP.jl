@@ -25,9 +25,8 @@ function run_serial_ph!(inst::Instance, params::Parameters)
 
                 update_cache_src_obj!(cache, scen, mip)
                 
-                (start, _) = build_solution(inst, params, scen)
-                fix_start!(inst, params, scen, mip, start)
-                solve!(params, mip)
+                # (start, _) = build_solution(inst, params, scen)
+                # fix_start!(inst, params, scen, mip, start)
 
                 # Store model at first it
                 models[scen] = mip
@@ -35,9 +34,8 @@ function run_serial_ph!(inst::Instance, params::Parameters)
                 mip = models[scen]
 
                 update_model_obj!(params, cache, scen, mip)
-
-                solve!(params, mip)
             end
+            solve!(params, mip)
             
             update_cache_incumbent!(cache, scen, mip)
         end

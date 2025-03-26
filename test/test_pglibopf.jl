@@ -24,7 +24,7 @@ function select_files(path::String, num_files::Int64)
     return files[1:num_files]
 end
 
-path = "TEP.jl/submodules/pglib-opf/"
+path = "submodules/pglib-opf/"
 num_tests = 40
 files = select_files(path, num_tests)
 
@@ -35,10 +35,10 @@ eps = 1e-3
 
 # BASELINE.md solution costs do not have precision
 
-@testset begin
+@testset "DC OPF Library" begin
     for (i, file) in enumerate(files)
         TEP.log(params, "Test $i $file")
-        params.log_file = "TEP.jl/log/" * TEP.get_inst_name(file) * ".txt"
+        params.log_file = "log/" * TEP.get_inst_name(file) * ".txt"
         mp_data = PowerModels.parse_file(path * file)
         # pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
         # TEP.print_constrs(pm.model, "TEP.jl/model2.lp")
