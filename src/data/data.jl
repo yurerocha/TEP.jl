@@ -103,19 +103,21 @@ abstract type TEPModel end
 
 struct MIPModel <: TEPModel
     jump_model::JuMP.GenericModel
+    obj::AffQuadExpr
     x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}
     f::Dict{Any, JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
     theta::Dict{Int64, JuMP.VariableRef}
 
-    MIPModel(jump_model::JuMP.GenericModel) = 
-                            new(jump_model, 
-                                Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}(), 
-                                Dict{Any, JuMP.VariableRef}(), 
-                                Dict{Int64, JuMP.VariableRef}(), 
-                                Dict{Int64, JuMP.AffExpr}(), 
-                                Dict{Int64, JuMP.VariableRef}())
+    MIPModel(params::Parameters) = 
+                new(JuMP.Model(params.model.optimizer), 
+                    params.model.is_dcp_power_model_en ? QuadExpr() : AffExpr(), 
+                    Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}(), 
+                    Dict{Any, JuMP.VariableRef}(), 
+                    Dict{Int64, JuMP.VariableRef}(), 
+                    Dict{Int64, JuMP.AffExpr}(), 
+                    Dict{Int64, JuMP.VariableRef}())
 end
 
 struct LPModel <: TEPModel
@@ -127,34 +129,32 @@ struct LPModel <: TEPModel
     theta::Dict{Int64, JuMP.VariableRef}
     f_cons::Dict{Any, JuMP.ConstraintRef}
 
-    LPModel(jump_model::JuMP.GenericModel) = 
-                                        new(jump_model, 
-                                            Dict{Any, JuMP.VariableRef}(), 
-                                            Dict{Any, JuMP.VariableRef}(), 
-                                            Dict{Int64, JuMP.VariableRef}(), 
-                                            Dict{Int64, JuMP.AffExpr}(), 
-                                            Dict{Int64, JuMP.VariableRef}(), 
-                                            Dict{Any, JuMP.ConstraintRef}())
+    LPModel(params::Parameters) = new(JuMP.Model(params.model.optimizer), 
+                                      Dict{Any, JuMP.VariableRef}(), 
+                                      Dict{Any, JuMP.VariableRef}(), 
+                                      Dict{Int64, JuMP.VariableRef}(), 
+                                      Dict{Int64, JuMP.AffExpr}(), 
+                                      Dict{Int64, JuMP.VariableRef}(), 
+                                      Dict{Any, JuMP.ConstraintRef}())
 end
 
 const TepModel = Union{MIPModel, LPModel}
 
 # ----------------------------- PH data structures -----------------------------
 
+struct State{T <: Union{Float64, JuMP.VariableRef}}
+    x::Vector{T}
+    y::Vector{T}
+end
+
 mutable struct ScenarioCache
-    src_obj::AffQuadExpr
     omega::Vector{Float64}
-    x::Vector{Float64}
-    y::Vector{Float64}
+    state::State{Float64}
 end
 
 mutable struct Cache
     it::Int64
     scenarios::Vector{ScenarioCache}
-    # src_obj::Vector{AffExpr}
-    # omega::Vector{Vector{Float64}}
-    # x::Vector{Vector{Float64}}
-    # y::Vector{Vector{Float64}}
     x_hat::Vector{Float64}
     x_average::Vector{Float64}
     best_convergence_delta::Float64
@@ -162,10 +162,9 @@ mutable struct Cache
 
     Cache(num_scenarios::Int64, num_vars::Int64) = 
                 new(0, 
-                    [ScenarioCache(AffExpr(0.0), 
-                                   zeros(num_vars), 
-                                   Vector{Float64}(), 
-                                   Vector{Float64}()) for _ in 1:num_scenarios],
+                    [ScenarioCache(zeros(num_vars), 
+                            State(Vector{Float64}(), 
+                                  Vector{Float64}())) for _ in 1:num_scenarios],
                     # [zeros(num_vars) for _ in 1:num_scenarios], 
                     # Vector{Vector{Float64}}(undef, num_vars), 
                     # Vector{Vector{Float64}}(undef, num_vars), 
@@ -174,19 +173,19 @@ mutable struct Cache
                     const_infinite, 0)
 end
 
-struct Variables
-    x::Vector{Union{Float64, JuMP.VariableRef}}
-    y::Vector{Union{Float64, JuMP.VariableRef}}
-end
-
 mutable struct ControllerMessage
-    inst::Instance
-    params::Parameters
     cache::Cache
-    models::Vector{MIPModel}
     it::Int64
     scen::Int64
 end
 
 mutable struct WorkerMessage
+    state_values::State{Float64}
+    it::Int64
+    scen::Int64
+end
+
+mutable struct WorkerCache
+    mip::MIPModel
+    scen::Int64
 end

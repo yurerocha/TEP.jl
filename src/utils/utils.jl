@@ -456,15 +456,14 @@ function set_state!(mip::MIPModel,
     # if !(:state in keys(md.ext))
     #     md.ext[:state] = []
     # end
-    mip.jump_model.ext[:state] = Variables([x for (_, x) in x], 
-                                           [g for (_, g) in y])
+    mip.jump_model.ext[:state] = State([x for (_, x) in x], [g for (_, g) in y])
     return nothing
 end
 
 function get_state_values(mip::MIPModel)
     x = mip.jump_model.ext[:state].x
     y = mip.jump_model.ext[:state].y
-    return Variables(value.(x), value.(y))
+    return State(value.(x), value.(y))
 end
 
 """

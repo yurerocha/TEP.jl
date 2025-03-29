@@ -289,18 +289,17 @@ function set_obj!(inst::Instance,
                   params::Parameters, 
                   scen::Int64, 
                   tep::TEPModel)
-    e = params.model.is_dcp_power_model_en ? QuadExpr() : AffExpr()
     # Generation costs
     for k in keys(tep.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
-        add_to_expression!(e, comp_obj_g(params, tep.g[k], c))
+        add_to_expression!(tep.obj, comp_obj_g(params, tep.g[k], c))
     end
     # Cost of building new candidate lines
     for k in keys(inst.K)
-        add_to_expression!(e, inst.K[k].cost, tep.x[k])
+        add_to_expression!(tep.obj, inst.K[k].cost, tep.x[k])
     end
 
-    @objective(tep.jump_model, Min, e)
+    @objective(tep.jump_model, Min, tep.obj)
     
     return nothing
 end

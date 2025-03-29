@@ -1,16 +1,14 @@
 function build_mip(inst::Instance, 
                    params::Parameters, 
                    scen::Int64)
-    mip = MIPModel(JuMP.Model(params.model.optimizer))
-    
+    mip = MIPModel(params)
     return build_model(inst, params, scen, mip)
 end
 
 function build_lp(inst::Instance, 
                   params::Parameters, 
                   scen::Int64)
-    lp = LPModel(JuMP.Model(params.model.optimizer))
-
+    lp = LPModel(params)
     return build_model(inst, params, scen, lp)
 end
 

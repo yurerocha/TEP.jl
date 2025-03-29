@@ -13,7 +13,7 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     JQM.mpi_barrier()
 
     if JQM.is_worker_process()
-        workers_loop()
+        workers_loop(inst, params)
         JQM.mpi_barrier()
         return nothing
     end
@@ -29,34 +29,9 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
         # TODO: Cenários como um vector, pois pode ser mais difícil causar erros
         # Imagine se o usuário dá um id que não corresponde a um índice válido
         for scen in 1:inst.num_scenarios
-            # TODO: Change to ControllerMessage
-            msg = ControllerMessage(inst, params, cache, models, it, scen)
+            # MPI does no copy state variables
+            msg = ControllerMessage(cache, it, scen)
             JQM.add_job_to_queue!(controller, msg)
-            # workers_loop()
-            # mip = nothing
-            # if it == 1
-            #     # TODO: Change LP objective as well
-            #     # TODO: Run heuristic in every it
-            #     mip = build_mip(inst, params, scen)
-            #     set_state!(mip, mip.x, mip.g)
-
-            #     update_cache_src_obj!(cache, scen, mip)
-                
-            #     (start, _) = build_solution(inst, params, scen)
-            #     fix_start!(inst, params, scen, mip, start)
-            #     solve!(params, mip)
-
-            #     # Store model at first it
-            #     models[scen] = mip
-            # else
-            #     mip = models[scen]
-
-            #     update_model_obj!(params, cache, scen, mip)
-
-            #     solve!(params, mip)
-            # end
-            
-            # update_cache_incumbent!(cache, scen, mip)
         end
         while !has_finished_all_jobs(controller)
             if !JQM.is_job_queue_empty(controller)
@@ -65,12 +40,11 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
             if JQM.any_pending_jobs(controller)
                 job_answer = JQM.check_for_job_answers(controller)
                 if !isnothing(job_answer)
-                    message = JQM.get_message(job_answer)
-                    @show message
+                    msg = JQM.get_message(job_answer)
+                    update_cache_incumbent!(cache, msg)
                 end
             end
         end
-        readline()
         # Aggregation
         update_cache_x_hat!(inst, cache)
 
@@ -90,17 +64,17 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     end
 
     for scen in 1:inst.num_scenarios
-        v = get_state_values(models[scen])
-        println("Scen#$(scen): $(v.x)")
+        println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
     end
 
     # JQM.mpi_barrier()
+    JQM.send_termination_message()
     JQM.mpi_finalize()
 
     return nothing
 end
 
-function workers_loop()
+function workers_loop(inst::Instance, params::Parameters)
     JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
@@ -111,41 +85,23 @@ function workers_loop()
                 break
             end
             
-            inst = msg.inst
-            params = msg.params
-            cache = msg.cache
-            models = msg.models
-            it = msg.it
-            scen = msg.scen
+            mip = build_mip(inst, params, msg.scen)
+            set_state!(mip, mip.x, mip.g)
 
-            mip = nothing
-            if it == 1
+            if msg.it == 1
                 # TODO: Change LP objective as well
                 # TODO: Run heuristic in every it
-                mip = build_mip(inst, params, scen)
-                set_state!(mip, mip.x, mip.g)
-
-                update_cache_src_obj!(cache, scen, mip)
                 
                 # (start, _) = build_solution(inst, params, scen)
                 # fix_start!(inst, params, scen, mip, start)
-                solve!(params, mip)
-
-                # Store model at first it
-                models[scen] = mip
             else
-                mip = models[scen]
-
-                update_model_obj!(params, cache, scen, mip)
-
-                solve!(params, mip)
+                update_model_obj!(params, msg.cache, msg.scen, mip)
             end
+            solve!(params, mip)
             
-            update_cache_incumbent!(cache, scen, mip)
+            ret_msg = WorkerMessage(get_state_values(mip), msg.it, msg.scen)
 
-            return_message = "It:$it scen:$scen"
-
-            JQM.send_job_answer_to_controller(worker, return_message)
+            JQM.send_job_answer_to_controller(worker, ret_msg)
         end
         exit(0)
     end

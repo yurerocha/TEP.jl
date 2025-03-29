@@ -22,8 +22,6 @@ function run_serial_ph!(inst::Instance, params::Parameters)
                 # TODO: Run heuristic in every it
                 mip = build_mip(inst, params, scen)
                 set_state!(mip, mip.x, mip.g)
-
-                update_cache_src_obj!(cache, scen, mip)
                 
                 # (start, _) = build_solution(inst, params, scen)
                 # fix_start!(inst, params, scen, mip, start)
@@ -58,7 +56,6 @@ function run_serial_ph!(inst::Instance, params::Parameters)
     end
 
     for scen in 1:inst.num_scenarios
-        v = get_state_values(models[scen])
-        println("Scen#$(scen): $(v.x)")
+        println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
     end
 end
