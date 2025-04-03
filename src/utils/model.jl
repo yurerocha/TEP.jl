@@ -107,6 +107,20 @@ function add_g_vars!(inst::Instance, scen::Int64, tep::TEPModel)
 end
 
 """
+    update_g_vars!(inst::Instance, scen::Int64, tep::TEPModel)
+
+Update the model g variables according to the scenario.
+"""
+function update_g_vars!(inst::Instance, scen::Int64, tep::TEPModel)
+    for k in keys(inst.scenarios[scen].G)
+        lb = inst.scenarios[scen].G[k].lower_bound
+        ub = inst.scenarios[scen].G[k].upper_bound
+        JuMP.set_lower_bound(tep.g[k], lb)
+        JuMP.set_upper_bound(tep.g[k], ub)
+    end
+end
+
+"""
     add_symmetry_constrs!(inst::Instance, 
                           params::Parameters, 
                           tep::TEPModel)
@@ -271,10 +285,27 @@ function add_fkl_constrs!(inst::Instance,
         d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
         g = i in keys(tep.g_bus) ? tep.g_bus[i] : AffExpr(0.0)
 
-        @constraint(tep.jump_model, e + g == d, base_name = "fkl[$i]")
+        tep.fkl_constrs[i] = @constraint(tep.jump_model, 
+                                         e + g == d, 
+                                         base_name = "fkl[$i]")
     end
 
     return nothing
+end
+
+"""
+    update_fkl_constrs_rhs!(inst::Instance, 
+                            scen::Int64, 
+                            tep::TEPModel)
+Update the right-hand side coefficients of the first Kirchhoff law constraints.
+"""
+function update_fkl_constrs_rhs!(inst::Instance, 
+                                 scen::Int64, 
+                                 tep::TEPModel)
+    for i in inst.I
+        d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
+        JuMP.set_normalized_rhs(tep.fkl_constrs[i], d)
+    end
 end
 
 """
@@ -348,6 +379,23 @@ function comp_obj_g(params::Parameters,
         end
         return costs[1] + costs[2]*g + costs[3]*g^2
     end
+end
+
+"""
+    update_model!(inst::Instance, 
+                  scen::Int64, 
+                  tep::TEPModel)
+
+Update the model g variables and the right-hand side coefficients of the first 
+Kirchhoff law constraints, according to scenario.
+"""
+function update_model!(inst::Instance, 
+                       scen::Int64, 
+                       tep::TEPModel)
+    update_g_vars!(inst, scen, tep)
+    update_fkl_constrs_rhs!(inst, scen, tep)
+
+    return nothing
 end
 
 """

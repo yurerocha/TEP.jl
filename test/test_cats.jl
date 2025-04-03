@@ -7,7 +7,7 @@ using Gurobi, Ipopt
 using PowerModels
 using Markdown, DataFrames
 
-file = "submodules/CATS-CaliforniaTestSystem/MATPOWER/CaliforniaTestSystem.m"
+file = "../submodules/CATS-CaliforniaTestSystem/MATPOWER/CaliforniaTestSystem.m"
 num_scenarios = 10
 
 params = TEP.Parameters()

@@ -4,33 +4,30 @@
 Implementation of the deterministic equivalent stochastic model.
 """
 function solve_deterministic!(inst::Instance, params::Parameters)
+    log(params, "Deterministic solution strategy", true)
+
     # Initialization
     cache = Cache(inst.num_scenarios, inst.num_K)
 
-    mip_model = MIPModel(JuMP.Model(params.model.optimizer), 
-                         Vector{JuMP.VariableRef}(), 
-                         Vector{JuMP.VariableRef}(), 
-                         Dict{Int, JuMP.VariableRef}(), 
-                         Vector{JuMP.VariableRef}(), 
-                         Vector{JuMP.VariableRef}(), 
-                         AffExpr(0.0))
-    subproblems = Vector{JuMP.Model}(undef, inst.num_scenarios)
+    mip = MIPModel(params)
+    subproblems = Vector{MIPModel}(undef, inst.num_scenarios)
     for scen in 1:inst.num_scenarios
         # TODO: Change LP objective as well
         # TODO: Run heuristic in every it
-        subproblem = build_mip_model(inst, params, scen)
-        set_state!(subproblem.model, 
-                   subproblem.x, 
-                   collect(values(subproblem.g)))
-        add_subproblem!(mip_model.model, subproblem.model, scen)
-        subproblems[scen] = subproblem.model
+        subproblem = build_mip(inst, params, scen)
+        set_state!(subproblem, subproblem.x, subproblem.g)
+        add_subproblem!(mip.jump_model, subproblem.jump_model, scen)
+        subproblems[scen] = subproblem
     end
-    add_non_anticipativity_constrs!(inst, mip_model.model, subproblems)
-    results = solve!(params, mip_model)
+    add_non_anticipativity_constrs!(inst, mip.jump_model, subproblems)
+    results = solve!(params, mip)
 
-    if has_values(mip_model.model)
+    if has_values(mip.jump_model)
         for scen in 1:inst.num_scenarios
-            println("Scen#$(scen): $(value.(subproblems[scen].ext[:state].x))")
+            update_cache_incumbent!(cache, scen, subproblems[scen])
+            println("Scen#$(scen): $(cache.scenarios[scen].state.x))")
         end
     end
+
+    return cache, results
 end

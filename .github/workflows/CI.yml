@@ -34,7 +34,27 @@ jobs:
         with:
           submodules: recursive
           token: ${{ secrets.PAT_TOKEN }}
-          run: ls && pwd
+
+      # Configure Gurobi WLS License
+      - name: Set Gurobi License Environment Variables
+        env:
+          GRB_WLSACCESSID: ${{ secrets.GRB_WLSACCESSID }}
+          GRB_WLSSECRET: ${{ secrets.GRB_WLSSECRET }}
+          GRB_LICENSEID: ${{ secrets.GRB_LICENSEID }}
+        run: |
+          if [ -z "${{ secrets.GRB_WLSACCESSID }}" ]; then
+            echo "ERROR: GRB_WLSACCESSID secret is missing"
+            exit 1
+          fi
+          echo "Setting up Gurobi WLS license"
+          echo "WLSACCESSID=${GRB_WLSACCESSID}" > gurobi.lic
+          echo "WLSSECRET=${GRB_WLSSECRET}" >> gurobi.lic
+          echo "LICENSEID=${GRB_LICENSEID}" >> gurobi.lic
+          cat gurobi.lic
+          mkdir -p /opt/gurobi
+          mv gurobi.lic /opt/gurobi/
+          export GRB_LICENSE_FILE=/opt/gurobi/gurobi.lic
+          echo "GRB_LICENSE_FILE=/opt/gurobi/gurobi.lic" >> $GITHUB_ENV
 
       - uses: julia-actions/setup-julia@v2
         with:

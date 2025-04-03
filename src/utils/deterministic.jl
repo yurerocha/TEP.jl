@@ -99,21 +99,24 @@ function update_state_vars!(model::JuMP.Model,
                                                JuMP.VariableRef})
     x = [build_expr(x, var_in_model) for x in subproblem.ext[:state].x]
     y = [build_expr(y, var_in_model) for y in subproblem.ext[:state].y]
-    subproblem.ext[:state] = Variables(x, y)
+    subproblem.ext[:state] = State(x, y)
     return nothing
 end
 
 """
-
+    add_non_anticipativity_constrs!(inst::Instance, 
+                                    model::JuMP.Model, 
+                                    subproblems::Vector{MIPModel})
+                                    
 Add constraints to make the first-stage decisions for all subproblems to be the
 same.
 """
 function add_non_anticipativity_constrs!(inst::Instance, 
                                          model::JuMP.Model, 
-                                         subproblems::Vector{JuMP.Model})
+                                         subproblems::Vector{MIPModel})
     for scen in 2:inst.num_scenarios
-        @constraint(model, subproblems[1].ext[:state].x .== 
-                           subproblems[scen].ext[:state].x)
+        @constraint(model, subproblems[1].jump_model.ext[:state].x .== 
+                           subproblems[scen].jump_model.ext[:state].x)
     end
     return nothing
 end

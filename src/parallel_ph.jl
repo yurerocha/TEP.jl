@@ -7,6 +7,8 @@ Associated paper: https://link.springer.com/article/10.1007/s10107-016-1000-z
 """
 # TODO: Consider non-binary first stage decision variables
 function run_parallel_ph!(inst::Instance, params::Parameters)
+    log(params, "Parallel solution strategy", true)
+
     # Config JobQueueMPI
     JQM = JobQueueMPI
     JQM.mpi_init()
@@ -71,32 +73,34 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     JQM.send_termination_message()
     JQM.mpi_finalize()
 
-    return nothing
+    return cache
 end
 
 function workers_loop(inst::Instance, params::Parameters)
     JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
+        # Build the model for the first scenario
+        current_model_scen = 1
+        mip = build_mip(inst, params, current_model_scen)
+        set_state!(mip, mip.x, mip.g)
         while true
             job = JQM.receive_job(worker)
             msg = JQM.get_message(job)
             if msg == JQM.TerminationMessage()
                 break
             end
-            
-            mip = build_mip(inst, params, msg.scen)
-            set_state!(mip, mip.x, mip.g)
 
-            if msg.it == 1
-                # TODO: Change LP objective as well
-                # TODO: Run heuristic in every it
-                
-                # (start, _) = build_solution(inst, params, scen)
-                # fix_start!(inst, params, scen, mip, start)
-            else
+            # Update the model according to the current scenario
+            if msg.scen != current_model_scen
+                update_model!(inst, msg.scen, mip)
+                current_model_scen = msg.scen
+            end
+
+            if msg.it > 1
                 update_model_obj!(params, msg.cache, msg.scen, mip)
             end
+
             solve!(params, mip)
             
             ret_msg = WorkerMessage(get_state_values(mip), msg.it, msg.scen)

@@ -476,5 +476,21 @@ function config_dcp_pm_tests!(params::Parameters)
     params.instance.load_gen_mult = 1.0
     params.model.is_dcp_power_model_en = true
     params.log_level = 0
-    # params.model.optimizer = Ipopt.Optimizer
+end
+
+"""
+    select_files(path::String, num_files::Int64)
+
+Benchmark: https://github.com/power-grid-lib/pglib-opf
+"""
+function select_files(path::String, num_files::Int64)
+    files = []
+    for file in readdir(path)
+        if endswith(file, ".m")
+            push!(files, file)
+        end
+    end
+    # Sort files so that instances with less buses are sovled first
+    sort!(files, by=x->parse(Int, match(r"\d+", x).match))
+    return files[1:num_files]
 end

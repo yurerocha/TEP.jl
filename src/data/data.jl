@@ -109,6 +109,7 @@ struct MIPModel <: TEPModel
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
     theta::Dict{Int64, JuMP.VariableRef}
+    fkl_constrs::Dict{Int64, JuMP.ConstraintRef}
 
     MIPModel(params::Parameters) = 
                 new(JuMP.Model(params.model.optimizer), 
@@ -117,7 +118,8 @@ struct MIPModel <: TEPModel
                     Dict{Any, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.AffExpr}(), 
-                    Dict{Int64, JuMP.VariableRef}())
+                    Dict{Int64, JuMP.VariableRef}(), 
+                    Dict{Int64, JuMP.ConstraintRef}())
 end
 
 struct LPModel <: TEPModel

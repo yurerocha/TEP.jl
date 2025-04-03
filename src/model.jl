@@ -120,7 +120,7 @@ function solve!(params::Parameters, mip::MIPModel)
 
     # If the solver found a solution
     if result_count(model) > 0
-        if status == MOI.OPTIMAL
+        if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED
             best_bound = objective_value(model)
             obj = objective_value(model)
             gap = 0.0
@@ -132,11 +132,11 @@ function solve!(params::Parameters, mip::MIPModel)
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         # TODO: Add param to compute conflict when infeasible
         # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
-        compute_conflict!(model)
-        if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-            iis_model, _ = copy_conflict(model)
-            println(iis_model)
-        end
+        # compute_conflict!(model)
+        # if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
+        #     iis_model, _ = copy_conflict(model)
+        #     println(iis_model)
+        # end
     end
 
     return solve_time(model), 

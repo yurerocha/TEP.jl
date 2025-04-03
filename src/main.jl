@@ -129,7 +129,7 @@ function solve(file::String, num_scenarios::Int64 = 1)
     params = Parameters()
     params.log_file *= "/" * get_inst_name(file) * ".txt"
 
-    params.solution_strategy = Parallel()
+    params.solution_strategy = Deterministic()
 
     inst = nothing
     if occursin("CATS-CaliforniaTestSystem", file)
@@ -139,17 +139,14 @@ function solve(file::String, num_scenarios::Int64 = 1)
         # Read the pglib-opf instances with single scenarios
         mp_data = PowerModels.parse_file(file)
         inst = build_instance(params, mp_data)
-        build_scenarios!(inst, num_scenarios - 1, 0.5)
+        build_scenarios!(inst, num_scenarios - 1, 0.25)
     end
 
     if params.solution_strategy isa Deterministic
-        log(params, "Deterministic solution strategy", true)
         solve_deterministic!(inst, params)
     elseif params.solution_strategy isa Serial
-        log(params, "Serial solution strategy", true)
         run_serial_ph!(inst, params)
     elseif params.solution_strategy isa Parallel
-        log(params, "Parallel solution strategy", true)
         run_parallel_ph!(inst, params)
     end
 

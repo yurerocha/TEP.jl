@@ -7,6 +7,8 @@ Associated paper: https://link.springer.com/article/10.1007/s10107-016-1000-z
 """
 # TODO: Consider non-binary first stage decision variables
 function run_serial_ph!(inst::Instance, params::Parameters)
+    log(params, "Serial solution strategy", true)
+
     # Initialization
     cache = Cache(inst.num_scenarios, inst.num_K)
     models = Vector{MIPModel}(undef, inst.num_scenarios)
@@ -33,6 +35,7 @@ function run_serial_ph!(inst::Instance, params::Parameters)
 
                 update_model_obj!(params, cache, scen, mip)
             end
+
             solve!(params, mip)
             
             update_cache_incumbent!(cache, scen, mip)
@@ -58,4 +61,6 @@ function run_serial_ph!(inst::Instance, params::Parameters)
     for scen in 1:inst.num_scenarios
         println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
     end
+
+    return cache
 end

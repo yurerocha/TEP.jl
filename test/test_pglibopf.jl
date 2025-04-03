@@ -7,26 +7,9 @@ using Gurobi, Ipopt
 using PowerModels
 using Markdown, DataFrames
 
-"""
-    select_files(path::String, num_files::Int64)
-
-Benchmark: https://github.com/power-grid-lib/pglib-opf
-"""
-function select_files(path::String, num_files::Int64)
-    files = []
-    for file in readdir(path)
-        if endswith(file, ".m")
-            push!(files, file)
-        end
-    end
-    # Sort files so that instances with less buses are sovled first
-    sort!(files, by=x->parse(Int, match(r"\d+", x).match))
-    return files[1:num_files]
-end
-
-path = "submodules/pglib-opf/"
+path = "../submodules/pglib-opf/"
 num_tests = 40
-files = select_files(path, num_tests)
+files = TEP.select_files(path, num_tests)
 
 params = TEP.Parameters()
 TEP.config_dcp_pm_tests!(params)
@@ -46,7 +29,7 @@ eps = 1e-3
         TEP.rm_g_nonlinear_coeffs!(mp_data)
 
         # Run DC-OPF
-        sol = PowerModels.solve_opf(mp_data, 
+        dc_opf = PowerModels.solve_opf(mp_data, 
                                     DCPPowerModel, 
                                     # DCMPPowerModel, 
                                     params.model.optimizer)
@@ -54,12 +37,15 @@ eps = 1e-3
         # Run TEP
         inst = TEP.build_instance(params, mp_data)
         mip = TEP.build_mip(inst, params, 1)
-        # force_solution(inst, mip, sol["solution"], mp_data)
+        # force_solution(inst, mip, dc_opf["solution"], mp_data)
         # TEP.print_constrs(mip.jump_model, "TEP.jl/model1.lp")
-        results = TEP.solve!(params, mip)
+        tep = TEP.solve!(params, mip)
+
+        @warn tep
         
-        @info results[7], sol["objective"]
-        @test abs(results[7] - sol["objective"]) < eps
+        @info tep[7], dc_opf["objective"]
+        @test abs(tep[7] - dc_opf["objective"]) < eps
+        # readline()
     end
 end
 

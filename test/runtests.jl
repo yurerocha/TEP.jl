@@ -18,6 +18,6 @@ end
 
 @testset verbose = true "TEP Tests" begin
     # recursive_include(@__DIR__)
-    # include("test_cats.jl")
+    include("test_cats.jl")
     include("test_pglibopf.jl")
 end
