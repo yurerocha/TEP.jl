@@ -1,20 +1,21 @@
 
 """
-    config!(params::Parameters, mip::MIPModel)
+    config!(params::Parameters, md::T) where T <: Union{MIPModel, PDDFModel}
 
 Configure the solver parameters.
 """
-function config!(params::Parameters, mip::MIPModel)
+function config!(params::Parameters, md::T) where 
+                                                T <: Union{MIPModel, PDDFModel}
     if params.model.optimizer == Gurobi.Optimizer
         if params.log_level >= 3
-            set_attribute(mip.jump_model, 
+            set_attribute(md.jump_model, 
                           MOI.RawOptimizerAttribute("LogFile"), 
                           params.log_file)
-            set_attribute(mip.jump_model, 
+            set_attribute(md.jump_model, 
                           MOI.RawOptimizerAttribute("LogToConsole"), 
                           1)
         else
-            JuMP.set_silent(mip.jump_model)
+            JuMP.set_silent(md.jump_model)
         end
     end
 
@@ -285,9 +286,11 @@ function add_fkl_constrs!(inst::Instance,
         d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
         g = i in keys(tep.g_bus) ? tep.g_bus[i] : AffExpr(0.0)
 
-        tep.fkl_constrs[i] = @constraint(tep.jump_model, 
-                                         e + g == d, 
-                                         base_name = "fkl[$i]")
+        constr = @constraint(tep.jump_model, e + g == d, base_name = "fkl[$i]")
+
+        if tep isa MIPModel
+            tep.fkl_constrs[i] = constr
+        end
     end
 
     return nothing

@@ -9,6 +9,7 @@ using OrderedCollections # OrderedDict
 using PowerModels
 # using ProfileView
 using Random
+# using SparseArrays
 # External files in instance/ext
 using CSV, JSON
 using DataFrames
@@ -36,17 +37,19 @@ include("utils/deterministic.jl")
 # include("utils/drawing.jl")
 include("utils/instance.jl")
 include("utils/model.jl")
+# include("utils/pddf_model.jl")
 include("utils/ph.jl")
 include("utils/utils.jl")
 
 include("main.jl")
 
-# include("compact_model.jl")
+# include("beam_search.jl")
 include("deterministic.jl")
 include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
 include("parallel_ph.jl")
+# include("pddf_model.jl")
 include("serial_ph.jl")
 
 end

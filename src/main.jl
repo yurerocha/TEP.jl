@@ -152,3 +152,13 @@ function solve(file::String, num_scenarios::Int64 = 1)
 
     return nothing
 end
+
+function run_pddf(file::String)
+    params = Parameters()
+    params.log_file *= "/" * get_inst_name(file) * ".txt"
+
+    mp_data = PowerModels.parse_file(file)
+    inst = build_instance(params, mp_data)
+
+    return build_pddf(inst, params, 1)
+end

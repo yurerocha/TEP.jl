@@ -1,116 +1,109 @@
 """
-    build_compact(data::Instance, logfile::String = "log_compact.txt")
+    build_bus_to_idx(inst::Instance)
 
-Build the compact model for the TEP problem. 
-    
-In the original version of the model, there are no variables, since the 
-generation is a parameter. In our version, we have added the generation as a 
-variable. Furthermore, we also have added slack variables ξ_i when the demand 
-exceeds what the generators can provide.
+Build a map of IDs of buses to indices in a vector, starting at 1.
 """
-function build_compact(inst::Instance, logfile::String = "log_compact.txt")
-    md = Model(Gurobi.Optimizer)
-    set_attribute(md, MOI.RawOptimizerAttribute("LogFile"), logfile)
-    set_attribute(md, MOI.RawOptimizerAttribute("LogToConsole"), 1)
-    set_attribute(md, MOI.RawOptimizerAttribute("TimeLimit"), solver_time_limit)
+function build_bus_to_idx(inst::Instance)
+    I = collect(inst.I)
+    sort!(I)
 
-    d, g, is_xi_req, xi = build_bus_injections(inst)
+    index = 1
+    bus_to_idx = Dict{Any, Int64}()
+    for i in I
+        bus_to_idx[i] = index
+        index += 1
+    end
 
-    S = build_incidence_matrix(inst)
-
-    Gamma = build_susceptance_matrix(inst)
-
-    # @show d
-    # @show g
-    # @show S
-    # @show Gamma
-
-    B = S' * Gamma * S
-    B_inv = comp_inverse!(B)
-    beta = Gamma * S * B_inv
-
-    bus_inj = comp_bus_injections(d, g, is_xi_req, xi)
-    f = beta * bus_inj
-
-    # Flow lower and upper bounds constra_ints
-    line_slacks, e, f_lower_cons, f_upper_cons = 
-                                flow_cons(inst, md, inst.num_J + inst.num_K, f)
-
-    # Load balance constraints
-    e_t = ones(inst.num_I)'
-    gl_lhs = comp_gen_balance(g, is_xi_req, xi)
-    @constraint(md, e_t * gl_lhs == e_t * d, base_name = "load_balance")
-
-    # The objective is to minize slacks in the line flows
-    # By constrolling the bounds on the slacks, we can simulate a model with and
-    # without them
-    @objective(md, Min, e)
-
-    return CompactModel(md, S, Gamma, d, g, is_xi_req, xi, B, B_inv, 
-                        beta, f, line_slacks, f_lower_cons, f_upper_cons)
-end
-
-function build_compact_system(inst::Instance, 
-                              d::Vector{Float64}, 
-                              g::Vector{Float64})
-    S = build_incidence_matrix(inst)
-
-    Gamma = build_susceptance_matrix(inst)
-
-    B = S' * Gamma * S
-    B_inv = comp_inverse!(B)
-    beta = Gamma * S * B_inv
-
-    f = beta * (d - g)
-
-    return CompactSystem(S, Gamma, d, g, B, B_inv, beta, f)
+    return bus_to_idx
 end
 
 """
     build_bus_injections(inst::Instance)
 
-Build generation g and slack xi injections for every bus in the network.
+Build load and generation injections per bus in the network.
 """
-function build_bus_injections(inst::Instance)
-    rhs_sum = 0.0
-    for i in inst.I
-        # Some buses may not have load or generation
-        d = i in keys(inst.D) ? inst.D[i] : 0.0
-        g = i in keys(inst.G) ? inst.G[i] : 0.0
-
-        rhs_sum += d - g
+function build_bus_injections(inst::Instance, 
+                              bus_to_idx::Dict{Any, Int64}, 
+                              scen::Int64, 
+                              md::JuMP.Model)
+    # The dimensions of D and G must match
+    # Get the buses used for D or G
+    buses = Set{Int64}()
+    for g in values(inst.scenarios[scen].G)
+        push!(buses, g.bus)
     end
-    is_xi_req = isg(rhs_sum, 0.0)
-    # @show rhs_sum, is_xi_req
+    buses = union(buses, keys(inst.scenarios[scen].D))
+    budes_indices = [bus_to_idx[b] for b in buses]
+    sorted_indices = collect(budes_indices)
 
-    g = Vector{JuMP.VariableRef}(undef, inst.num_I)
-    xi = Array{JuMP.VariableRef}(undef, inst.num_I)
-    for i in inst.I
-        # Some buses may not have generation
-        if i in keys(inst.G)
-            g_max = inst.G[i]
-            if isl(g_max, 0.0)
-                @show g_max, t, i
-            end
-            # If xi slack variables are required, then the generation is bounded
-            # to its maximum
-            if is_xi_req
-                g[i] = @variable(md, lower_bound = g_max, upper_bound = g_max, 
-                                 base_name = "g$i")
-            else
-                g[i] = @variable(md, lower_bound = 0, upper_bound = g_max,
-                                 base_name = "g$i")
-            end
+    idx_in_vec = Dict{Int64, Int64}()
+    for (i, b) in enumerate(sorted_indices)
+        idx_in_vec[b] = i
+    end
+      
+    D = Vector{Float64}()
+    G = Vector{JuMP.AffExpr}()
+    for _ in idx_in_vec
+        push!(D, 0.0)
+        push!(G, AffExpr(0.0))
+    end
+
+    for k in keys(inst.scenarios[scen].D)
+        D[idx_in_vec[bus_to_idx[k]]] += inst.scenarios[scen].D[k]
+    end
+
+    for k in keys(inst.scenarios[scen].G)
+        bus = inst.scenarios[scen].G[k].bus
+        lb = inst.scenarios[scen].G[k].lower_bound
+        ub = inst.scenarios[scen].G[k].upper_bound
+
+        if isl(ub, 0.0)
+            @show ub, i
+        end
+
+        var = @variable(md, 
+                        lower_bound = lb, 
+                        upper_bound = ub, 
+                        base_name = "g[$k]")
+
+        G[idx_in_vec[bus_to_idx[bus]]] += var
+    end
+
+    return SparseArrays.sparsevec(sorted_indices, D), 
+           SparseArrays.sparsevec(sorted_indices, G)
+end 
+
+function build_g_injections(inst::Instance, 
+                            bus_to_idx::Dict{Any, Int64}, 
+                            scen::Int64, 
+                            md::JuMP.Model)
+    buses = Vector{Int64}()
+    D = Vector{JuMP.AffExpr}()
+    idx_in_vec = Dict{Int64, Int64}()
+    for k in keys(inst.scenarios[scen].G)
+        bus = inst.scenarios[scen].G[k].bus
+        lb = inst.scenarios[scen].G[k].lower_bound
+        ub = inst.scenarios[scen].G[k].upper_bound
+
+        if isl(ub, 0.0)
+            @show ub, i
+        end
+
+        var = @variable(md, 
+                        lower_bound = lb, 
+                        upper_bound = ub, 
+                        base_name = "g[$k]")
+
+        if bus in keys(idx_in_vec)
+            D[idx_in_vec[bus]] += var
         else
-            g[i] = @variable(md, lower_bound = 0, upper_bound = 0, 
-                             base_name = "g$i")
-        end
-        if is_xi_req
-            xi[i] = @variable(md, lower_bound = 0, base_name = "xi$i")
+            push!(buses, bus_to_idx[bus])
+            push!(D, var)
+            idx_in_vec[bus] = length(buses)
         end
     end
 
-    return g, is_xi_req, xi
+    return SparseArrays.sparsevec(buses, D)
 end
 
 """
@@ -120,30 +113,45 @@ Build incidence matrix.
 
 Where incoming and outgoing lines are represented by 1 and -1, respectively.
 """
-function build_incidence_matrix(inst::Instance)
-    S = zeros(inst.num_J + inst.num_K, inst.num_I)
-
-    for i in inst.I
-        for j in 1:inst.num_J
-            c = inst.J[j]
-            if c.to == i
-                S[j, i] = 1
-            elseif c.fr == i
-                S[j, i] = -1
+function build_incidence_matrix(inst::Instance, bus_to_idx::Dict{Any, Int64})
+    I_fr = Vector{Int64}()
+    I_to = Vector{Int64}()
+    S = Vector{Float64}()
+    l = 1
+    for j in keys(inst.J)
+        for i in inst.I
+            if j[2] == i
+                # S[j, i] = 1
+                push!(I_fr, l)
+                push!(I_to, bus_to_idx[i])
+                push!(S, 1.0)
+            elseif j[3] == i
+                # S[j, i] = -1
+                push!(I_fr, l)
+                push!(I_to, bus_to_idx[i])
+                push!(S, -1.0)
             end
         end
-        for l in 1:inst.num_K
-            k = l + inst.num_J
-            c = inst.K[l]
-            if c.to == i
-                S[k, i] = 1
-            elseif c.fr == i
-                S[k, i] = -1
+        l += 1
+    end
+    for k in keys(inst.K)
+        for i in inst.I
+            if k[1][2] == i
+                # S[k, i] = 1
+                push!(I_fr, l)
+                push!(I_to, bus_to_idx[i])
+                push!(S, 1.0)
+            elseif k[1][3] == i
+                # S[k, i] = -1
+                push!(I_fr, l)
+                push!(I_to, bus_to_idx[i])
+                push!(S, -1.0)
             end
         end
+        l += 1
     end
 
-    return S
+    return SparseArrays.sparse(I_fr, I_to, S)
 end
 
 """
@@ -152,13 +160,21 @@ end
 Build the diagonal matrix of susceptances.
 """
 function build_susceptance_matrix(inst::Instance)
-    Gamma = zeros(inst.num_J + inst.num_K, inst.num_J + inst.num_K)
-
-    for l in 1:inst.num_J + inst.num_K
-        Gamma[l, l] = inst.gamma[l]
+    L = Vector{Int64}()
+    G = Vector{Float64}()
+    l = 1
+    for j in keys(inst.J)
+        push!(L, l)
+        push!(G, inst.J[j].gamma)
+        l += 1
+    end
+    for k in keys(inst.K)
+        push!(L, l)
+        push!(G, inst.K[k].gamma)
+        l += 1
     end
 
-    return Gamma
+    return SparseArrays.sparse(L, L, G)
 end
 
 """
@@ -260,23 +276,6 @@ function update_flow_constrs!(inst::Instance,
 end
 
 """
-    comp_bus_injections(d, g, is_xi_req, xi)
-
-Compute the nodal injections.
-"""
-function comp_bus_injections(d::Vector{Float64}, 
-                             g::Vector{T}, 
-                             is_xi_req::Bool, 
-                             xi::Vector{S}) where 
-                                            {T <: FloatVarRef, S <: FloatVarRef}
-    if is_xi_req
-        return d - g - xi
-    else
-        return d - g
-    end
-end
-
-"""
     comp_gen_balance(g, is_xi_req, xi)
 
 Compute the generation side of the balance constraints.
@@ -357,7 +356,8 @@ Make matrix B invertible.
 Zero out the row corresponding to the reference bus and then set the diagonal 
 term for the reference bus to 1.
 """
-function make_invertible!(B::Matrix{Float64}, refbus::Int64)
+function make_invertible!(B::SparseArrays.SparseMatrixCSC{Float64, Int64}, 
+                          refbus::Int64)
     B[refbus, :] .= 0
     B[refbus, refbus] = 1
 end
@@ -368,18 +368,19 @@ end
 Compute B⁻¹ by solving the linear system Ax = b for every row of the identity 
 matrix. 
 """
-function comp_inverse!(B::Matrix{Float64}, refbus::Int64 = 1)
+function comp_inverse!(params::Parameters, 
+                       B::SparseArrays.SparseMatrixCSC{Float64, Int64}, 
+                       refbus::Int64 = 1)
     _, n = size(B)
-    X = Matrix{Float64}(undef, n, n)
     make_invertible!(B, refbus)
 
-    if param_debugging_level == 5
+    X = B \ 1.0LinearAlgebra.I(n)
+
+    if params.debugging_level == 1
         # @show rank(B), n
-        @assert rank(B) == n
+        @assert LinearAlgebra.rank(B) == n
         @assert is_one(X * B)
     end
-
-    X = B \ 1.0I(n)
 
     # X[refbus, refbus] = 0.0
     # This is part of the workaround to make B invertible

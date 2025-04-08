@@ -4,35 +4,6 @@ const FloatVarRef = Union{Float64, JuMP.VariableRef}
 const VectorSet = Union{Vector{Int64}, Set{Int64}}
 const AffQuadExpr = Union{JuMP.AffExpr, JuMP.QuadExpr}
 
-# ------------------------ Compact model data structures -----------------------
-struct CompactModel
-    model # ::JuMP.Model
-    # m::Int64 # Number of lines
-    # n::Int64 # Number of buses
-    S::Matrix{Float64} # m x n adjacency matrix
-    Gamma::Matrix{Float64} # m x m matrix of susceptances
-    d::Vector{Float64} # n vector of demands
-    shunt_gamma::Vector{Float64} # n vector of shunt susceptances
-    g::Vector{JuMP.VariableRef} # n vector of generation variables
-    B::Matrix{Float64} # n x n matrix, where B = S'ΓS
-    B_inv::Matrix{Float64} # n x n inverse of matrix B
-    beta::Matrix{Float64} # m x m matrix, where β = ΓSB⁻¹
-    f::Vector{AffExpr} # m x 1 vector of line flows
-    f_lower_cons::Vector{JuMP.ConstraintRef} # m x 1 vector of line flow constrs
-    f_upper_cons::Vector{JuMP.ConstraintRef} # m x 1 vector of line flow constrs
-end
-
-struct CompactSystem
-    S::Matrix{Float64} # m x n adjacency matrix
-    Gamma::Matrix{Float64} # m x m matrix of susceptances
-    d::Vector{Float64} # n vector of demands
-    g::Vector{Float64} # n vector of generation variables
-    B::Matrix{Float64} # n x n matrix, where B = S'ΓS
-    B_inv::Matrix{Float64} # n x n inverse of matrix B
-    beta::Matrix{Float64} # m x m matrix, where β = ΓSB⁻¹
-    f::Vector{Float64} # m x 1 vector of line flows
-end
-
 # -------------------------- Heuristic data structures -------------------------
 struct Start
     inserted::Set{Any}
@@ -142,6 +113,37 @@ end
 
 const TepModel = Union{MIPModel, LPModel}
 
+# ------------------------- PDDF model data structures -------------------------
+struct CompactModel
+end
+
+struct PDDFModel <: TEPModel
+    jump_model::JuMP.Model
+    bus_to_idx::Dict{Any, Int64} # Map buses' ids to indices
+    S::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x n adjacency matrix
+    Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m susceptances
+    d::SparseArrays.SparseVector{Float64, Int64} # n vector of demands
+    g_bus::SparseArrays.SparseVector{JuMP.AffExpr, Int64} # n vector of g vars
+    B::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n mat, where B = S'ΓS
+    B_inv::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n inverse of B
+    beta::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m, where β = ΓSB⁻¹
+    f::SparseArrays.SparseVector{JuMP.AffExpr, Int64} # m x 1 vec of line flows
+     # m x 1 vector of line flow constrs
+    f_lower_cons::SparseArrays.SparseVector{JuMP.ConstraintRef, Int64}
+    f_upper_cons::SparseArrays.SparseVector{JuMP.ConstraintRef, Int64}
+end
+
+struct CompactSystem
+    S::Matrix{Float64} # m x n adjacency matrix
+    Gamma::Matrix{Float64} # m x m matrix of susceptances
+    d::Vector{Float64} # n vector of demands
+    g::Vector{Float64} # n vector of generation variables
+    B::Matrix{Float64} # n x n matrix, where B = S'ΓS
+    B_inv::Matrix{Float64} # n x n inverse of matrix B
+    beta::Matrix{Float64} # m x m matrix, where β = ΓSB⁻¹
+    f::Vector{Float64} # m x 1 vector of line flows
+end
+
 # ----------------------------- PH data structures -----------------------------
 
 struct State{T <: Union{Float64, JuMP.VariableRef}}
@@ -190,4 +192,10 @@ end
 mutable struct WorkerCache
     mip::MIPModel
     scen::Int64
+end
+
+# ------------------------- Beam Search data structures ------------------------
+struct Node
+    inserted::Vector{Tuple{Tuple3I, Int64}}
+    removed::Vector{Tuple{Tuple3I, Int64}}
 end
