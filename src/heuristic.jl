@@ -41,7 +41,7 @@ function build_solution(inst::Instance,
     @warn "Runtime", report.runtime
     @warn "Rm ratio", report.removed_ratio
 
-    return start, report
+    return start, report, inserted, removed
 end
 
 function rm_and_fix(inst::Instance, 
@@ -115,6 +115,7 @@ function rm_and_fix(inst::Instance,
                                             viol, 
                                             time_beg)
             
+            break
             viol, _ = g_lines_neigh(inst, 
                                     params, 
                                     scen, 
@@ -134,6 +135,7 @@ function rm_and_fix(inst::Instance,
             end
         end
 
+        break
         if has_impr
             if params.debugging_level == 1
                 @assert length(inserted) + length(removed) == inst.num_K
@@ -435,9 +437,8 @@ Remove lines from the model by setting the susceptances to a small value.
 function rm_lines!(inst::Instance, 
                    params::Parameters, 
                    lp::LPModel,  
-                   candidates::T, 
-                   is_opt::Bool = false) where 
-                            T <: Union{Vector{Tuple{Tuple3I, Int64}}, Set{Any}}
+                   candidates, 
+                   is_opt::Bool = false)
     log(params, "Rm $(length(candidates)) line(s)")
 
     for k in candidates
@@ -466,7 +467,7 @@ Insert lines in the model by setting the diagonal terms of the susceptance.
 function add_lines!(inst::Instance, 
                params::Parameters, 
                lp::LPModel,
-               new_candidates::Vector{Tuple{Tuple{Int64, Int64, Int64}, Int64}}, 
+               new_candidates, 
                is_opt::Bool = true)
     log(params, "Add $(length(new_candidates)) line(s)")
 

@@ -19,7 +19,7 @@ function solve_deterministic!(inst::Instance, params::Parameters)
         add_subproblem!(mip.jump_model, subproblem.jump_model, scen)
         subproblems[scen] = subproblem
     end
-    add_non_anticipativity_constrs!(inst, mip.jump_model, subproblems)
+    add_non_anticipativity_cons!(inst, mip.jump_model, subproblems)
     results = solve!(params, mip)
 
     if has_values(mip.jump_model)

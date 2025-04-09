@@ -18,7 +18,10 @@ function build_bus_to_idx(inst::Instance)
 end
 
 """
-    build_bus_injections(inst::Instance)
+    build_bus_injections(inst::Instance, 
+                         bus_to_idx::Dict{Any, Int64}, 
+                         scen::Int64, 
+                         md::JuMP.Model)
 
 Build load and generation injections per bus in the network.
 """
@@ -26,32 +29,17 @@ function build_bus_injections(inst::Instance,
                               bus_to_idx::Dict{Any, Int64}, 
                               scen::Int64, 
                               md::JuMP.Model)
-    # The dimensions of D and G must match
-    # Get the buses used for D or G
-    buses = Set{Int64}()
-    for g in values(inst.scenarios[scen].G)
-        push!(buses, g.bus)
-    end
-    buses = union(buses, keys(inst.scenarios[scen].D))
-    budes_indices = [bus_to_idx[b] for b in buses]
-    sorted_indices = collect(budes_indices)
-
-    idx_in_vec = Dict{Int64, Int64}()
-    for (i, b) in enumerate(sorted_indices)
-        idx_in_vec[b] = i
-    end
+    # The dimensions of D and G must match and must also be equal to n, where n
+    # is the number of nodes
+    n = length(inst.I)
       
-    D = Vector{Float64}()
-    G = Vector{JuMP.AffExpr}()
-    for _ in idx_in_vec
-        push!(D, 0.0)
-        push!(G, AffExpr(0.0))
-    end
-
+    d = zeros(Float64, n)
     for k in keys(inst.scenarios[scen].D)
-        D[idx_in_vec[bus_to_idx[k]]] += inst.scenarios[scen].D[k]
+        d[bus_to_idx[k]] += inst.scenarios[scen].D[k]
     end
-
+    
+    g = Dict{Int64, JuMP.VariableRef}()
+    g_bus = zeros(JuMP.AffExpr, n)
     for k in keys(inst.scenarios[scen].G)
         bus = inst.scenarios[scen].G[k].bus
         lb = inst.scenarios[scen].G[k].lower_bound
@@ -61,16 +49,22 @@ function build_bus_injections(inst::Instance,
             @show ub, i
         end
 
-        var = @variable(md, 
+        g[k] = @variable(md, 
                         lower_bound = lb, 
                         upper_bound = ub, 
                         base_name = "g[$k]")
 
-        G[idx_in_vec[bus_to_idx[bus]]] += var
+        g_bus[bus_to_idx[bus]] += g[k]
     end
 
-    return SparseArrays.sparsevec(sorted_indices, D), 
-           SparseArrays.sparsevec(sorted_indices, G)
+    I = [bus_to_idx[i] for i in inst.I]
+    sort!(I)
+    d = dropzeros!(SparseArrays.sparsevec(I, d))
+    g_bus = dropzeros!(SparseArrays.sparsevec(I, g_bus))
+    
+    @warn length(I)
+
+    return d, g, g_bus
 end 
 
 function build_g_injections(inst::Instance, 
@@ -107,7 +101,7 @@ function build_g_injections(inst::Instance,
 end
 
 """
-    build_incidence_matrix(inst::Instance)
+    build_incidence_matrix(inst::Instance, bus_to_idx::Dict{Any, Int64})
 
 Build incidence matrix.
 
@@ -178,46 +172,88 @@ function build_susceptance_matrix(inst::Instance)
 end
 
 """
-    flow_cons(data, model, num_lines, flows)
+    add_thermal_limits_cons!(inst::Instance, 
+                             params::Parameters, 
+                             md::JuMP.Model, 
+                             f::SparseArrays.SparseVector{AffExpr})
 
 Lower and upper bounds on flows.
 
 Slacks in the line allow for the capacity to be exceeded with penalization.
 """
-function flow_cons(inst::Instance, 
-                   md::JuMP.Model, 
-                   m::Int64, 
-                   f::Vector{AffExpr})
+function add_thermal_limits_cons!(inst::Instance, 
+                                  params::Parameters, 
+                                  md::JuMP.Model, 
+                                  f::SparseArrays.SparseVector{AffExpr})
+    m = length(f)
     s = Vector{JuMP.VariableRef}(undef, m)
-    # s = @variable(md, 
-    #               lines_slack[l = 1:m], 
-    #               lower_bound = 0.0, 
-    #               upper_bound = 0.0)
-    f_lower_cons = Vector{JuMP.ConstraintRef}(undef, m)
-    f_upper_cons = Vector{JuMP.ConstraintRef}(undef, m)
-    # f_lower_cons = @constraint(md, f_lower_cons[l = 1:m])
-    # f_upper_cons = @constraint(md, f_lower_cons[l = 1:m])
-    
-    # f_lower_cons = @constraint(md, f_lower_cons, f - inst.f_bar .<= s)
-    # f_upper_cons = @constraint(md, f_upper_cons, -f - inst.f_bar .<= s)
 
-    e = AffExpr(0.0)
-    for l in 1:m
+    f_neg_cons = Vector{JuMP.ConstraintRef}(undef, m)
+    f_pos_cons = Vector{JuMP.ConstraintRef}(undef, m)
+
+    # obj = AffExpr(0.0)
+    l = 1
+    for j in keys(inst.J)
         # Initially, the model does not have slacks on the lines
         s[l] = @variable(md, 
                          lower_bound = 0.0, 
                          upper_bound = 0.0,
                          base_name = "s$l")
-        add_to_expression!(e, param_penalty, s[l])
-        f_lower_cons[l] = @constraint(md, -f[l] - inst.f_bar[l] <= s[l])
-        f_upper_cons[l] = @constraint(md, f[l] - inst.f_bar[l] <= s[l])
+        # add_to_expression!(obj, params.model.penalty, s[l])
+        f_neg_cons[l] = @constraint(md, -f[l] - inst.J[j].f_bar <= s[l])
+        f_pos_cons[l] = @constraint(md, f[l] - inst.J[j].f_bar <= s[l])
         # When s[l] is zero, the constraints above are equivalent to the
         # following constraints
-        # f_lower_cons[l] = @constraint(md, -inst.f_bar[l] <= f[l])
-        # f_upper_cons[l] = @constraint(md, f[l] <= inst.f_bar[l])
+        # f_neg_cons[l] = @constraint(md, -inst.f_bar[l] <= f[l])
+        # f_pos_cons[l] = @constraint(md, f[l] <= inst.f_bar[l])
+        l += 1
+    end
+    for k in keys(inst.K)
+        # Initially, the model does not have slacks on the lines
+        s[l] = @variable(md, 
+                         lower_bound = 0.0, 
+                         upper_bound = 0.0,
+                         base_name = "s$l")
+        # add_to_expression!(obj, params.model.penalty, s[l])
+        f_neg_cons[l] = @constraint(md, -f[l] - inst.K[k].f_bar <= s[l])
+        f_pos_cons[l] = @constraint(md, f[l] - inst.K[k].f_bar <= s[l])
+        # When s[l] is zero, the constraints above are equivalent to the
+        # following constraints
+        # f_neg_cons[l] = @constraint(md, -inst.f_bar[l] <= f[l])
+        # f_pos_cons[l] = @constraint(md, f[l] <= inst.f_bar[l])
+        l += 1
     end
 
-    return s, e, f_lower_cons, f_upper_cons
+    return s, f_neg_cons, f_pos_cons
+end
+
+"""
+    set_obj!(inst::Instance, 
+             params::Parameters, 
+             scen::Int64, 
+             md::JuMP.Model, 
+             g::Dict{Int64, JuMP.VariableRef}, 
+             s::Vector{JuMP.VariableRef})
+
+Set the objective to minimize the costs of expanding the network.
+"""
+function set_obj!(inst::Instance, 
+                  params::Parameters, 
+                  scen::Int64, 
+                  md::JuMP.Model, 
+                  g::Dict{Int64, JuMP.VariableRef}, 
+                  s::Vector{JuMP.VariableRef})
+    # Generation costs
+    obj = AffExpr()
+    for k in keys(g)
+        c = reverse(inst.scenarios[scen].G[k].costs)
+        add_to_expression!(obj, comp_g_obj(params, g[k], c))
+    end
+    add_to_expression!(obj, sum([params.model.penalty * x for x in s]))
+    # Violation costs
+    @objective(md, Min, obj)
+    
+    return obj
 end
 
 """
@@ -240,13 +276,13 @@ function update_upper_bounds_lines_slack!(md::CompactModel,
 end
 
 """
-    update_flow_constrs(md, beta)
+    update_flow_cons!(md, beta)
 
 Update the flow constraints in the compact model.
 """
-function update_flow_constrs!(inst::Instance, 
-                              md::CompactModel, 
-                              beta::Matrix{Float64})
+function update_flow_cons!(inst::Instance, 
+                           md::CompactModel, 
+                           beta::Matrix{Float64})
     
     # f[l] = beta * d - beta * g
 
@@ -262,31 +298,16 @@ function update_flow_constrs!(inst::Instance,
     for l in 1:md.m
         # for i in 1:md.n
             # Update the lhs g coefficients
-            set_normalized_coefficient([md.f_lower_cons[l] for i in 1:md.n], 
+            set_normalized_coefficient([md.f_neg_cons[l] for i in 1:md.n], 
                                        md.g, beta[l, :])
-            set_normalized_coefficient([md.f_upper_cons[l] for i in 1:md.n], 
+            set_normalized_coefficient([md.f_pos_cons[l] for i in 1:md.n], 
                                        md.g, -beta[l, :])
         # end
         # Update the rhs
-        set_normalized_rhs(md.f_lower_cons[l], 
+        set_normalized_rhs(md.f_neg_cons[l], 
                            inst.f_bar[l] + beta[l, :]' * md.d)
-        set_normalized_rhs(md.f_upper_cons[l], 
+        set_normalized_rhs(md.f_pos_cons[l], 
                            inst.f_bar[l] - beta[l, :]' * md.d)
-    end
-end
-
-"""
-    comp_gen_balance(g, is_xi_req, xi)
-
-Compute the generation side of the balance constraints.
-"""
-function comp_gen_balance(g::Vector{JuMP.VariableRef}, 
-                          is_xi_req::Bool, 
-                          xi::Vector{JuMP.VariableRef})
-    if is_xi_req
-        return g + xi
-    else
-        return g
     end
 end
 
@@ -374,7 +395,11 @@ function comp_inverse!(params::Parameters,
     _, n = size(B)
     make_invertible!(B, refbus)
 
+    F = SparseArrays.lu(B)
+    # I = SparseArrays.sparse(1.0 * LinearAlgebra.I(n))
+
     X = B \ 1.0LinearAlgebra.I(n)
+    X = SparseArrays.sparse(X)
 
     if params.debugging_level == 1
         # @show rank(B), n

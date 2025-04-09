@@ -65,6 +65,7 @@ mutable struct Instance
     num_I::Int64 # Number of buses
     num_J::Int64 # Number of existing circuits
     num_K::Int64 # Number of candidate circuits
+    ref_bus::Int64
     scenarios::Vector{Scenario}
     num_scenarios::Int64
 end
@@ -80,7 +81,7 @@ struct MIPModel <: TEPModel
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
     theta::Dict{Int64, JuMP.VariableRef}
-    fkl_constrs::Dict{Int64, JuMP.ConstraintRef}
+    fkl_cons::Dict{Int64, JuMP.ConstraintRef}
 
     MIPModel(params::Parameters) = 
                 new(JuMP.Model(params.model.optimizer), 
@@ -95,6 +96,7 @@ end
 
 struct LPModel <: TEPModel
     jump_model::JuMP.Model
+    obj::AffExpr
     s::Dict{Any, JuMP.VariableRef}
     f::Dict{Any, JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
@@ -103,6 +105,7 @@ struct LPModel <: TEPModel
     f_cons::Dict{Any, JuMP.ConstraintRef}
 
     LPModel(params::Parameters) = new(JuMP.Model(params.model.optimizer), 
+                                      AffExpr(), 
                                       Dict{Any, JuMP.VariableRef}(), 
                                       Dict{Any, JuMP.VariableRef}(), 
                                       Dict{Int64, JuMP.VariableRef}(), 
@@ -119,18 +122,21 @@ end
 
 struct PDDFModel <: TEPModel
     jump_model::JuMP.Model
+    obj::AffExpr
     bus_to_idx::Dict{Any, Int64} # Map buses' ids to indices
     S::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x n adjacency matrix
     Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m susceptances
     d::SparseArrays.SparseVector{Float64, Int64} # n vector of demands
-    g_bus::SparseArrays.SparseVector{JuMP.AffExpr, Int64} # n vector of g vars
+    g::Dict{Int64, JuMP.VariableRef} 
+    g_bus::SparseArrays.SparseVector{JuMP.AffExpr, Int64} 
     B::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n mat, where B = S'ΓS
     B_inv::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n inverse of B
-    beta::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m, where β = ΓSB⁻¹
+    beta::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x n, where β = ΓSB⁻¹
     f::SparseArrays.SparseVector{JuMP.AffExpr, Int64} # m x 1 vec of line flows
-     # m x 1 vector of line flow constrs
-    f_lower_cons::SparseArrays.SparseVector{JuMP.ConstraintRef, Int64}
-    f_upper_cons::SparseArrays.SparseVector{JuMP.ConstraintRef, Int64}
+    s::Vector{JuMP.VariableRef} # m vector of slack variables
+     # m x 1 vector of line flow conss
+    f_neg_cons::Vector{JuMP.ConstraintRef}
+    f_pos_cons::Vector{JuMP.ConstraintRef}
 end
 
 struct CompactSystem

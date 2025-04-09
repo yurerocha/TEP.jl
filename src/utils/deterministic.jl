@@ -41,27 +41,27 @@ function add_subproblem!(model::JuMP.Model, subproblem::JuMP.Model, scen::Int64)
 end
 
 """
-    build_expr(constr::AffQuadExpr, 
+    build_expr(cons::AffQuadExpr, 
                var_in_model::Dict{JuMP.VariableRef, JuMP.VariableRef})
 
 Build a new constraint equal to the one in the subproblem, but involving the 
 variables in the model.
 """
-function build_expr(constr::T, 
+function build_expr(cons::T, 
                 var_in_model::Dict{JuMP.VariableRef, JuMP.VariableRef}) where 
                                     T <: Union{AffQuadExpr, JuMP.VariableRef}
-    if constr isa JuMP.AffExpr
-        return JuMP.AffExpr(constr.constant, 
+    if cons isa JuMP.AffExpr
+        return JuMP.AffExpr(cons.constant, 
                             OrderedDict(var_in_model[var] => coef 
-                                        for (var, coef) in constr.terms))
-    elseif constr isa JuMP.QuadExpr
+                                        for (var, coef) in cons.terms))
+    elseif cons isa JuMP.QuadExpr
         # Build the aff expr with the vars in the model
         e = AffExpr()
-        for (var, coef) in constr.aff.terms
+        for (var, coef) in cons.aff.terms
             add_to_expression!(e, coef, var_in_model[var])
         end
         terms = OrderedDict{UnorderedPair{JuMP.VariableRef}, Float64}()
-        for (var, coef) in constr.terms
+        for (var, coef) in cons.terms
             p = UnorderedPair{JuMP.VariableRef}(var_in_model[var.a], 
                                                 var_in_model[var.b])
             terms[p] = coef
@@ -104,16 +104,16 @@ function update_state_vars!(model::JuMP.Model,
 end
 
 """
-    add_non_anticipativity_constrs!(inst::Instance, 
-                                    model::JuMP.Model, 
-                                    subproblems::Vector{MIPModel})
+    add_non_anticipativity_cons!(inst::Instance, 
+                                 model::JuMP.Model, 
+                                 subproblems::Vector{MIPModel})
                                     
 Add constraints to make the first-stage decisions for all subproblems to be the
 same.
 """
-function add_non_anticipativity_constrs!(inst::Instance, 
-                                         model::JuMP.Model, 
-                                         subproblems::Vector{MIPModel})
+function add_non_anticipativity_cons!(inst::Instance, 
+                                      model::JuMP.Model, 
+                                      subproblems::Vector{MIPModel})
     for scen in 2:inst.num_scenarios
         @constraint(model, subproblems[1].jump_model.ext[:state].x .== 
                            subproblems[scen].jump_model.ext[:state].x)

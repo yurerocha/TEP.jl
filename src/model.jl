@@ -1,13 +1,13 @@
 function build_mip(inst::Instance, 
                    params::Parameters, 
-                   scen::Int64)
+                   scen::Int64 = 1)
     mip = MIPModel(params)
     return build_model(inst, params, scen, mip)
 end
 
 function build_lp(inst::Instance, 
                   params::Parameters, 
-                  scen::Int64)
+                  scen::Int64 = 1)
     lp = LPModel(params)
     return build_model(inst, params, scen, lp)
 end
@@ -32,19 +32,20 @@ function build_model(inst::Instance,
     if params.model.is_symmetry_en && 
        !params.model.is_dcp_power_model_en && 
        tep isa MIPModel
-        add_symmetry_constrs!(inst, tep)
+        add_symmetry_cons!(inst, tep)
     end
 
-    add_thermal_limits_constrs!(inst, tep)
+    add_thermal_limits_cons!(inst, tep)
     
-    add_fkl_constrs!(inst, scen, tep)
+    add_fkl_cons!(inst, scen, tep)
 
-    add_ohms_law_constrs!(inst, tep)
+    add_ohms_law_cons!(inst, tep)
     
     if params.model.is_dcp_power_model_en && tep isa MIPModel
-        add_delta_theta_bounds_constrs!(inst, tep)
-        # TODO: Set reference bus
+        add_delta_theta_bounds_cons!(inst, tep)
     end
+
+    # add_ref_bus_cons!(inst, tep)
 
     set_obj!(inst, params, scen, tep)
 

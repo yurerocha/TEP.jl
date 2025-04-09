@@ -1,6 +1,7 @@
 const const_eps = 1e-5
 const MAXINT = 2e9 # Gurobi MAXINT value
 const const_infinite = 2.0e9
+const mp_type_ref_bus = 3
 
 abstract type AbstractSolutionStrategy end
 
@@ -16,6 +17,7 @@ Base.@kwdef mutable struct InstanceParameters
     max_rand::Int64 = 100 # Max random value for the new cost (see text)
     num_candidates::Int64 = 2 # Number of candidates available per existing line
     cost_mult::Float64 = 100.0 # Value multiplied by gamma to build the costs
+    ref_bus::Int64 = 1 # Default reference bus used when none is found
 end
 
 Base.@kwdef mutable struct ModelParameters

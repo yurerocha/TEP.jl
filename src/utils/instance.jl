@@ -195,6 +195,25 @@ function rm_g_nonlinear_coeffs!(mp_data::Dict{String, Any})
 end
 
 """
+    read_reference_bus(params::Parameters, mp_data::Dict{String, Any})
+
+Read reference bus to instance.
+
+Defaults to 1 if none is found.
+"""
+function read_reference_bus(params::Parameters, mp_data::Dict{String, Any})
+    ref_bus = params.instance.ref_bus
+    for b in mp_data["bus"]
+        if b[2]["bus_type"] == mp_type_ref_bus
+            ref_bus = b[2]["bus_i"]
+            break
+        end
+    end
+
+    return ref_bus
+end
+
+"""
     build_scenarios!(inst::Instance, 
                      num_scenarios::Int64, 
                      change_percentage::Float64)

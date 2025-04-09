@@ -22,9 +22,12 @@ function build_instance(params::Parameters,
     J = build_existing_circuits(params, mp_data)
     K = build_candidate_circuits(params, J)
 
+    ref_bus = read_reference_bus(params, mp_data)
+
     scenarios = [Scenario(1.0, D, G)]
 
     return Instance(I, J, K, 
-                    length(I), length(J), length(K), 
+                    length(I), length(J), length(K),
+                    ref_bus, 
                     scenarios, length(scenarios))
 end

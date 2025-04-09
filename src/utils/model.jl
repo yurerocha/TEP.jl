@@ -122,18 +122,18 @@ function update_g_vars!(inst::Instance, scen::Int64, tep::TEPModel)
 end
 
 """
-    add_symmetry_constrs!(inst::Instance, 
-                          params::Parameters, 
-                          tep::TEPModel)
+    add_symmetry_cons!(inst::Instance, 
+                       params::Parameters, 
+                       tep::TEPModel)
 
 Add constraints to help breaking symmetry.
 
 For candidates k, k + 1, ..., k + n with the same gamma, x_k >= x_{k + 1} >= ...
 >= x_{k + n}.
 """
-function add_symmetry_constrs!(inst::Instance, 
-                               params::Parameters, 
-                               tep::TEPModel)
+function add_symmetry_cons!(inst::Instance, 
+                            params::Parameters, 
+                            tep::TEPModel)
     for j in keys(inst.J)
         for l in 1:params.instance.num_candidates
             k = (j, l)
@@ -151,11 +151,11 @@ function add_symmetry_constrs!(inst::Instance,
 end
 
 """
-    add_thermal_limit_constrs!(inst::Instance, tep::TEPModel)
+    add_thermal_limits_cons!(inst::Instance, tep::TEPModel)
 
 Add flow variables to the model and thermal limits constraints.
 """
-function add_thermal_limits_constrs!(inst::Instance, tep::TEPModel)
+function add_thermal_limits_cons!(inst::Instance, tep::TEPModel)
     # Existing lines
     for j in keys(inst.J)
         JuMP.set_lower_bound(tep.f[j], -inst.J[j].f_bar)
@@ -171,12 +171,12 @@ function add_thermal_limits_constrs!(inst::Instance, tep::TEPModel)
 end
 
 """
-    add_thermal_limit_constrs!(inst::Instance, lp::LPModel)
+    add_thermal_limits_cons!(inst::Instance, lp::LPModel)
 
 Add flow variables to the model and thermal limits constraints considering the
 slack variables.
 """
-function add_thermal_limits_constrs!(inst::Instance, lp::LPModel)
+function add_thermal_limits_cons!(inst::Instance, lp::LPModel)
     # Existing lines
     for j in keys(inst.J)
         @constraint(lp.jump_model, lp.f[j] - inst.J[j].f_bar <= lp.s[j])
@@ -191,7 +191,7 @@ function add_thermal_limits_constrs!(inst::Instance, lp::LPModel)
     return nothing
 end
 
-function add_ohms_law_constrs!(inst::Instance, tep::TEPModel)
+function add_ohms_law_cons!(inst::Instance, tep::TEPModel)
     # Ohm's law for existing circuits
     for j in keys(inst.J)
         delta_theta = tep.theta[j[2]] - tep.theta[j[3]]
@@ -217,7 +217,7 @@ function add_ohms_law_constrs!(inst::Instance, tep::TEPModel)
     return nothing
 end
 
-function add_ohms_law_constrs!(inst::Instance, lp::LPModel)
+function add_ohms_law_cons!(inst::Instance, lp::LPModel)
     # Ohm's law for existing circuits
     for j in keys(inst.J)
         delta_theta = lp.theta[j[2]] - lp.theta[j[3]]
@@ -236,8 +236,8 @@ function add_ohms_law_constrs!(inst::Instance, lp::LPModel)
     return nothing
 end
 
-function add_delta_theta_bounds_constrs!(inst::Instance, 
-                                         mip::TEPModel)
+function add_delta_theta_bounds_cons!(inst::Instance, 
+                                      mip::TEPModel)
     bounds = Dict{Tuple{Int64, Int64}, Tuple{Float64, Float64}}()
     for j in keys(inst.J)
         if iseq(inst.J[j].delta_theta_bounds[1], 0.0) &&
@@ -262,21 +262,20 @@ function add_delta_theta_bounds_constrs!(inst::Instance,
     return nothing
 end
 
-function add_delta_theta_bounds_constrs(inst::Instance, 
-                                        lp::LPModel)
+function add_delta_theta_bounds_cons(inst::Instance, lp::LPModel)
     return nothing
 end
 
 """
-    add_fkl_constrs!(inst::Instance, 
-                     scen::Int64, 
-                     tep::TEPModel)
+    add_fkl_cons!(inst::Instance, 
+                  scen::Int64, 
+                  tep::TEPModel)
 
 Add first Kirchhoff law constraints.
 """
-function add_fkl_constrs!(inst::Instance, 
-                          scen::Int64, 
-                          tep::TEPModel)
+function add_fkl_cons!(inst::Instance, 
+                       scen::Int64, 
+                       tep::TEPModel)
     for i in inst.I
         e = comp_candidate_incident_flows(inst, tep.f, i)
         # e += comp_existing_incident_flows(inst, f, i)
@@ -286,10 +285,10 @@ function add_fkl_constrs!(inst::Instance,
         d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
         g = i in keys(tep.g_bus) ? tep.g_bus[i] : AffExpr(0.0)
 
-        constr = @constraint(tep.jump_model, e + g == d, base_name = "fkl[$i]")
+        cons = @constraint(tep.jump_model, e + g == d, base_name = "fkl[$i]")
 
         if tep isa MIPModel
-            tep.fkl_constrs[i] = constr
+            tep.fkl_cons[i] = cons
         end
     end
 
@@ -297,18 +296,30 @@ function add_fkl_constrs!(inst::Instance,
 end
 
 """
-    update_fkl_constrs_rhs!(inst::Instance, 
-                            scen::Int64, 
-                            tep::TEPModel)
+    update_fkl_cons_rhs!(inst::Instance, 
+                         scen::Int64, 
+                         tep::TEPModel)
+
 Update the right-hand side coefficients of the first Kirchhoff law constraints.
 """
-function update_fkl_constrs_rhs!(inst::Instance, 
-                                 scen::Int64, 
-                                 tep::TEPModel)
+function update_fkl_cons_rhs!(inst::Instance, 
+                              scen::Int64, 
+                              tep::TEPModel)
     for i in inst.I
         d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
-        JuMP.set_normalized_rhs(tep.fkl_constrs[i], d)
+        JuMP.set_normalized_rhs(tep.fkl_cons[i], d)
     end
+end
+
+"""
+    add_ref_bus_cons!(inst::Instance, tep::TEPModel)
+
+Add constraint on the reference bus theta value.
+"""
+function add_ref_bus_cons!(inst::Instance, tep::TEPModel)
+    @constraint(tep.jump_model, tep.theta[inst.ref_bus] == 0.0)
+    
+    return nothing
 end
 
 """
@@ -326,7 +337,7 @@ function set_obj!(inst::Instance,
     # Generation costs
     for k in keys(tep.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
-        add_to_expression!(tep.obj, comp_obj_g(params, tep.g[k], c))
+        add_to_expression!(tep.obj, comp_g_obj(params, tep.g[k], c))
     end
     # Cost of building new candidate lines
     for k in keys(inst.K)
@@ -350,19 +361,27 @@ function set_obj!(inst::Instance,
                   params::Parameters, 
                   scen::Int64, 
                   lp::LPModel)
-    @objective(lp.jump_model, Min, sum([s for (_, s) in lp.s]))
+    # Generation costs
+    for k in keys(lp.g)
+        c = reverse(inst.scenarios[scen].G[k].costs)
+        add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
+    end
+    add_to_expression!(lp.obj, 
+                       sum([params.model.penalty * s for (_, s) in lp.s]))
+    # Violation costs
+    @objective(lp.jump_model, Min, lp.obj)
     
     return nothing
 end
 
 """
-   comp_obj_g(params::Parameters, 
+   comp_g_obj(params::Parameters, 
               g::JuMP.VariableRef, 
               costs::Vector{Float64})
 
 Compute g in the objective function.
 """
-function comp_obj_g(params::Parameters, 
+function comp_g_obj(params::Parameters, 
                     g::JuMP.VariableRef, 
                     costs::Vector{Float64})
     l = length(costs)
@@ -396,16 +415,17 @@ function update_model!(inst::Instance,
                        scen::Int64, 
                        tep::TEPModel)
     update_g_vars!(inst, scen, tep)
-    update_fkl_constrs_rhs!(inst, scen, tep)
+    update_fkl_cons_rhs!(inst, scen, tep)
 
     return nothing
 end
 
 """
-    print_constrs(model::JuMP.Model, filename::String)
+    print_cons(model::JuMP.Model, filename::String)
+
 Print model constraints according to their types.
 """
-function print_constrs(model::JuMP.Model, filename::String)
+function print_cons(model::JuMP.Model, filename::String)
     open(filename, "w") do f
         for (F, S) in JuMP.list_of_constraint_types(model)
             for cref in JuMP.all_constraints(model, F, S)

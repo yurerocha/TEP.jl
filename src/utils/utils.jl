@@ -81,12 +81,12 @@ function comp_incidence_matrix(inst::Instance,
                                md::JuMP.Model, 
                                f::Vector{JuMP.VariableRef}, 
                                i::Int64, 
-                               is_add_constrs::Bool,
+                               is_add_cons::Bool,
                                is_cand_en::Bool,
                                lines::Vector{Int64})
     e = 0
     # Candidate lines
-    is_constr_update_req = false
+    is_cons_update_req = false
     if is_cand_en
         for l in lines
             circ = inst.K[l - inst.num_J]
@@ -94,7 +94,7 @@ function comp_incidence_matrix(inst::Instance,
             # l = inst.num_J + k
 
             if (circ.to == i || circ.fr == i) && !isdefined(f, l)
-                is_constr_update_req = true
+                is_cons_update_req = true
                 f[l] = @variable(md, base_name = "f")
             end
 
@@ -107,7 +107,7 @@ function comp_incidence_matrix(inst::Instance,
     end
 
     # Existing lines
-    if is_add_constrs || is_constr_update_req
+    if is_add_cons || is_cons_update_req
         for j in 1:inst.num_J
             circ = inst.J[j]
             if circ.to == i
@@ -118,7 +118,7 @@ function comp_incidence_matrix(inst::Instance,
         end
     end
 
-    return e, is_constr_update_req
+    return e, is_cons_update_req
 end
 
 """
@@ -206,6 +206,8 @@ function log_instance(outputfile::String,
          " $(round(start_time, digits=2)) | \n"
 
     log(outputfile, s)
+
+    return nothing
 end
 
 """
@@ -229,11 +231,11 @@ function comp_bigM(inst::Instance, k::Tuple{Tuple3I, Int64})
 end
 
 """
-    is_one(I)
+    is_one(I::SparseArrays.SparseMatrixCSC{Float64, Int64})
 
 Check if the matrix is the identity matrix.
 """
-function is_one(I::Matrix{Float64})
+function is_one(I::SparseArrays.SparseMatrixCSC{Float64, Int64})
     _, n = size(I)
     for i in 1:n, j in 1:n
         if i == j
@@ -336,7 +338,7 @@ Compute the residuals of the line flows.
 """
 function comp_f_residuals(inst::Instance, 
                           f::Dict{Any, Float64}, 
-                          inserted::Set{Any})
+                          inserted, rev = true)
     f_residuals = Vector{Tuple{Any, Float64}}()
     for k in inserted
         # Shift to the existing lines
@@ -349,7 +351,7 @@ function comp_f_residuals(inst::Instance,
     end
 
     # Sort lines in non-descending order of residuals
-    sort!(f_residuals, by = x->x[2], rev = true)
+    sort!(f_residuals, by = x->x[2], rev = rev)
 
     return [f_residuals[i][1] for i in 1:length(f_residuals)]
 end
@@ -366,8 +368,8 @@ Compute the violations of the flow constraints in the existing lines.
 function comp_viols(inst::Instance, 
                     params::Parameters, 
                     s::Dict{Any, Float64}, 
-                    inserted::Set{Any}, 
-                    candidates::Set{Any})
+                    inserted, 
+                    candidates)
     viols = Vector{Tuple{Any, Float64}}()
     for k in candidates
         j = k[1]
@@ -476,7 +478,7 @@ function config_dcp_pm_tests!(params::Parameters)
     params.instance.load_gen_mult = 1.0
     params.model.is_dcp_power_model_en = true
     params.log_level = 0
-end
+end    
 
 """
     select_files(path::String, num_files::Int64)

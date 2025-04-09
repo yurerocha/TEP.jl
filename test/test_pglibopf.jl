@@ -30,20 +30,18 @@ eps = 1e-3
 
         # Run DC-OPF
         dc_opf = PowerModels.solve_opf(mp_data, 
-                                    DCPPowerModel, 
-                                    # DCMPPowerModel, 
-                                    params.model.optimizer)
+                                       DCPPowerModel, 
+                                       # DCMPPowerModel, 
+                                       params.model.optimizer)
         
         # Run TEP
         inst = TEP.build_instance(params, mp_data)
-        mip = TEP.build_mip(inst, params, 1)
+        mip = TEP.build_mip(inst, params)
         # force_solution(inst, mip, dc_opf["solution"], mp_data)
         # TEP.print_constrs(mip.jump_model, "TEP.jl/model1.lp")
         tep = TEP.solve!(params, mip)
 
-        @warn tep
-        
-        @info tep[7], dc_opf["objective"]
+        TEP.log(params, "$(tep[7]), $(dc_opf["objective"])", true)
         @test abs(tep[7] - dc_opf["objective"]) < eps
         # readline()
     end
