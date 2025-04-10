@@ -1,21 +1,20 @@
 
 """
-    config!(params::Parameters, md::T) where T <: Union{MIPModel, PDDFModel}
+    config!(params::Parameters, tep::TEPModel)
 
 Configure the solver parameters.
 """
-function config!(params::Parameters, md::T) where 
-                                                T <: Union{MIPModel, PDDFModel}
+function config!(params::Parameters, tep::TEPModel)
     if params.model.optimizer == Gurobi.Optimizer
         if params.log_level >= 3
-            set_attribute(md.jump_model, 
+            set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("LogFile"), 
                           params.log_file)
-            set_attribute(md.jump_model, 
+            set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("LogToConsole"), 
                           1)
         else
-            JuMP.set_silent(md.jump_model)
+            JuMP.set_silent(tep.jump_model)
         end
     end
 

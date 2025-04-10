@@ -55,12 +55,16 @@ function build_pddf(inst::Instance, params::Parameters, scen::Int64 = 1)
 
     # return bus_inj
 
-    return PDDFModel(md, obj, bus_to_idx, 
+    pddf = PDDFModel(md, obj, bus_to_idx, 
                      S, Gamma, 
                      d, g, g_bus, 
                      B, B_inv, 
                      beta, f, 
                      s, f_neg_cons, f_pos_cons)
+
+    config!(params, pddf)
+
+    return pddf
 end
 # function build_pddf(inst::Instance, params::Parameters)
 #     md = Model(Gurobi.Optimizer)

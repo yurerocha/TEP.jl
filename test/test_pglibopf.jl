@@ -21,7 +21,9 @@ eps = 1e-3
 @testset "DC OPF Library" begin
     for (i, file) in enumerate(files)
         TEP.log(params, "Test $i $file")
-        params.log_file = "log/" * TEP.get_inst_name(file) * ".txt"
+        
+        # params.log_file = "log/" * TEP.get_inst_name(file) * ".txt"
+
         mp_data = PowerModels.parse_file(path * file)
         # pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
         # TEP.print_constrs(pm.model, "TEP.jl/model2.lp")
