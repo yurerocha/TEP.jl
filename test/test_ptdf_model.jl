@@ -1,4 +1,4 @@
-module TestPDDFModel
+module TestPTDFModel
 
 using TEP
 using Test
@@ -13,9 +13,9 @@ files = TEP.select_files(path, num_tests)
 params = TEP.Parameters()
 params.log_level = 0
 
-eps = 1e-2
+eps = 1e-1
 
-@testset "PDDF Model" begin
+@testset "PTDF Model" begin
     for (i, file) in enumerate(files)
         TEP.log(params, "Test $i $file")
 
@@ -24,21 +24,19 @@ eps = 1e-2
         mp_data = PowerModels.parse_file(path * file)
         inst = TEP.build_instance(params, mp_data)
         
-        pddf = TEP.build_pddf(inst, params)
-        JuMP.optimize!(pddf.jump_model)
+        ptdf = TEP.build_ptdf(inst, params)
+        JuMP.optimize!(ptdf.jump_model)
         
         lp = TEP.build_lp(inst, params)
         JuMP.optimize!(lp.jump_model)
 
-        pddf_obj_val = objective_value(pddf.jump_model)
+        ptdf_obj_val = objective_value(ptdf.jump_model)
         lp_obj_val = objective_value(lp.jump_model)
 
-        TEP.log(params, "$pddf_obj_val, $lp_obj_val", true)
+        TEP.log(params, "$ptdf_obj_val, $lp_obj_val", true)
+        TEP.log(params, "Test $i $file")
 
-        @test abs(pddf_obj_val - lp_obj_val) < eps
-
-        # TEP.log(params, "Test $i $file")
-        # readline()
+        @test abs(ptdf_obj_val - lp_obj_val) < eps
     end
 end
 

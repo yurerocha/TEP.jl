@@ -79,19 +79,27 @@ function add_vars!(inst::Instance, scen::Int64, lp::LPModel)
 end
 
 """
-    add_g_vars!(inst::Instance, scen::Int64, tep::TEPModel)
+    add_g_vars!(inst::Instance, 
+                params::Parameters, 
+                scen::Int64, 
+                tep::TEPModel)
 
 Add generation variables.
 """
-function add_g_vars!(inst::Instance, scen::Int64, tep::TEPModel)
+function add_g_vars!(inst::Instance, 
+                     params::Parameters, 
+                     scen::Int64, 
+                     tep::TEPModel)
     # Some buses may not have load or generation
     for k in keys(inst.scenarios[scen].G)
         bus = inst.scenarios[scen].G[k].bus
         lb = inst.scenarios[scen].G[k].lower_bound
         ub = inst.scenarios[scen].G[k].upper_bound
+
         if isl(ub, 0.0)
-            @show ub, i
+            log(params, "Negative g bounds: $lb, $ub, $k", true)
         end
+
         tep.g[k] = @variable(tep.jump_model, 
                              lower_bound = lb, 
                              upper_bound = ub, 

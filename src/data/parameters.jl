@@ -48,9 +48,9 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
 end
 
 Base.@kwdef mutable struct Parameters
-    log_level::Int64 = 3
+    log_level::Int64 = 1
     log_file::String = "log"
-    debugging_level::Int64 = 1
+    debugging_level::Int64 = 0
     solver_time_limit::Float64 = 600.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()

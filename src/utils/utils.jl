@@ -26,11 +26,12 @@ function iseq(a::Float64, b::Float64)
 end
 
 """
-    iseq(A::Matrix, B::Matrix)
+    iseq(A::Matrix{T}, B::Matrix{T}) where T <: AbstractFloat
 
 Return true if matrices A and B are equal.
 """
-function iseq(A::Matrix{Float64}, B::Matrix{Float64})
+function iseq(A::Matrix{T}, B::Matrix{S}) where {T <: AbstractFloat, 
+                                                 S <: AbstractFloat}
     return norm(A - B) < const_eps
 end
 
@@ -231,11 +232,11 @@ function comp_bigM(inst::Instance, k::Tuple{Tuple3I, Int64})
 end
 
 """
-    is_one(I::SparseArrays.SparseMatrixCSC{Float64, Int64})
+    is_one(I::Matrix{T}) where T <: AbstractFloat
 
 Check if the matrix is the identity matrix.
 """
-function is_one(I::SparseArrays.SparseMatrixCSC{Float64, Int64})
+function is_one(I::Matrix{T}) where T <: AbstractFloat
     _, n = size(I)
     for i in 1:n, j in 1:n
         if i == j
@@ -495,4 +496,13 @@ function select_files(path::String, num_files::Int64)
     # Sort files so that instances with less buses are sovled first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
     return files[1:num_files]
+end
+
+"""
+    comp_sparsity(A)
+
+Compute the sparsity of a matrix.
+"""
+function comp_sparsity(A)
+    return 1.0 - count(!iszero, A) / length(A)
 end

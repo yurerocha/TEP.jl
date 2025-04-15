@@ -120,19 +120,22 @@ const TepModel = Union{MIPModel, LPModel}
 struct CompactModel
 end
 
-struct PDDFModel <: TEPModel
+struct PTDFModel{T <: AbstractFloat} <: TEPModel
     jump_model::JuMP.Model
     obj::AffExpr
     bus_to_idx::Dict{Any, Int64} # Map buses' ids to indices
-    S::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x n adjacency matrix
-    Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m susceptances
-    d::SparseArrays.SparseVector{Float64, Int64} # n vector of demands
+    S::SparseArrays.SparseMatrixCSC{Float32, Int64} # m x n adjacency matrix
+    Gamma::SparseArrays.SparseMatrixCSC{T, Int64} # m x m susceptances
+    d::Vector{T} # n vector of demands
     g::Dict{Int64, JuMP.VariableRef} 
-    g_bus::SparseArrays.SparseVector{JuMP.AffExpr, Int64} 
-    B::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n mat, where B = S'ΓS
-    B_inv::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n inverse of B
-    beta::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x n, where β = ΓSB⁻¹
-    f::SparseArrays.SparseVector{JuMP.AffExpr, Int64} # m x 1 vec of line flows
+    # g_bus::SparseArrays.SparseVector{JuMP.AffExpr, Int64} 
+    g_bus::Vector{JuMP.AffExpr} 
+    B::SparseArrays.SparseMatrixCSC{T, Int64} # n x n mat, where B = S'ΓS
+    B_inv::Matrix{T} # n x n inverse of B
+    I::SparseArrays.SparseMatrixCSC{Float32, Int64} # n x n identity matrix
+    beta::Matrix{Float32} # m x n, where β = ΓSB⁻¹
+    bus_inj::Vector{JuMP.AffExpr}
+    f::Vector{JuMP.AffExpr} # m x 1 vec of line flows
     s::Vector{JuMP.VariableRef} # m vector of slack variables
      # m x 1 vector of line flow conss
     f_neg_cons::Vector{JuMP.ConstraintRef}
