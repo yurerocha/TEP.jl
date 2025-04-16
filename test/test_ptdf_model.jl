@@ -24,7 +24,7 @@ eps = 1e-1
         mp_data = PowerModels.parse_file(path * file)
         inst = TEP.build_instance(params, mp_data)
         
-        ptdf = TEP.build_ptdf(inst, params)
+        ptdf = TEP.build_ptdf(inst, params, T = Float64)
         JuMP.optimize!(ptdf.jump_model)
         
         lp = TEP.build_lp(inst, params)

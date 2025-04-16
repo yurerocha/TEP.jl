@@ -1,13 +1,17 @@
 module TEP
 
+# using BenchmarkTools
+# using BFloat16s
 using Dates
 using Distributions
 using Gurobi
 using JuMP
+using LinearAlgebra
 using MPI
 using OrderedCollections # OrderedDict
 using PowerModels
-# using ProfileView
+# using Profile
+# using PProf
 using Random
 using SparseArrays
 # External files in instance/ext
@@ -24,7 +28,7 @@ using JobQueueMPI
 # using SimpleWeightedGraphs
 
 # compact_model.jl
-using LinearAlgebra
+# using LinearAlgebra
 # using LinearSolve
 
 include("data/parameters.jl")
@@ -37,7 +41,7 @@ include("utils/deterministic.jl")
 # include("utils/drawing.jl")
 include("utils/instance.jl")
 include("utils/model.jl")
-include("utils/pddf_model.jl")
+include("utils/ptdf.jl")
 include("utils/ph.jl")
 include("utils/utils.jl")
 
@@ -49,7 +53,7 @@ include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
 include("parallel_ph.jl")
-include("pddf_model.jl")
+include("ptdf.jl")
 include("serial_ph.jl")
 
 end

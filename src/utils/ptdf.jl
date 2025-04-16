@@ -18,29 +18,46 @@ function build_bus_to_idx(inst::Instance)
 end
 
 """
-    build_bus_injections(inst::Instance, 
-                         params::Parameters, 
-                         bus_to_idx::Dict{Any, Int64}, 
-                         scen::Int64, 
-                         md::JuMP.Model; 
-                         type::Type{T} = Float64) where T <: AbstractFloat
+    build_d_injections(inst::Instance, 
+                       bus_to_idx::Dict{Any, Int64}, 
+                       params::Parameters, 
+                       scen::Int64)
 
 Build load and generation injections per bus in the network.
 """
-function build_bus_injections(inst::Instance, 
-                              params::Parameters, 
-                              bus_to_idx::Dict{Any, Int64}, 
-                              scen::Int64, 
-                              md::JuMP.Model; 
-                              type::Type{T} = Float64) where T <: AbstractFloat
+function build_d_injections(inst::Instance, 
+                            bus_to_idx::Dict{Any, Int64}, 
+                            params::Parameters, 
+                            scen::Int64)
     # The dimensions of D and G must match and must also be equal to n, where n
     # is the number of nodes
     n = length(inst.I)
       
-    d = zeros(type, n)
+    d = zeros(Float64, n)
     for k in keys(inst.scenarios[scen].D)
         d[bus_to_idx[k]] += inst.scenarios[scen].D[k]
     end
+    
+    return d
+end
+
+"""
+    build_g_injections(inst::Instance, 
+                       bus_to_idx::Dict{Any, Int64}, 
+                       params::Parameters, 
+                       scen::Int64, 
+                       md::JuMP.Model)
+
+Build load and generation injections per bus in the network.
+"""
+function build_g_injections(inst::Instance, 
+                            bus_to_idx::Dict{Any, Int64}, 
+                            params::Parameters, 
+                            scen::Int64, 
+                            md::JuMP.Model)
+    # The dimensions of D and G must match and must also be equal to n, where n
+    # is the number of nodes
+    n = length(inst.I)
     
     g = Dict{Int64, JuMP.VariableRef}()
     g_bus = zeros(JuMP.AffExpr, n)
@@ -65,53 +82,24 @@ function build_bus_injections(inst::Instance,
     # sort!(I)
     # g_bus = dropzeros!(SparseArrays.sparsevec(I, g_bus))
     
-    return d, g, g_bus
-end 
-
-function build_g_injections(inst::Instance, 
-                            bus_to_idx::Dict{Any, Int64}, 
-                            scen::Int64, 
-                            md::JuMP.Model)
-    buses = Vector{Int64}()
-    D = Vector{JuMP.AffExpr}()
-    idx_in_vec = Dict{Int64, Int64}()
-    for k in keys(inst.scenarios[scen].G)
-        bus = inst.scenarios[scen].G[k].bus
-        lb = inst.scenarios[scen].G[k].lower_bound
-        ub = inst.scenarios[scen].G[k].upper_bound
-
-        if isl(ub, 0.0)
-            @show ub, i
-        end
-
-        var = @variable(md, 
-                        lower_bound = lb, 
-                        upper_bound = ub, 
-                        base_name = "g[$k]")
-
-        if bus in keys(idx_in_vec)
-            D[idx_in_vec[bus]] += var
-        else
-            push!(buses, bus_to_idx[bus])
-            push!(D, var)
-            idx_in_vec[bus] = length(buses)
-        end
-    end
-
-    return SparseArrays.sparsevec(buses, D)
+    return g, g_bus
 end
 
 """
-    build_incidence_matrix(inst::Instance, bus_to_idx::Dict{Any, Int64}
+    build_incidence_matrix(inst::Instance, 
+                           bus_to_idx::Dict{Any, Int64}; 
+                           T::Type{X} = Float16) where X <: AbstractFloat
 
 Build incidence matrix.
 
 Where incoming and outgoing lines are represented by 1 and -1, respectively.
 """
-function build_incidence_matrix(inst::Instance, bus_to_idx::Dict{Any, Int64})
+function build_incidence_matrix(inst::Instance, 
+                                bus_to_idx::Dict{Any, Int64}; 
+                                T::Type{X} = Float16) where X <: AbstractFloat
     I_fr = Vector{Int64}()
     I_to = Vector{Int64}()
-    S = Vector{Float32}()
+    S = Vector{T}()
 
     l = 1
     for j in keys(inst.J)
@@ -151,16 +139,13 @@ function build_incidence_matrix(inst::Instance, bus_to_idx::Dict{Any, Int64})
 end
 
 """
-    build_susceptance_matrix(inst::Instance;  
-                             type::Type{T} = Float64) where T <: AbstractFloat
+    build_susceptance_matrix(inst::Instance)
 
 Build the diagonal matrix of susceptances.
 """
-function build_susceptance_matrix(inst::Instance;  
-                                  type::Type{T} = Float64) where 
-                                                            T <: AbstractFloat
+function build_susceptance_matrix(inst::Instance)
     L = Vector{Int64}()
-    G = Vector{type}()
+    G = Vector{Float64}()
     l = 1
     for j in keys(inst.J)
         push!(L, l)
@@ -280,62 +265,6 @@ function set_obj!(inst::Instance,
 end
 
 """
-    update_upper_bounds_lines_slack!(md::CompactModel, is_fix::Bool)
-
-Update upper bounds on the slack variables for the line flows.
-
-is_fix: true for fixing the upper bound to zero or false to delete an upper
-bound previously set.
-"""
-function update_upper_bounds_lines_slack!(md::CompactModel, is_fix::Bool)
-    for l in 1:md.m
-        if is_fix
-            set_upper_bound(md.lines_slack[l], 0.0)
-        else
-            delete_upper_bound(md.lines_slack[l])
-        end
-    end
-end
-
-"""
-    update_flow_cons!(inst::Instance, 
-                      md::CompactModel, 
-                      beta::Matrix{AbstractFloat})
-
-Update the flow constraints in the compact model.
-"""
-function update_flow_cons!(inst::Instance, 
-                           md::CompactModel, 
-                           beta::Matrix{AbstractFloat})
-    
-    # f[l] = beta * d - beta * g
-
-    # -f[l] - inst.f_bar[l] <= s[l]
-    # -(beta * d - beta * g) - inst.f_bar[l] <= s[l]
-    # -beta * d + beta * g - inst.f_bar[l] <= s[l]
-    # -s[l] + beta * g <= inst.f_bar[l] + beta * d
-
-    # f[l] - inst.f_bar[l] <= s[l]
-    # beta * d - beta * g - inst.f_bar[l] <= s[l]
-    # -s[l] - beta * g <= inst.f_bar[l] - beta * d
-    
-    for l in 1:md.m
-        # for i in 1:md.n
-            # Update the lhs g coefficients
-            set_normalized_coefficient([md.f_neg_cons[l] for i in 1:md.n], 
-                                       md.g, beta[l, :])
-            set_normalized_coefficient([md.f_pos_cons[l] for i in 1:md.n], 
-                                       md.g, -beta[l, :])
-        # end
-        # Update the rhs
-        set_normalized_rhs(md.f_neg_cons[l], 
-                           inst.f_bar[l] + beta[l, :]' * md.d)
-        set_normalized_rhs(md.f_pos_cons[l], 
-                           inst.f_bar[l] - beta[l, :]' * md.d)
-    end
-end
-
-"""
     make_invertible!(B::SparseArrays.SparseMatrixCSC{T, Int64}, 
                      refbus::Int64) where T <: AbstractFloat
 
@@ -376,8 +305,8 @@ function comp_inverse!(inst::Instance,
     # I = SparseArrays.sparse(1.0 * LinearAlgebra.I(n))
 
     X = F \ 1.0LinearAlgebra.I(n)
-    # X = Matrix{Float32}(X)
-
+    # X = Matrix{Float64}(X)
+    
     if params.debugging_level == 1
         # @show rank(B), n
         @assert LinearAlgebra.rank(B) == n
@@ -394,18 +323,15 @@ end
 function comp_beta(inst::Instance, 
                    bus_to_idx::Dict{Any, Int64}, 
                    params::Parameters, 
-                   S::SparseArrays.SparseMatrixCSC{Float32, Int64}, 
-                   Gamma::SparseArrays.SparseMatrixCSC{T, Int64}) where 
-                                                            T <: AbstractFloat
+                   Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64}, 
+                   S::SparseArrays.SparseMatrixCSC{X, Int64}; 
+                   T::Type{X} = Float16) where {X <: AbstractFloat}
     @time GS = Gamma * S
     @time B = S' * GS
 
-    # Profile.clear()
-    # @profile B_inv = comp_inverse!(inst, bus_to_idx, params, B)
-    # pprof()
     @time B_inv = comp_inverse!(inst, bus_to_idx, params, B)
 
-    @time beta = Matrix{Float32}(GS * B_inv)
+    @time beta = Matrix{T}(GS * B_inv)
 
     return B, B_inv, beta
 end
@@ -417,17 +343,17 @@ end
 Compute bus injections.
 """
 function comp_bus_inj(d::Vector{T}, 
-                    g_bus::Vector{JuMP.AffExpr}) where T <: AbstractFloat
+                      g_bus::Vector{JuMP.AffExpr}) where T <: AbstractFloat
     return Vector{JuMP.AffExpr}(d - g_bus)
 end
 
 """
-    update_beta(inst::Instance, 
-                bus_to_idx::Dict{Any, Int64}, 
-                params::Parameters, 
-                ptdf::T, 
-                i::Int64, 
-                k) where T <: Union{PTDFModel, CompactSystem}
+    update_beta!(inst::Instance, 
+                 bus_to_idx::Dict{Any, Int64}, 
+                 params::Parameters, 
+                 ptdf::T, 
+                 i::Int64, 
+                 k) where T <: Union{PTDFModel, PTDFSystem}
 
 Update the beta matrix through a rank-1 update after removing a circuit from the 
 model.
@@ -435,34 +361,67 @@ model.
 function update_beta!(inst::Instance, 
                       bus_to_idx::Dict{Any, Int64}, 
                       params::Parameters, 
-                      ptdf::T, 
+                      ptdf::X, 
                       i::Int64, 
-                      k) where T <: Union{PTDFModel, CompactSystem}
-    gamma_i = Float32(inst.K[k].gamma)
-    gamma_star = Float32(1e-3 * gamma_i)
-    
+                      gamma_i::Y, 
+                      gamma_star::Y; 
+                      T::Type{Y} = Float16) where 
+                                        {X <: Union{PTDFModel, PTDFSystem}, 
+                                         Y <: AbstractFloat}    
     # Update β
     a_i = ptdf.S[i, :]
     beta_i = ptdf.beta[i, :]'
 
     # Since A - A * B = A * (I - B)
     den = gamma_i / (gamma_star - gamma_i) + beta_i * a_i
-    @warn gamma_i, gamma_star, gamma_i / (gamma_star - gamma_i), beta_i * a_i
     
-    C = ptdf.I - (a_i * beta_i) / den
-
-    @time ptdf.beta[:, :] *= C
+    ptdf.beta *= (ptdf.I - (a_i * beta_i) / den)
     ptdf.beta[i, :] *= gamma_star / gamma_i
-    
+
     ptdf.Gamma[i, i] *= gamma_star / gamma_i
     
     # Computing the new B⁻¹ and β matrices from scratch
     if params.debugging_level == 1
-        B, B_inv, beta = comp_beta(inst, bus_to_idx, params, ptdf.S, ptdf.Gamma)
+        B, B_inv, beta = comp_beta(inst, bus_to_idx, params, 
+                                   ptdf.Gamma, ptdf.S, T = T)
 
         log(params, "Norm: $(norm(ptdf.beta - beta))", true)
         @assert iseq(ptdf.beta, beta)
     end
+
+    return nothing
+end
+
+function rm_line!(inst::Instance, 
+                  bus_to_idx::Dict{Any, Int64}, 
+                  params::Parameters, 
+                  ptdf::X, 
+                  i::Int64, 
+                  k; 
+                  T::Type{Y} = Float16) where 
+                                    {X <: Union{PTDFModel, PTDFSystem}, 
+                                     Y <: AbstractFloat}
+    g_i = T(inst.K[k].gamma)
+    g_star = T(1e-3 * g_i)
+
+    update_beta!(inst, bus_to_idx, params, ptdf, i, g_i, g_star, T = T)
+
+    return nothing
+end
+
+function add_line!(inst::Instance, 
+                   bus_to_idx::Dict{Any, Int64}, 
+                   params::Parameters, 
+                   ptdf::X, 
+                   i::Int64, 
+                   k; 
+                   T::Type{Y} = Float16) where 
+                                     {X <: Union{PTDFModel, PTDFSystem}, 
+                                      Y <: AbstractFloat}
+    g_i = T(inst.K[k].gamma)
+    g_star = T(1e-3 * g_i)
+
+    update_beta!(inst, bus_to_idx, params, ptdf, i, g_star, g_i, T = T)
 
     return nothing
 end

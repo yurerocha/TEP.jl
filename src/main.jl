@@ -160,7 +160,8 @@ function run_ptdf(file::String)
     mp_data = PowerModels.parse_file(file)
     inst = build_instance(params, mp_data)
 
-    build_ptdf(inst, params, 1)
+    # build_ptdf(inst, params, 1, T = Float64)
+    build_ptdf_system(inst, params, 1, T = Float64)
 
     return nothing
 end

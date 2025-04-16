@@ -117,23 +117,27 @@ end
 const TepModel = Union{MIPModel, LPModel}
 
 # ------------------------- PDDF model data structures -------------------------
-struct CompactModel
-end
+"""
+    PTDFModel{T <: AbstractFloat} <: TEPModel
 
-struct PTDFModel{T <: AbstractFloat} <: TEPModel
+- T: used to represent floating-point data types involved in computations 
+that are required to be efficient.
+"""
+mutable struct PTDFModel{T <: AbstractFloat} <: TEPModel
     jump_model::JuMP.Model
     obj::AffExpr
     bus_to_idx::Dict{Any, Int64} # Map buses' ids to indices
-    S::SparseArrays.SparseMatrixCSC{Float32, Int64} # m x n adjacency matrix
-    Gamma::SparseArrays.SparseMatrixCSC{T, Int64} # m x m susceptances
-    d::Vector{T} # n vector of demands
+    Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m susceptances
+    S::SparseArrays.SparseMatrixCSC{T, Int64} # m x n adjacency matrix
+    d::Vector{Float64} # n vector of demands
     g::Dict{Int64, JuMP.VariableRef} 
     # g_bus::SparseArrays.SparseVector{JuMP.AffExpr, Int64} 
     g_bus::Vector{JuMP.AffExpr} 
-    B::SparseArrays.SparseMatrixCSC{T, Int64} # n x n mat, where B = S'ΓS
-    B_inv::Matrix{T} # n x n inverse of B
-    I::SparseArrays.SparseMatrixCSC{Float32, Int64} # n x n identity matrix
-    beta::Matrix{Float32} # m x n, where β = ΓSB⁻¹
+    B::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n mat, where B = S'ΓS
+    B_inv::Matrix{Float64} # n x n inverse of B
+    # buffer::Matrix{T} # n x n
+    I::Matrix{T} # n x n identity matrix
+    beta::Matrix{T} # m x n, where β = ΓSB⁻¹
     bus_inj::Vector{JuMP.AffExpr}
     f::Vector{JuMP.AffExpr} # m x 1 vec of line flows
     s::Vector{JuMP.VariableRef} # m vector of slack variables
@@ -142,15 +146,16 @@ struct PTDFModel{T <: AbstractFloat} <: TEPModel
     f_pos_cons::Vector{JuMP.ConstraintRef}
 end
 
-struct CompactSystem
-    S::Matrix{Float64} # m x n adjacency matrix
-    Gamma::Matrix{Float64} # m x m matrix of susceptances
+struct PTDFSystem{T <: AbstractFloat}
+    bus_to_idx::Dict{Any, Int64} # Map buses' ids to indices
+    Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m susceptances
+    S::SparseArrays.SparseMatrixCSC{T, Int64} # m x n adjacency matrix
     d::Vector{Float64} # n vector of demands
-    g::Vector{Float64} # n vector of generation variables
-    B::Matrix{Float64} # n x n matrix, where B = S'ΓS
-    B_inv::Matrix{Float64} # n x n inverse of matrix B
-    beta::Matrix{Float64} # m x m matrix, where β = ΓSB⁻¹
-    f::Vector{Float64} # m x 1 vector of line flows
+    B::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n mat, where B = S'ΓS
+    B_inv::Matrix{Float64} # n x n inverse of B
+    # buffer::Matrix{T} # n x n
+    I::Matrix{T} # n x n identity matrix
+    beta::Matrix{T} # m x n, where β = ΓSB⁻¹
 end
 
 # ----------------------------- PH data structures -----------------------------
