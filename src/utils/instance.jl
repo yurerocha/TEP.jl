@@ -7,7 +7,7 @@ function comp_gamma(params::Parameters, x::Float64, r::Float64 = 0.0)
     # if !params.model.is_dcp_power_model_en
     #     return -x / (r^2 + x^2)
     # else
-    #     return 1.0 / (x^2)
+        # return 1.0 / (x^2)
     # end
     return -x / (r^2 + x^2)
 end

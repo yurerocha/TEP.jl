@@ -18,7 +18,7 @@ Solve all instances.
 function run(logname::String = "log.md")
     params = Parameters()
 
-    logfile = "$(params.dir)/$(params.dir_log)/$logname"
+    logfile = "tep.md"
     
     # Number of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
@@ -27,18 +27,17 @@ function run(logname::String = "log.md")
 
     log_header(logfile)
 
-    files = readdir("$(params.dir)/input3")
+    dir = "submodules/pglib-opf"
+    files = select_files(dir, 66)
     # Sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
     # Run solver with binary decision variables
     is_mip_en = true
+    skip = []
     skip = [
-        "pglib_opf_case162_ieee_dtc.txt", # Infeasible with all candidates
-        "pglib_opf_case1803_snem.txt", # Zero reactance
-        "pglib_opf_case3022_goc.txt", # Infeasible with all candidates
-        "pglib_opf_case4661_sdet.txt", # Infeasible or unbounded
-        "pglib_opf_case4917_goc.txt", # Infeasible with all candidates
-        "pglib_opf_case78484_epigrids.txt" # Infeasible with all candidates
+            "pglib_opf_case2853_sdet.m",    # Numerical trouble encountered
+            "pglib_opf_case13659_pegase.m", # Numerical trouble encountered
+            "pglib_opf_case9241_pegase.m"   # Numerical trouble encountered
     ]
     counter = 1
     for file in files
@@ -49,31 +48,34 @@ function run(logname::String = "log.md")
         end
         log(params, "Processing $file num $counter", true)
 
-        inputfile = "$(params.dir)/input3/$file"
-        logsolver = "$(params.dir)/$(params.dir_log)/$file"
+        inputfile = "$(dir)/$file"
+        logsolver = "$(dir)/log/$file"
 
-        inst = read_instance(params, inputfile, rng)
+        params.log_file = "log/" * file
+
+        mp_data = PowerModels.parse_file(inputfile)
+        inst = build_instance(params, mp_data)
         if params.debugging_level == 1
             @assert iseq(comp_gd_ratio(inst), 1.0 + params.g_slack)
         end
 
-        model = nothing
+        mip = nothing
         build_time = 0.0
         start_time = 0.0
         ms_gap = 0.0
 
         # try
         log(params, "Build heuristic solution", true)
-        (start, report) = build_solution(params, inst, logsolver)
+        (start, report) = build_solution(inst, params)
 
         log(params, "Build full model", true)
-        build_time = @elapsed (model = build_mip_model(inst, logsolver))
+        build_time = @elapsed (mip = build_mip(inst, params))
 
         log(params, "Fix the start of the model", true)
-        start_time = @elapsed (fix_start!(inst, model, start))
+        start_time = @elapsed (fix_start!(inst, params, mip, start))
 
         log(params, "Solve the model", true)
-        results = solve!(model, true)
+        results = solve!(params, mip)
         ms_gap = results[end]
         results = results[1:end - 1]
         
@@ -86,6 +88,8 @@ function run(logname::String = "log.md")
         #                  inst, build_time, model_dt.is_xi_req,
         #                  ntuple(v->'-', 14))
         # end
+
+        # readline()
     end
 end
 

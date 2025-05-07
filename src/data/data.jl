@@ -71,6 +71,7 @@ mutable struct Instance
 end
 
 # ---------------------------- Model data structures ---------------------------
+# abstract type AbstractTEPModel end
 abstract type TEPModel end
 
 struct MIPModel <: TEPModel
@@ -102,6 +103,7 @@ struct LPModel <: TEPModel
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
     theta::Dict{Int64, JuMP.VariableRef}
+    fkl_cons::Dict{Int64, JuMP.ConstraintRef}
     f_cons::Dict{Any, JuMP.ConstraintRef}
 
     LPModel(params::Parameters) = new(JuMP.Model(params.model.optimizer), 
@@ -111,12 +113,15 @@ struct LPModel <: TEPModel
                                       Dict{Int64, JuMP.VariableRef}(), 
                                       Dict{Int64, JuMP.AffExpr}(), 
                                       Dict{Int64, JuMP.VariableRef}(), 
+                                      Dict{Int64, JuMP.VariableRef}(), 
                                       Dict{Any, JuMP.ConstraintRef}())
 end
 
 const TepModel = Union{MIPModel, LPModel}
 
 # ------------------------- PDDF model data structures -------------------------
+# abstract type AbstractPTDFModel <: AbstractTEPModel end
+
 """
     PTDFModel{T <: AbstractFloat} <: TEPModel
 
@@ -127,6 +132,7 @@ mutable struct PTDFModel{T <: AbstractFloat} <: TEPModel
     jump_model::JuMP.Model
     obj::AffExpr
     bus_to_idx::Dict{Any, Int64} # Map buses' ids to indices
+    line_to_idx::Dict{Any, Int64} 
     Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m susceptances
     S::SparseArrays.SparseMatrixCSC{T, Int64} # m x n adjacency matrix
     d::Vector{Float64} # n vector of demands
@@ -146,16 +152,19 @@ mutable struct PTDFModel{T <: AbstractFloat} <: TEPModel
     f_pos_cons::Vector{JuMP.ConstraintRef}
 end
 
-struct PTDFSystem{T <: AbstractFloat}
+mutable struct PTDFSystem{T <: AbstractFloat}
     bus_to_idx::Dict{Any, Int64} # Map buses' ids to indices
+    line_to_idx::Dict{Any, Int64}
     Gamma::SparseArrays.SparseMatrixCSC{Float64, Int64} # m x m susceptances
     S::SparseArrays.SparseMatrixCSC{T, Int64} # m x n adjacency matrix
     d::Vector{Float64} # n vector of demands
+    g_bus::Vector{Float64}
     B::SparseArrays.SparseMatrixCSC{Float64, Int64} # n x n mat, where B = S'ΓS
     B_inv::Matrix{Float64} # n x n inverse of B
     # buffer::Matrix{T} # n x n
     I::Matrix{T} # n x n identity matrix
     beta::Matrix{T} # m x n, where β = ΓSB⁻¹
+    bus_inj::Vector{Float64}
 end
 
 # ----------------------------- PH data structures -----------------------------
@@ -209,7 +218,12 @@ mutable struct WorkerCache
 end
 
 # ------------------------- Beam Search data structures ------------------------
-struct Node
-    inserted::Vector{Tuple{Tuple3I, Int64}}
-    removed::Vector{Tuple{Tuple3I, Int64}}
+mutable struct Node{T <: AbstractFloat}
+    obj::Float64
+    viol::Float64
+    beta::Matrix{T}
+    bus_inj::Vector{T}
+    f::Vector{Float64} # m x 1 vec of line flows
+    inserted::Vector
+    candidates::Vector
 end

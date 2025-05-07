@@ -185,3 +185,106 @@ No nosso caso,
 - Add config file
 - Ler: https://docs.julialang.org/en/v1/manual/performance-tips/
 - Add log status
+
+## TODO
+- Depois de calcular a inversa, converter para Float16
+
+Instância 8387
+Float16:
+1.68
+1.67
+1.67
+Float32:
+2.59
+2.59
+2.59
+Float64:
+3.40
+3.75
+3.87
+
+Instância 13659
+BFloat16
+
+Float16
+4.1
+4.1
+4.1
+Float32
+6.30
+6.32
+6.82
+Float64
+8.51
+8.70
+
+## TODO
+- Adicionar arcos conectados aos nós com maior cardinalidade
+- Adicionar uma lista de candidatos por nó
+
+## Atenção
+- Instância 4917_goc é meio tricky: dá muita inviabilidade e explora apenas um nó da árvore
+- Aumentar w pode ajudar?
+
+## Testes
+- tep1.md: comp_f_residuals original
+- tep2.md: comp_f_residuals com dual Lagrangiano
+- tep3.md: comp_f_residuals original, mas fazendo a divisão pelo custo
+- tep4.md: comp_f_residuals com dual Lagrangiano, mas fazendo a divisão pelo custo
+- tep5.md: comp_f_residuals com dual Lagrangiano, adicionando apenas candidatos
+  cujo benefício marginal seja negativo
+- tep6.md: comp_f_residuals original, com abs(f[k] / inst.K[k].f_bar)
+
+## TODO
+- É possível deixar ambos os modelos bem mais leves, construindo-os apenas com
+  os candidatos resultantes da heurística
+
+## Erro
+
+┌ Warning: (181, 5.508027891832172e6, 1074, 234, 589, 496.057088136673)
+
+...
+
+Barrier performed 80 iterations in 0.55 seconds (0.42 work units)
+Numerical trouble encountered
+
+Model may be infeasible or unbounded.  Consider using the
+homogeneous algorithm (through parameter 'BarHomogeneous')
+
+
+User-callback calls 388, time in user-callback 0.00 sec
+[ Info: Any[((2760, 2916, 2946), 2)]
+  0.301499 seconds (47 allocations: 495.303 MiB, 10.30% gc time)
+  0.000106 seconds (6 allocations: 47.375 KiB)
+┌ Warning: (0.14159014151250765, 0.14159014151250765)
+└ @ TEP ~/psr/TEP.jl/src/beam_search.jl:233
+[ Info: Infeasible solution found!
+ERROR: Result index of attribute MathOptInterface.VariablePrimal(1) out of bounds. There are currently 0 solution(s) in the model.
+Stacktrace:
+  [1] check_result_index_bounds
+    @ ~/.julia/packages/MathOptInterface/jGuEH/src/attributes.jl:207 [inlined]
+  [2] get(model::Gurobi.Optimizer, attr::MathOptInterface.VariablePrimal, x::MathOptInterface.VariableIndex)
+    @ Gurobi ~/.julia/packages/Gurobi/rPBei/src/MOI_wrapper/MOI_wrapper.jl:3060
+  [3] get(b::MathOptInterface.Bridges.LazyBridgeOptimizer{Gurobi.Optimizer}, attr::MathOptInterface.VariablePrimal, index::MathOptInterface.VariableIndex)
+    @ MathOptInterface.Bridges ~/.julia/packages/MathOptInterface/jGuEH/src/Bridges/bridge_optimizer.jl:1254
+  [4] get(model::MathOptInterface.Utilities.CachingOptimizer{…}, attr::MathOptInterface.VariablePrimal, index::MathOptInterface.VariableIndex)
+    @ MathOptInterface.Utilities ~/.julia/packages/MathOptInterface/jGuEH/src/Utilities/cachingoptimizer.jl:908
+  [5] _moi_get_result(::MathOptInterface.Utilities.CachingOptimizer{…}, ::MathOptInterface.VariablePrimal, ::Vararg{…})
+    @ JuMP ~/.julia/packages/JuMP/xlp0s/src/optimizer_interface.jl:1138
+  [6] get(model::JuMP.Model, attr::MathOptInterface.VariablePrimal, v::JuMP.VariableRef)
+    @ JuMP ~/.julia/packages/JuMP/xlp0s/src/optimizer_interface.jl:1178
+  [7] value(v::JuMP.VariableRef; result::Int64)
+    @ JuMP ~/.julia/packages/JuMP/xlp0s/src/variables.jl:1904
+  [8] value
+    @ ~/.julia/packages/JuMP/xlp0s/src/variables.jl:1903 [inlined]
+  [9] get_values(vars::Dict{Any, JuMP.VariableRef})
+    @ TEP ~/psr/TEP.jl/src/utils/utils.jl:425
+ [10] select_lines(inst::TEP.Instance, params::TEP.Parameters, ptdf::TEP.PTDFSystem{Float64}, lp::TEP.LPModel, node::TEP.Node{Float64}, K::Vector{Any}, params_w::Int64, params_b::Int64)
+    @ TEP ~/psr/TEP.jl/src/utils/beam_search.jl:88
+ [11] beam_search(file::String)
+    @ TEP ~/psr/TEP.jl/src/beam_search.jl:186
+ [12] top-level scope
+    @ REPL[10]:1
+Some type information was truncated. Use `show(err)` to see complete types.
+
+julia> TEP.beam_search("submodules/pglib-opf/pglib_opf_case3022_goc.m")

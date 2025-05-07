@@ -1,13 +1,13 @@
 """
     build_solution(inst::Instance, 
                    params::Parameters, 
-                   scen::Int64)
+                   scen::Int64 = 1)
 
 Build solution with the full linear programming model.
 """
 function build_solution(inst::Instance, 
                         params::Parameters, 
-                        scen::Int64)
+                        scen::Int64 = 1)
     log(params, "Start heuristic to build initial solution", true)
     # At the first it, there are no candidate lines
     lp = build_lp(inst, params, scen)
@@ -22,7 +22,7 @@ function build_solution(inst::Instance,
     if params.debugging_level == 1
         st = termination_status(lp.jump_model)
         viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
-        @assert iseq(viol, 0.0)
+        # @assert iseq(viol, 0.0)
     end
 
     cost = comp_cost(inst, inserted)
@@ -62,9 +62,10 @@ function rm_and_fix(inst::Instance,
     end
 
     rnf_percent = params.heuristic.rnf_percent
+    start_inserted = Set{Any}()
     f = get_values(lp.f)
     g = get_values(lp.g)
-    lines = comp_f_residuals(inst, f, inserted)
+    lines = comp_f_residuals(inst, lp, f, inserted)
     it = 1
     while true
         num_itens = round(Int64, rnf_percent * length(lines))
@@ -75,7 +76,7 @@ function rm_and_fix(inst::Instance,
             log(params, "All candidates removed!")
             break
         elseif isg(time() - time_beg, params.heuristic.rnf_time_limit)
-            log(params, "Reached time limit")
+            log(params, "Time limit reached")
             break
         end
 
@@ -115,17 +116,16 @@ function rm_and_fix(inst::Instance,
                                             viol, 
                                             time_beg)
             
-            break
-            viol, _ = g_lines_neigh(inst, 
-                                    params, 
-                                    scen, 
-                                    lp, 
-                                    rm_set, 
-                                    removed, 
-                                    inserted, 
-                                    viol, 
-                                    viol, 
-                                    time_beg)
+            # viol, _ = g_lines_neigh(inst, 
+            #                         params, 
+            #                         scen, 
+            #                         lp, 
+            #                         rm_set, 
+            #                         removed, 
+            #                         inserted, 
+            #                         viol, 
+            #                         viol, 
+            #                         time_beg)
 
             if iseq(viol, 0.0)
                 cost = comp_cost(inst, inserted)
@@ -135,7 +135,7 @@ function rm_and_fix(inst::Instance,
             end
         end
 
-        break
+        # break
         if has_impr
             if params.debugging_level == 1
                 @assert length(inserted) + length(removed) == inst.num_K
@@ -155,11 +155,17 @@ function rm_and_fix(inst::Instance,
             if !has_values(lp.jump_model)
                 optimize!(lp.jump_model)
             end
+            start_inserted = deepcopy(inserted)
             f = get_values(lp.f)
             g = get_values(lp.g)
 
-            lines = comp_f_residuals(inst, f, inserted)
+            lines = comp_f_residuals(inst, lp, f, inserted)
             rnf_percent = min(1.0, rnf_percent + params.heuristic.rnf_delta)
+
+            # TODO: To break when the first feasible sol is found
+            # if iseq(viol, 0.0)
+            #     break
+            # end
         else
             log(params, "Not improved! Add new lines...")
             setdiff!(removed, rm_set)
@@ -175,7 +181,8 @@ function rm_and_fix(inst::Instance,
 
     report = NeighReport(delta_runtime, delta_rm / inst.num_K, 0.0)
 
-    return best_cost, Start(inserted, f, g), report
+    return best_cost, Start(start_inserted, f, g), report
+    # return best_cost, Start(inserted, f, g), report
 end
 
 function violated_flows_neigh!(inst::Instance, 
@@ -232,7 +239,7 @@ function violated_flows_neigh!(inst::Instance,
             log(params, "Insufficient num of lines")
             break
         elseif isg(time() - rnf_time_beg, params.heuristic.rnf_time_limit)
-            log(params, "Reached time limit")
+            log(params, "Time limit reached")
             break
         end
 
@@ -273,8 +280,8 @@ function violated_flows_neigh!(inst::Instance,
                 @assert iseq(viol, objective_value(lp_debug.jump_model))
             end
         else
-            # log("Decrease lambda and restart $lambda")
-            # lambda /= 2.0
+            log(params, "Decrease lambda and restart $lambda")
+            lambda /= 2.0
             # lambda = max(0.0, lambda - params.heuristic.vf_delta)
             # The inserted candidates make the solution worse
             rm_lines!(inst, params, lp, insert)
@@ -368,7 +375,7 @@ function g_lines_neigh(inst::Instance,
             log(params, "All viol removed!")
             break
         elseif isg(time() - rnf_time_beg, params.heuristic.rnf_time_limit)
-            log(params, "Reached time limit")
+            log(params, "Time limit reached")
             break
         elseif a > length(lines) || a > b
             break
@@ -465,10 +472,10 @@ end
 Insert lines in the model by setting the diagonal terms of the susceptance.
 """
 function add_lines!(inst::Instance, 
-               params::Parameters, 
-               lp::LPModel,
-               new_candidates, 
-               is_opt::Bool = true)
+                    params::Parameters, 
+                    lp::LPModel,
+                    new_candidates, 
+                    is_opt::Bool = true)
     log(params, "Add $(length(new_candidates)) line(s)")
 
     for k in new_candidates
@@ -501,9 +508,9 @@ Fix start the model with the lines, generation, and flows of the start struct.
 """
 function fix_start!(inst::Instance, 
                     params::Parameters, 
-                    scen::Int64, 
                     mip::MIPModel, 
-                    start::Start)
+                    start::Start, 
+                    scen::Int64 = 1)
     JuMP.set_attribute(mip.jump_model, 
                        MOI.RawOptimizerAttribute("SolutionLimit"), 
                        1)
@@ -516,10 +523,10 @@ function fix_start!(inst::Instance,
     end
 
     for k in keys(inst.K)
-        JuMP.fix(mip.x[k], 0; force = true)
+        JuMP.fix(mip.x[k], 0.0; force = true)
     end
     for k in start.inserted
-        fix(mip.x[k], 1.0; force = true)
+        JuMP.fix(mip.x[k], 1.0; force = true)
     end
     all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
     for l in all_keys
@@ -531,6 +538,9 @@ function fix_start!(inst::Instance,
     end
 
     optimize!(mip.jump_model)
+    # To compare the objective value of this solution with the objective value
+    # of the mip start solution in the next solver call, the fix constraints on
+    # the flows and generation have to be removed
 
     model = mip.jump_model
     status = JuMP.termination_status(model)
@@ -553,8 +563,8 @@ function fix_start!(inst::Instance,
 
     for k in keys(inst.K)
         JuMP.unfix(mip.x[k])
-        # set_lower_bound(md.x[k - inst.num_J], 0.0)
-        # set_upper_bound(md.x[k - inst.num_J], 1.0)
+        # set_lower_bound(mip.x[k], 0.0)
+        # set_upper_bound(mip.x[k], 1.0)
     end
     for l in all_keys
         JuMP.unfix(mip.f[l])

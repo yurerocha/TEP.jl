@@ -1,0 +1,14 @@
+Root relaxation: time limit, 2038 iterations, 0.12 seconds (0.08 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0          -    0      4554724.50 1116503.30  75.5%     -    1s
+
+Explored 1 nodes (2038 simplex iterations) in 1.00 seconds (1.01 work units)
+Thread count was 32 (of 80 available processors)
+
+Solution count 1: 4.55472e+06 
+
+Time limit reached
+Best objective 4.554724498495e+06, best bound 1.116503300000e+06, gap 75.4869%

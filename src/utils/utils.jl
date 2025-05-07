@@ -338,22 +338,49 @@ end
 Compute the residuals of the line flows.
 """
 function comp_f_residuals(inst::Instance, 
+                          lp, 
                           f::Dict{Any, Float64}, 
-                          inserted, rev = true)
+                          inserted, 
+                          rev = true)
     f_residuals = Vector{Tuple{Any, Float64}}()
+    # for c in inserted
+    #     k = c[1][2]
+    #     l = c[1][3]
+    #     pi_k = dual(lp.fkl_cons[k])
+    #     pi_l = dual(lp.fkl_cons[l])
+    #     theta_k = value(lp.theta[k])
+    #     theta_l = value(lp.theta[l])
+    #     # pi_kl = (pi_l - pi_k) * (theta_k - theta_l) / inst.K[c].cost
+    #     pi_kl = (pi_l - pi_k) * (theta_k - theta_l)
+    #     push!(f_residuals, (c, pi_kl))
+    # end
+
     for k in inserted
         # Shift to the existing lines
         # j = map_to_existing_line(inst, k)
-        diff = inst.K[k].f_bar - abs(f[k])
-        # if !isl(diff, 0.0) # diff >= 0.0
-        r = diff / inst.K[k].f_bar
+        delta = inst.K[k].f_bar - abs(f[k])
+        # if !isl(delta, 0.0) # diff >= 0.0
+        r = delta / inst.K[k].f_bar
         push!(f_residuals, (k, r))
         # end
     end
 
     # Sort lines in non-descending order of residuals
     sort!(f_residuals, by = x->x[2], rev = rev)
+    # sort!(f_residuals, by = x->x[2], rev = false)
+    # @warn f_residuals[1:6]
+    # readline()
+    # idx = length(f_residuals)
+    # i = 1
+    # for f in f_residuals
+    #     if isg(f[2], 0.001)
+    #         idx = i
+    #         break
+    #     end
+    #     i += 1
+    # end
 
+    # return [f_residuals[i][1] for i in 1:idx]
     return [f_residuals[i][1] for i in 1:length(f_residuals)]
 end
 
@@ -386,16 +413,18 @@ function comp_viols(inst::Instance,
 end
 
 """
-    get_values(vars::Dict{Any, JuMP.VariableRef})
+    get_values(vars::Dict{T, JuMP.VariableRef}) where T <: Union{Int64, Any}
 
 Get values of vars variables.
 """
 function get_values(vars::Dict{T, JuMP.VariableRef}) where 
                                                         T <: Union{Int64, Any}
-    vals = Dict{Any, Float64}()
+    vals = Dict{T, Float64}()
+
     for (k, v) in vars
         vals[k] = value(v)
     end
+
     return vals
 end
 

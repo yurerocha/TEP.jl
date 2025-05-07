@@ -9,12 +9,29 @@ function build_bus_to_idx(inst::Instance)
 
     index = 1
     bus_to_idx = Dict{Any, Int64}()
+
     for i in I
         bus_to_idx[i] = index
         index += 1
     end
 
     return bus_to_idx
+end
+
+function build_line_to_idx(inst::Instance)
+    l = 1
+    line_to_idx = Dict{Any, Int64}()
+
+    for j in keys(inst.J)
+        line_to_idx[j] = l
+        l += 1
+    end
+    for k in keys(inst.K)
+        line_to_idx[k] = l
+        l += 1
+    end
+
+    return line_to_idx
 end
 
 """
@@ -31,9 +48,8 @@ function build_d_injections(inst::Instance,
                             scen::Int64)
     # The dimensions of D and G must match and must also be equal to n, where n
     # is the number of nodes
-    n = length(inst.I)
-      
-    d = zeros(Float64, n)
+    d = zeros(Float64, length(inst.I))
+
     for k in keys(inst.scenarios[scen].D)
         d[bus_to_idx[k]] += inst.scenarios[scen].D[k]
     end
@@ -57,10 +73,9 @@ function build_g_injections(inst::Instance,
                             md::JuMP.Model)
     # The dimensions of D and G must match and must also be equal to n, where n
     # is the number of nodes
-    n = length(inst.I)
-    
     g = Dict{Int64, JuMP.VariableRef}()
-    g_bus = zeros(JuMP.AffExpr, n)
+    g_bus = zeros(JuMP.AffExpr, length(inst.I))
+    
     for k in keys(inst.scenarios[scen].G)
         bus = inst.scenarios[scen].G[k].bus
         lb = inst.scenarios[scen].G[k].lower_bound
@@ -142,10 +157,13 @@ end
     build_susceptance_matrix(inst::Instance)
 
 Build the diagonal matrix of susceptances.
+
+The susceptance of the candidate lines is zero.
 """
-function build_susceptance_matrix(inst::Instance)
+function build_susceptance_matrix(inst::Instance, K)
     L = Vector{Int64}()
     G = Vector{Float64}()
+
     l = 1
     for j in keys(inst.J)
         push!(L, l)
@@ -154,7 +172,12 @@ function build_susceptance_matrix(inst::Instance)
     end
     for k in keys(inst.K)
         push!(L, l)
-        push!(G, inst.K[k].gamma)
+        if k in K
+            push!(G, inst.K[k].gamma)
+        else
+            # push!(G, 1e-5 * inst.K[k].gamma)
+            push!(G, 1e-5)
+        end
         l += 1
     end
 
@@ -337,91 +360,103 @@ function comp_beta(inst::Instance,
 end
 
 """
-    comp_bus_inj(d::Vector{T}, 
-                 g_bus::Vector{JuMP.AffExpr}) where T <: AbstractFloat
+    comp_bus_inj(d::Vector{X}, 
+                 g_bus::Vector{Y}) where {X <: AbstractFloat, 
+                                        Y <: Union{JuMP.AffExpr, AbstractFloat}}
 
 Compute bus injections.
 """
-function comp_bus_inj(d::Vector{T}, 
-                      g_bus::Vector{JuMP.AffExpr}) where T <: AbstractFloat
-    return Vector{JuMP.AffExpr}(d - g_bus)
+function comp_bus_inj(d::Vector{X}, 
+                      g_bus::Vector{Y}; 
+                      T::Type{Y} = Float64) where {X <: AbstractFloat, 
+                                        Y <: Union{JuMP.AffExpr, AbstractFloat}}
+    return Vector{T}(d - g_bus)
+end
+
+function update_bus_inj!(ptdf::PTDFSystem, 
+                         g_bus::Vector{Float64})
+    ptdf.g_bus = g_bus
+    ptdf.bus_inj = comp_bus_inj(ptdf.d, g_bus)
+
+    return nothing
 end
 
 """
-    update_beta!(inst::Instance, 
-                 bus_to_idx::Dict{Any, Int64}, 
-                 params::Parameters, 
-                 ptdf::T, 
-                 i::Int64, 
-                 k) where T <: Union{PTDFModel, PTDFSystem}
+    update_beta(inst::Instance, 
+                bus_to_idx::Dict{Any, Int64}, 
+                params::Parameters, 
+                ptdf::T, 
+                i::Int64, 
+                k) where T <: Union{PTDFModel, PTDFSystem}
 
 Update the beta matrix through a rank-1 update after removing a circuit from the 
 model.
 """
-function update_beta!(inst::Instance, 
-                      bus_to_idx::Dict{Any, Int64}, 
-                      params::Parameters, 
-                      ptdf::X, 
-                      i::Int64, 
-                      gamma_i::Y, 
-                      gamma_star::Y; 
-                      T::Type{Y} = Float16) where 
-                                        {X <: Union{PTDFModel, PTDFSystem}, 
-                                         Y <: AbstractFloat}    
+function update_beta(inst::Instance, 
+                     params::Parameters, 
+                     ptdf::X, 
+                     beta::Matrix{Y}, 
+                     i::Int64, 
+                     gamma_i::Y, 
+                     gamma_star::Y; 
+                     T::Type{Y} = Float16) where 
+                                       {X <: Union{PTDFModel, PTDFSystem}, 
+                                        Y <: AbstractFloat}    
     # Update β
     a_i = ptdf.S[i, :]
-    beta_i = ptdf.beta[i, :]'
+    beta_i = beta[i, :]'
 
     # Since A - A * B = A * (I - B)
     den = gamma_i / (gamma_star - gamma_i) + beta_i * a_i
-    
-    ptdf.beta *= (ptdf.I - (a_i * beta_i) / den)
-    ptdf.beta[i, :] *= gamma_star / gamma_i
 
-    ptdf.Gamma[i, i] *= gamma_star / gamma_i
+    @time beta *= (ptdf.I - (a_i * beta_i) / den)
+    @time beta[i, :] *= gamma_star / gamma_i
+
+    # ptdf.Gamma[i, i] *= gamma_star / gamma_i
     
     # Computing the new B⁻¹ and β matrices from scratch
     if params.debugging_level == 1
-        B, B_inv, beta = comp_beta(inst, bus_to_idx, params, 
-                                   ptdf.Gamma, ptdf.S, T = T)
+        ptdf.Gamma[i, i] *= gamma_star / gamma_i
+        B, B_inv, new_beta = comp_beta(inst, ptdf.bus_to_idx, params, 
+                                       ptdf.Gamma, ptdf.S, T = T)
 
-        log(params, "Norm: $(norm(ptdf.beta - beta))", true)
-        @assert iseq(ptdf.beta, beta)
+        log(params, "Norm: $(norm(beta - new_beta))", true)
+        @assert iseq(beta, new_beta)
     end
 
-    return nothing
+    return beta
 end
 
-function rm_line!(inst::Instance, 
-                  bus_to_idx::Dict{Any, Int64}, 
+function rm_line(inst::Instance, 
+                 params::Parameters, 
+                 ptdf::X, 
+                 beta::Matrix{Y}, 
+                 k) where {X <: Union{PTDFModel, PTDFSystem}, 
+                           Y <: AbstractFloat}
+    i = ptdf.line_to_idx[k]
+    T = eltype(beta)
+    g_i = T(inst.K[k].gamma)
+    # g_star = T(1e-5 * g_i)
+    g_star = T(1e-5)
+
+    return update_beta(inst, params, 
+                       ptdf, beta, 
+                       i, g_i, g_star, T = T)
+end
+
+function add_line(inst::Instance, 
                   params::Parameters, 
                   ptdf::X, 
-                  i::Int64, 
-                  k; 
-                  T::Type{Y} = Float16) where 
-                                    {X <: Union{PTDFModel, PTDFSystem}, 
-                                     Y <: AbstractFloat}
+                  beta::Matrix{Y}, 
+                  k) where {X <: Union{PTDFModel, PTDFSystem},
+                            Y <: AbstractFloat}
+    i = ptdf.line_to_idx[k]
+    T = eltype(beta)
     g_i = T(inst.K[k].gamma)
-    g_star = T(1e-3 * g_i)
+    # g_star = T(1e-5 * g_i)
+    g_star = T(1e-5)
 
-    update_beta!(inst, bus_to_idx, params, ptdf, i, g_i, g_star, T = T)
-
-    return nothing
-end
-
-function add_line!(inst::Instance, 
-                   bus_to_idx::Dict{Any, Int64}, 
-                   params::Parameters, 
-                   ptdf::X, 
-                   i::Int64, 
-                   k; 
-                   T::Type{Y} = Float16) where 
-                                     {X <: Union{PTDFModel, PTDFSystem}, 
-                                      Y <: AbstractFloat}
-    g_i = T(inst.K[k].gamma)
-    g_star = T(1e-3 * g_i)
-
-    update_beta!(inst, bus_to_idx, params, ptdf, i, g_star, g_i, T = T)
-
-    return nothing
+    return update_beta(inst, params, 
+                       ptdf, beta, 
+                       i, g_star, g_i, T = T)
 end

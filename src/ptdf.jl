@@ -17,6 +17,7 @@ function build_ptdf(inst::Instance,
     md = Model(Gurobi.Optimizer)
 
     bus_to_idx = build_bus_to_idx(inst)
+    line_to_idx = build_line_to_idx(inst)
 
     d = build_d_injections(inst, bus_to_idx, params, scen)
     g, g_bus = build_g_injections(inst, bus_to_idx, params, scen, md)
@@ -25,9 +26,8 @@ function build_ptdf(inst::Instance,
 
     S = build_incidence_matrix(inst, bus_to_idx; T = T)
 
-    n = length(inst.I)
-    # I = SparseArrays.sparse(Matrix{T}(1.0 * LinearAlgebra.I(n)))
-    I = Matrix{T}(1.0 * LinearAlgebra.I(n))
+    # I = SparseArrays.sparse(Matrix{T}(1.0 * LinearAlgebra.I(length(inst.I))))
+    I = Matrix{T}(1.0 * LinearAlgebra.I(length(inst.I)))
 
     B, B_inv, beta = comp_beta(inst, bus_to_idx, params, Gamma, S, T = T)
 
@@ -51,7 +51,8 @@ function build_ptdf(inst::Instance,
     # without them
     obj = set_obj!(inst, params, scen, md, g, s)
 
-    ptdf = PTDFModel{T}(md, obj, bus_to_idx, 
+    ptdf = PTDFModel{T}(md, obj, 
+                        bus_to_idx, line_to_idx, 
                         Gamma, S, 
                         d, g, g_bus, 
                         B, B_inv, 
@@ -79,25 +80,29 @@ end
 
 function build_ptdf_system(inst::Instance, 
                            params::Parameters, 
+                           # g_bus::Vector{Float64}, 
+                           K, 
                            scen::Int64 = 1; 
                            T::Type{X} = Float16) where {X <: AbstractFloat}
     bus_to_idx = build_bus_to_idx(inst)
+    line_to_idx = build_line_to_idx(inst)
 
     d = build_d_injections(inst, bus_to_idx, params, scen)
 
-    Gamma = build_susceptance_matrix(inst)
+    Gamma = build_susceptance_matrix(inst, K)
 
     S = build_incidence_matrix(inst, bus_to_idx, T = T)
 
-    n = length(inst.I)
-    I = Matrix{T}(1.0 * LinearAlgebra.I(n))
+    I = Matrix{T}(1.0 * LinearAlgebra.I(length(inst.I)))
 
     B, B_inv, beta = comp_beta(inst, bus_to_idx, params, Gamma, S, T = T)
 
-    return PTDFSystem(bus_to_idx, 
-                      Gamma, S, 
-                      d, 
-                      B, B_inv, 
-                      I, beta)
+    # bus_inj = comp_bus_inj(d, g_bus)
+
+    return PTDFSystem{T}(bus_to_idx, line_to_idx, 
+                         Gamma, S, 
+                         d, [], 
+                         B, B_inv, 
+                         I, beta, [])
 end
 

@@ -22,22 +22,22 @@ end
 
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
-    penalty::Float64 = 1e6
+    penalty::Float64 = 1e1
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
     optimizer = Gurobi.Optimizer
 end
 
 Base.@kwdef mutable struct HeuristicParameters
-    rnf_time_limit::Float64 = 10.0
-    rnf_percent::Float64 = 0.9
-    rnf_delta::Float64 = 0.1
-    # Initial percentage of violated cands to insert
+    rnf_time_limit::Float64 = 5.0
+    rnf_percent::Float64 = 0.95 # 0.9
+    rnf_delta::Float64 = 0.05
+    # Initial percentage of violated candidates to insert
     vf_lambda_start::Float64 = 1.0
-    # Percent of cands connected to g to evaluate per it
+    # Percentage of candidates connected to g to evaluate per it
     gl_ins::Float64 = 0.1 
     # 1 - g lines; 2 - d lines; 3 - g or d lines; 4 - !(g or d) lines
-    gl_strategy::Int64 = 3 
+    gl_strategy::Int64 = 3
 end
 
 # TODO: ProgressiveHedging -> PH
@@ -48,10 +48,10 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
 end
 
 Base.@kwdef mutable struct Parameters
-    log_level::Int64 = 1
-    log_file::String = "log"
+    log_level::Int64 = 3
+    log_file::String = "log.txt"
     debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 600.0
+    solver_time_limit::Float64 = 1.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()

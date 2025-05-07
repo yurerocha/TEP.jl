@@ -294,9 +294,9 @@ function add_fkl_cons!(inst::Instance,
 
         cons = @constraint(tep.jump_model, e + g == d, base_name = "fkl[$i]")
 
-        if tep isa MIPModel
+        # if tep isa MIPModel
             tep.fkl_cons[i] = cons
-        end
+        # end
     end
 
     return nothing
@@ -369,12 +369,20 @@ function set_obj!(inst::Instance,
                   scen::Int64, 
                   lp::LPModel)
     # Generation costs
-    for k in keys(lp.g)
-        c = reverse(inst.scenarios[scen].G[k].costs)
-        add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
-    end
-    add_to_expression!(lp.obj, 
-                       sum([params.model.penalty * s for (_, s) in lp.s]))
+    # s_pen = 0.0
+    # for k in keys(lp.g)
+    #     c = reverse(inst.scenarios[scen].G[k].costs)
+    #     # TODO: Add generation costs?
+    #     # add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
+    #     if length(c) > 0
+    #         s_pen = max(s_pen, maximum(c))
+    #     end
+    # end
+    # The value used for penalizing flow violations is equal to the largest 
+    # generation cost times a constant
+    # s_pen *= params.model.penalty
+    # add_to_expression!(lp.obj, sum([s_pen * s for s in values(lp.s)]))
+    add_to_expression!(lp.obj, sum([s for s in values(lp.s)]))
     # Violation costs
     @objective(lp.jump_model, Min, lp.obj)
     
@@ -389,8 +397,9 @@ end
 Compute g in the objective function.
 """
 function comp_g_obj(params::Parameters, 
-                    g::JuMP.VariableRef, 
-                    costs::Vector{Float64})
+                    g::T, 
+                    costs::Vector{Float64}) where 
+                                        T <: Union{Float64, JuMP.VariableRef}
     l = length(costs)
     if l == 0
         return 0.0
@@ -460,4 +469,16 @@ function enforce_sol(inst::Instance,
         i = parse(Int64, g[1])
         @constraint(tep.jump_model, tep.g[i] == g[2]["pg"])
     end
+
+    return nothing
+end
+
+function comp_viol(lp::LPModel)
+    viol = 0.0
+
+    for s in values(lp.s)
+        viol += JuMP.value(s)
+    end
+
+    return viol
 end
