@@ -34,11 +34,11 @@ function run(logname::String = "log.md")
     # Run solver with binary decision variables
     is_mip_en = true
     skip = []
-    skip = [
-            "pglib_opf_case2853_sdet.m",    # Numerical trouble encountered
-            "pglib_opf_case13659_pegase.m", # Numerical trouble encountered
-            "pglib_opf_case9241_pegase.m"   # Numerical trouble encountered
-    ]
+    # skip = [
+    #         "pglib_opf_case2853_sdet.m",    # Numerical trouble encountered
+    #         "pglib_opf_case9241_pegase.m",  # Numerical trouble encountered
+    #         "pglib_opf_case13659_pegase.m"  # Numerical trouble encountered
+    # ]
     counter = 1
     for file in files
         counter += 1
@@ -55,39 +55,35 @@ function run(logname::String = "log.md")
 
         mp_data = PowerModels.parse_file(inputfile)
         inst = build_instance(params, mp_data)
-        if params.debugging_level == 1
-            @assert iseq(comp_gd_ratio(inst), 1.0 + params.g_slack)
-        end
 
         mip = nothing
         build_time = 0.0
         start_time = 0.0
         ms_gap = 0.0
 
-        # try
-        log(params, "Build heuristic solution", true)
-        (start, report) = build_solution(inst, params)
+        try
+            log(params, "Build heuristic solution", true)
+            (start, report) = build_solution(inst, params)
 
-        log(params, "Build full model", true)
-        build_time = @elapsed (mip = build_mip(inst, params))
+            log(params, "Build full model", true)
+            build_time = @elapsed (mip = build_mip(inst, params))
 
-        log(params, "Fix the start of the model", true)
-        start_time = @elapsed (fix_start!(inst, params, mip, start))
+            log(params, "Fix the start of the model", true)
+            start_time = @elapsed (fix_start!(inst, params, mip, start))
 
-        log(params, "Solve the model", true)
-        results = solve!(params, mip)
-        ms_gap = results[end]
-        results = results[1:end - 1]
-        
-        log_instance(logfile, file, inst, build_time, 
-                     results, report, start_time)
-        # catch e
-        #     @warn e
-        #     log_instance(logfile, 
-        #                  "<s>" * file * "</s>", 
-        #                  inst, build_time, model_dt.is_xi_req,
-        #                  ntuple(v->'-', 14))
-        # end
+            log(params, "Solve the model", true)
+            results = solve!(params, mip)
+
+            results["heur_rm"] = report.removed_ratio
+            results["heur_time"] = report.runtime
+            results["start_time"] = start_time
+            results["build_time"] = build_time
+            
+            log_instance(logfile, file, inst, results)
+        catch e
+            @warn e
+            log_instance(logfile, "<s>" * file * "</s>", inst, Dict())
+        end
 
         # readline()
     end

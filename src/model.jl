@@ -115,18 +115,18 @@ function solve!(params::Parameters, mip::MIPModel)
 
     status = termination_status(model)
     
-    best_bound = "-"
+    lower_bound = "-"
     obj = "-"
     gap = "-"
 
     # If the solver found a solution
     if result_count(model) > 0
         if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED
-            best_bound = objective_value(model)
+            lower_bound = objective_value(model)
             obj = objective_value(model)
             gap = 0.0
         elseif status == MOI.TIME_LIMIT
-            best_bound = dual_objective_value(model)
+            lower_bound = objective_bound(model)
             obj = objective_value(model)
             gap = 100.0 * relative_gap(model)
         end
@@ -140,15 +140,26 @@ function solve!(params::Parameters, mip::MIPModel)
         # end
     end
 
-    return solve_time(model), 
-           incumbent_time, 
-           status, 
-           rt_runtime, 
-           rt_best_bound, 
-           best_bound, 
-           obj, 
-           gap, 
-           mip_start_gap
+    results = Dict(
+        "incumbent_time" => incumbent_time, 
+        "solve_time" => solve_time(model), 
+        "status" => status, 
+        "root_best_bound" => rt_best_bound, 
+        "root_time" => rt_runtime, 
+        "lower_bound" => lower_bound, 
+        "objective" => obj, 
+        "gap" => gap
+    )
+
+    # return solve_time(model), 
+    #        incumbent_time, 
+    #        status, 
+    #        rt_runtime, 
+    #        rt_best_bound, 
+    #        lower_bound, 
+    #        obj, 
+    #        gap, 
+    #        mip_start_gap
 end
 
 """

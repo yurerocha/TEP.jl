@@ -29,7 +29,7 @@ Base.@kwdef mutable struct ModelParameters
 end
 
 Base.@kwdef mutable struct HeuristicParameters
-    rnf_time_limit::Float64 = 5.0
+    rnf_time_limit::Float64 = 10.0
     rnf_percent::Float64 = 0.95 # 0.9
     rnf_delta::Float64 = 0.05
     # Initial percentage of violated candidates to insert
@@ -50,8 +50,8 @@ end
 Base.@kwdef mutable struct Parameters
     log_level::Int64 = 3
     log_file::String = "log.txt"
-    debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 1.0
+    debugging_level::Int64 = 1
+    solver_time_limit::Float64 = 2.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()

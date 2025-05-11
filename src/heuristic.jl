@@ -179,7 +179,7 @@ function rm_and_fix(inst::Instance,
     delta_runtime = time() - time_beg
     delta_rm = length(removed) - num_rm_beg
 
-    report = NeighReport(delta_runtime, delta_rm / inst.num_K, 0.0)
+    report = NeighReport(delta_runtime, 100.0 * delta_rm / inst.num_K, 0.0)
 
     return best_cost, Start(start_inserted, f, g), report
     # return best_cost, Start(inserted, f, g), report

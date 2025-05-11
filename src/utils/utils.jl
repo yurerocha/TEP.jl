@@ -172,39 +172,42 @@ function log(file::String, msg::String)
 end
 
 function log_header(outputfile::String)
-    outstr = "| Instance | N | L | L/N | Build (s) | Solve (s) " * 
-             "| Incumbent (s) | Status | Rt solve (s) | Rt best bound " * 
-             "| Best bound | Cost | Gap (%) | Heur (s) | Heur rm (%) " * 
-             "| Start (s) | \n"
+    outstr = "| Instance | L | N | L/N | Build (s) | Incumbent (s) " * 
+             "| Solve (s) | Status | Rt best bound | Rt solve (s) " * 
+             "| Lower bound | Obj | Gap (%) | Start (s) | Heur rm (%) " *
+             "| Heur (s) | \n"
     outstr *= "|:---"^16 * "| \n"
     log(outputfile, outstr)
 end
 
 """
-    log_instance(outputfile, instance, inst, build_time, results)
+    log_instance(outputfile::String, 
+                 inst_name::String, 
+                 inst::Instance, 
+                 results::Tuple)
 """
 function log_instance(outputfile::String, 
                       inst_name::String, 
                       inst::Instance, 
-                      build_time::Float64, 
-                      results::Tuple,
-                      report::NeighReport,
-                      start_time::Float64)
+                      results::Dict)
     N = inst.num_I
     L = (inst.num_K + inst.num_J)
-    s = "| $inst_name | $N | $L | $(round(L / N, digits=2)) |" * 
-        " $(round(build_time, digits=2)) |"
+    s = "| $inst_name | $L | $N | $(round(L / N, digits=2)) |"
 
-    for r in results
-        if typeof(r) == Float64
-            r = round(r, digits=2)
+    keys_order = ["build_time", "incumbent_time", "solve_time", "status", 
+                  "root_best_bound", "root_time", "lower_bound", "objective", 
+                  "gap", "start_time", "heur_rm", "heur_time"]
+    for k in keys_order
+        r = "-"
+        if k in keys(results)
+            r = results[k]
+            if typeof(r) == Float64
+                r = round(r, digits=2)
+            end
         end
         s *= " $r |"
     end
-
-    s *= " $(round(report.runtime, digits=2)) |" *
-         " $(round(100.0 * report.removed_ratio, digits=2)) |" *
-         " $(round(start_time, digits=2)) | \n"
+    s *= "\n"
 
     log(outputfile, s)
 
