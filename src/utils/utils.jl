@@ -225,13 +225,12 @@ existing line conecting every two buses.
 function comp_bigM(inst::Instance, k::Tuple{Tuple3I, Int64})
     bigM = const_infinite
     for j in keys(inst.J)
-        if j[2] == k[1][2] && j[3]== k[1][3]
+        if j[2] == k[1][2] && j[3] == k[1][3]
             tmp = inst.K[k].gamma * (inst.J[j].f_bar / inst.J[j].gamma)
             bigM = min(bigM, tmp)
         end
     end
-    bigM = abs(bigM)
-    return bigM
+    return abs(bigM)
 end
 
 """
@@ -368,7 +367,8 @@ function comp_f_residuals(inst::Instance,
         # end
     end
 
-    # Sort lines in non-descending order of residuals
+    # Sort lines in non-ascending order of residuals
+    # Rationale: to remove subutilized lines first
     sort!(f_residuals, by = x->x[2], rev = rev)
     # sort!(f_residuals, by = x->x[2], rev = false)
     # @warn f_residuals[1:6]
@@ -410,7 +410,9 @@ function comp_viols(inst::Instance,
             push!(viols, (k, s[j]))
         end
     end
-    # sort!(viols, by = x->x[2], rev = true)
+    # Sort lines in non-ascending order of residuals
+    # Rationale: to build where is more violated first
+    sort!(viols, by = x->x[2], rev = true)
 
     return [v[1] for v in viols]
 end

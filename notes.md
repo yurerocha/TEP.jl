@@ -288,3 +288,80 @@ Stacktrace:
 Some type information was truncated. Use `show(err)` to see complete types.
 
 julia> TEP.beam_search("submodules/pglib-opf/pglib_opf_case3022_goc.m")
+
+## Experiments
+- log_inicial.md: apenas para testar as cardinalidades das instâncias
+- tep1.md: 0.95, 0.05
+- tep2.md: 0.9, 0.1
+- tep_mip.md: MIP solver sem heurítica construtiva
+- tep_build.md: MIP solver com heurística construtiva
+
+
+43 - pglib_opf_case4020_goc.m
+61 - pglib_opf_case13659_pegase.m
+Total de instâncias: 19
+Batch 1: 43 a 52
+Batch 2: 53 a 61
+
+4020:
+x / (r^2 + x^2), com custos de geração: unbounded
+x / (r^2 + x^2), sem custos de geração: unbounded
+
+1.0 / x, sem custos de geração: 
+
+q10: build com custo de geração
+q12: mip com custo de geração
+
+q10:
+  return x / (r^2 + x^2)
+  delta_theta_limits
+  unbounded
+q12:
+  return -x / (r^2 + x^2)
+  delta_theta_limits
+
+1354 infeas
+1888 infeas
+
+Remover restrições para verificar quando viabiliza
+- Começar pela ol
+
+Será que as capacidades dos circuitos permitem escoar a geração e atender a demanda?
+
+## Infeasible
+- Os testes começaram da instância 23
+- pglib_opf_case1951_rte.m
+  FEAS RELAX
+    [ Info: F viol k:(822, 1364, 414) f:-7.641475022244821 f_bar:4.13
+    [ Info: F viol k:(141, 1032, 62) f:-16.746000000000002 f_bar:4.32
+
+- Hipótese:
+  lower bound em g gera inviabilidade
+  custo de geração deixa unbounded
+- log_fo1: sem fo e sem limites inferiores para a geração
+- log_fo2: sem fo e com limites inferiores para a geração
+- Modificações feitas
+  - Mais geradores, antes era apenas um por nó
+  - Limite inferior de geração
+  - Custo de geração na FO
+- 1951, 2383, 
+- 2312 não ficou viável nem com o aumento das tolerancias
+- Versão em testes
+  - DualReductions: 0
+- Fazer testes nas instâncias inviáveis
+  - Rm linhas DualReductions
+  - Diminuir as tolerâncias
+  - Observar os resultados
+
+40: pglib_opf_case3120sp_k
+
+Última instância: 27 pglib_opf_case2312_goc.m
+
+## Implementar checador
+
+tep1: 0.85, 0.05
+tep2: 0.90, 0.1
+tep3: 0.95, 0.05
+
+- Rápida convergência em modelos menores (2k barras) não é necessariamente um 
+problema

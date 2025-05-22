@@ -4,12 +4,13 @@
 Compute the susceptance of a circuit.
 """
 function comp_gamma(params::Parameters, x::Float64, r::Float64 = 0.0)
-    # if !params.model.is_dcp_power_model_en
-    #     return -x / (r^2 + x^2)
-    # else
-        # return 1.0 / (x^2)
-    # end
-    return -x / (r^2 + x^2)
+    if params.model.is_dcp_power_model_en
+        return -x / (r^2 + x^2)
+    else
+        return 1.0 / x
+    end
+    # return 1.0 / x
+    # return -x / (r^2 + x^2)
 end
 
 """
@@ -143,7 +144,7 @@ function build_existing_circuits(params::Parameters, mp_data::Dict{String, Any})
         # min_gamma = min(min_gamma, gamma)
         # max_gamma = max(max_gamma, gamma)
         J[j] = BranchInfo(dt["rate_a"], 
-                          gamma, 0.0, 
+                          x, gamma, 0.0, 
                           (dt["angmin"], dt["angmax"]))
     end
     # @warn min_gamma, max_gamma
@@ -165,14 +166,11 @@ function build_candidate_circuits(params::Parameters,
     for (j, v) in J
         # Candidate circuits are copies of the existing ones
         for l in 1:params.instance.num_candidates
-            # Compute the new costs based on the gamma values
-            base_cost = params.instance.cost_mult * v.gamma
-            rand_num = rand(params.rng, 1:params.instance.max_rand)
-            new_cost = base_cost * (1.0 / (params.instance.num_candidates + 1) +
-                                    1.0 / rand_num)
-
             K[(j, l)] = v
-            K[(j, l)].cost = abs(new_cost)
+            # Compute the new costs based on the gamma values
+            c = params.instance.cost_mult * abs(v.x)
+            n = rand(params.rng, 1:params.instance.max_rand)
+            K[(j, l)].cost = c / (params.instance.num_candidates + 1) + c / n
         end
     end
     return K
@@ -211,69 +209,4 @@ function read_reference_bus(params::Parameters, mp_data::Dict{String, Any})
     end
 
     return ref_bus
-end
-
-"""
-    build_scenarios!(inst::Instance, 
-                     num_scenarios::Int64, 
-                     change_percentage::Float64)
-Build a multi-scenario instance based on the generation and load of a starting
-scenario.
-"""
-function build_scenarios!(inst::Instance, 
-                          num_scenarios::Int64, 
-                          change_percentage::Float64)
-    base_scenario = deepcopy(inst.scenarios[1])
-    p = 1.0 / (1 + num_scenarios)
-    num_changes = change_percentage * inst.num_I
-
-    acc = 0.0 
-    count = 0
-    for d in values(base_scenario.D)
-        acc += d
-        count += 1
-    end
-    mean_D = acc / count
-
-    acc = 0.0 
-    count = 0
-    for g in values(base_scenario.G)
-        acc += g.upper_bound
-        count += 1
-    end
-    mean_G = acc / count
-
-    dist_D = Distributions.Exponential(mean_D)
-    dist_G = Distributions.Exponential(mean_G)
-
-    for _ in 1:num_scenarios
-        count = 0
-        for (k, d) in base_scenario.D
-            if isg(d, 0.0)
-                base_scenario.D[k] = rand(dist_D)
-                count += 1
-            end
-            if count > num_changes
-                break
-            end
-        end
-
-        count = 0
-        for (k, g) in base_scenario.G
-            if isg(g.upper_bound, 0.0)
-                base_scenario.G[k].lower_bound = 0.0
-                base_scenario.G[k].upper_bound = rand(dist_G)
-                count += 1
-            end
-            if count > num_changes
-                break
-            end
-        end
-
-        push!(inst.scenarios, 
-              Scenario(p, deepcopy(base_scenario.D), deepcopy(base_scenario.G)))
-    end
-    inst.num_scenarios = 1 + num_scenarios
-
-    return nothing
 end

@@ -49,6 +49,7 @@ end
 
 mutable struct BranchInfo
     f_bar::Float64 # Capacity of circuits
+    x::Float64 # Reactance of circuits
     gamma::Float64 # Susceptance of circuits
     cost::Float64 # Cost of candidate circuits
     delta_theta_bounds::Tuple{Float64, Float64}
@@ -85,7 +86,8 @@ struct MIPModel <: TEPModel
     fkl_cons::Dict{Int64, JuMP.ConstraintRef}
 
     MIPModel(params::Parameters) = 
-                new(JuMP.Model(params.model.optimizer), 
+                new(direct_model(Gurobi.Optimizer()), 
+                    # JuMP.Model(params.model.optimizer), 
                     params.model.is_dcp_power_model_en ? QuadExpr() : AffExpr(), 
                     Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}(), 
                     Dict{Any, JuMP.VariableRef}(), 

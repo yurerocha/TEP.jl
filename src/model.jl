@@ -29,9 +29,7 @@ function build_model(inst::Instance,
     add_vars!(inst, scen, tep)
     add_g_vars!(inst, params, scen, tep)
     
-    if params.model.is_symmetry_en && 
-       !params.model.is_dcp_power_model_en && 
-       tep isa MIPModel
+    if params.model.is_symmetry_en && !params.model.is_dcp_power_model_en
         add_symmetry_cons!(inst, tep)
     end
 
@@ -41,18 +39,20 @@ function build_model(inst::Instance,
 
     add_ohms_law_cons!(inst, tep)
     
-    if params.model.is_dcp_power_model_en && tep isa MIPModel
+    if params.model.is_dcp_power_model_en
         add_delta_theta_bounds_cons!(inst, tep)
     end
 
-    # add_ref_bus_cons!(inst, tep)
+    add_ref_bus_cons!(inst, tep)
 
     set_obj!(inst, params, scen, tep)
+
+    # write_to_file(tep.jump_model, "model.lp")
 
     return tep
 end
 
-function solve!(params::Parameters, mip::MIPModel)
+function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     model = mip.jump_model
 
     if params.model.optimizer == Gurobi.Optimizer
@@ -130,14 +130,38 @@ function solve!(params::Parameters, mip::MIPModel)
             obj = objective_value(model)
             gap = 100.0 * relative_gap(model)
         end
+
+        grb_model = backend(model)
+        is_feas = check_sol(inst, mip, grb_model)
+        if !is_feas 
+            status = "MODEL_ERROR"
+        end
+    # elseif status == MOI.INFEASIBLE_OR_UNBOUNDED
+    #     grb_model = backend(model)
+    #     # relaxobjtype = 2: the objective of the feasibility relaxation is to 
+    #     # minimize the total number of bound and constraint violations
+    #     relaxobjtype = 1
+    #     lbpen = Cdouble[10000.0]
+    #     ubpen = Cdouble[10000.0]
+    #     rhspen = Cdouble[1.0]
+    #     feasobjP = Ref{Cdouble}()
+    #     GRBfeasrelax(grb_model, relaxobjtype, 1, 
+    #                  lbpen, ubpen, rhspen, feasobjP)
+    #     # set_attribute(model, 
+    #     #               MOI.RawOptimizerAttribute("DualReductions"), 
+    #     #               0)
+    #     # GRBreset(model, 0)
+    #     # optimize!(model)
+    #     GRBoptimize(grb_model)
+    #     check_sol(inst, mip, grb_model)
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         # TODO: Add param to compute conflict when infeasible
         # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
-        # compute_conflict!(model)
-        # if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-        #     iis_model, _ = copy_conflict(model)
-        #     println(iis_model)
-        # end
+        compute_conflict!(model)
+        if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
+            iis_model, _ = copy_conflict(model)
+            print_cons(iis_model, "model.iis")
+        end
     end
 
     results = Dict(
@@ -150,16 +174,6 @@ function solve!(params::Parameters, mip::MIPModel)
         "objective" => obj, 
         "gap" => gap
     )
-
-    # return solve_time(model), 
-    #        incumbent_time, 
-    #        status, 
-    #        rt_runtime, 
-    #        rt_best_bound, 
-    #        lower_bound, 
-    #        obj, 
-    #        gap, 
-    #        mip_start_gap
 end
 
 """

@@ -41,10 +41,11 @@ eps = 1e-3
         mip = TEP.build_mip(inst, params)
         # force_solution(inst, mip, dc_opf["solution"], mp_data)
         # TEP.print_constrs(mip.jump_model, "TEP.jl/model1.lp")
-        tep = TEP.solve!(params, mip)
+        tep = TEP.solve!(inst, params, mip)
 
-        TEP.log(params, "$(tep[7]), $(dc_opf["objective"])", true)
-        @test abs(tep[7] - dc_opf["objective"]) < eps
+        TEP.log(params, "Test $i $file")
+        TEP.log(params, "$(tep["objective"]), $(dc_opf["objective"])", true)
+        @test abs(tep["objective"] - dc_opf["objective"]) < eps
         # readline()
     end
 end

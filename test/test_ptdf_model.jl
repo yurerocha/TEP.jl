@@ -33,8 +33,8 @@ eps = 1e-1
         ptdf_obj_val = objective_value(ptdf.jump_model)
         lp_obj_val = objective_value(lp.jump_model)
 
-        TEP.log(params, "$ptdf_obj_val, $lp_obj_val", true)
         TEP.log(params, "Test $i $file")
+        TEP.log(params, "$ptdf_obj_val, $lp_obj_val", true)
 
         @test abs(ptdf_obj_val - lp_obj_val) < eps
     end

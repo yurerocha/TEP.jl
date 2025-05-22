@@ -18,7 +18,15 @@ Solve all instances.
 function run(logname::String = "log.md")
     params = Parameters()
 
-    logfile = "tep.md"
+    # Alterar logfile, start e end files
+    # logfile = "tep_build_batch1.md"
+    logfile = "tep_build.md"
+    # Batch 1:  1, 2, 3, 4
+    # Batch 2: 5, 6, 7, 8
+    start_file = 40
+    end_file = 62
+    is_build_en = true
+    log_dir = "log_build/"
     
     # Number of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
@@ -28,20 +36,23 @@ function run(logname::String = "log.md")
     log_header(logfile)
 
     dir = "submodules/pglib-opf"
-    files = select_files(dir, 66)
+    files = select_files(dir, end_file)
     # Sort files so that the smallest instances are solved first
     sort!(files, by=x->parse(Int, match(r"\d+", x).match))
     # Run solver with binary decision variables
-    is_mip_en = true
     skip = []
     # skip = [
     #         "pglib_opf_case2853_sdet.m",    # Numerical trouble encountered
     #         "pglib_opf_case9241_pegase.m",  # Numerical trouble encountered
     #         "pglib_opf_case13659_pegase.m"  # Numerical trouble encountered
     # ]
+    # files = ["pglib_opf_case162_ieee_dtc.m", "pglib_opf_case500_goc.m", 
+    #          "pglib_opf_case793_goc.m", "pglib_opf_case1354_pegase.m", 
+    #          "pglib_opf_case1803_snem.m", "pglib_opf_case1951_rte.m", 
+    #          "pglib_opf_case2000_goc.m", "pglib_opf_case2312_goc.m"]
+    # "pglib_opf_case1888_rte.m" unbounded
     counter = 1
-    for file in files
-        counter += 1
+    for file in files[start_file:end_file]
         if file in skip
             log(params, "Skipping instance $file num $counter")
             continue
@@ -51,7 +62,7 @@ function run(logname::String = "log.md")
         inputfile = "$(dir)/$file"
         logsolver = "$(dir)/log/$file"
 
-        params.log_file = "log/" * file
+        params.log_file = log_dir * file
 
         mp_data = PowerModels.parse_file(inputfile)
         inst = build_instance(params, mp_data)
@@ -62,22 +73,32 @@ function run(logname::String = "log.md")
         ms_gap = 0.0
 
         try
-            log(params, "Build heuristic solution", true)
-            (start, report) = build_solution(inst, params)
-
             log(params, "Build full model", true)
             build_time = @elapsed (mip = build_mip(inst, params))
 
-            log(params, "Fix the start of the model", true)
-            start_time = @elapsed (fix_start!(inst, params, mip, start))
+            if is_build_en
+                log(params, "Build heuristic solution", true)
+                (start, report) = build_solution(inst, params)
+
+                log(params, "Fix the start of the model", true)
+                start_time = @elapsed (fix_start!(inst, params, mip, start))
+
+                params.solver_time_limit -= (start_time + report.runtime)
+            end
 
             log(params, "Solve the model", true)
-            results = solve!(params, mip)
+            results = solve!(inst, params, mip)
 
-            results["heur_rm"] = report.removed_ratio
-            results["heur_time"] = report.runtime
-            results["start_time"] = start_time
             results["build_time"] = build_time
+            if is_build_en
+                results["heur_rm"] = report.removed_ratio
+                results["heur_time"] = report.runtime
+                results["start_time"] = start_time
+            else
+                results["heur_rm"] = "-"
+                results["heur_time"] = "-"
+                results["start_time"] = "-"
+            end
             
             log_instance(logfile, file, inst, results)
         catch e
@@ -86,6 +107,7 @@ function run(logname::String = "log.md")
         end
 
         # readline()
+        counter += 1
     end
 end
 

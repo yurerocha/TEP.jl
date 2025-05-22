@@ -38,6 +38,12 @@ function build_solution(inst::Instance,
                                           init_cost, 
                                           best_cost)
 
+    # add_lines!(inst, params, lp, inserted, true)
+    # f = get_values(lp.f)
+    # g = get_values(lp.g)
+    # start = Start(inserted, f, g)
+    # report = NeighReport(0.0, 1.0, 1.0)
+
     @warn "Runtime", report.runtime
     @warn "Rm ratio", report.removed_ratio
 
@@ -285,7 +291,7 @@ function violated_flows_neigh!(inst::Instance,
             # lambda = max(0.0, lambda - params.heuristic.vf_delta)
             # The inserted candidates make the solution worse
             rm_lines!(inst, params, lp, insert)
-            break
+            # break
         end
         it += 1
     end
@@ -528,14 +534,14 @@ function fix_start!(inst::Instance,
     for k in start.inserted
         JuMP.fix(mip.x[k], 1.0; force = true)
     end
-    all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
-    for l in all_keys
-        JuMP.fix(mip.f[l], start.f[l], force = true)
-    end
-    for k in keys(inst.scenarios[scen].G)
-        JuMP.fix(mip.g[k], start.g[k]; force = true)
-        # fix(md.theta[i], start.theta[i])
-    end
+    # all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
+    # for l in all_keys
+    #     JuMP.fix(mip.f[l], start.f[l], force = true)
+    # end
+    # for k in keys(inst.scenarios[scen].G)
+    #     JuMP.fix(mip.g[k], start.g[k]; force = true)
+    #     # fix(md.theta[i], start.theta[i])
+    # end
 
     optimize!(mip.jump_model)
     # To compare the objective value of this solution with the objective value
@@ -547,7 +553,7 @@ function fix_start!(inst::Instance,
     is_feas = true
     if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         log(params, "Infeasible model")
-        if params.log_level >= 3
+        if params.log_level >= 1
             JuMP.compute_conflict!(model)
             if JuMP.get_attribute(model, MOI.ConflictStatus()) == 
                MOI.CONFLICT_FOUND
@@ -566,16 +572,16 @@ function fix_start!(inst::Instance,
         # set_lower_bound(mip.x[k], 0.0)
         # set_upper_bound(mip.x[k], 1.0)
     end
-    for l in all_keys
-        JuMP.unfix(mip.f[l])
-    end
-    # Some buses may not have generation
-    for k in keys(inst.scenarios[scen].G)
-        JuMP.unfix(mip.g[k])
-        lb = inst.scenarios[scen].G[k].lower_bound
-        ub = inst.scenarios[scen].G[k].upper_bound
-        JuMP.set_lower_bound(mip.g[k], lb)
-        JuMP.set_upper_bound(mip.g[k], ub)
-        # unfix(md.theta[i])
-    end
+    # for l in all_keys
+    #     JuMP.unfix(mip.f[l])
+    # end
+    # # Some buses may not have generation
+    # for k in keys(inst.scenarios[scen].G)
+    #     JuMP.unfix(mip.g[k])
+    #     lb = inst.scenarios[scen].G[k].lower_bound
+    #     ub = inst.scenarios[scen].G[k].upper_bound
+    #     JuMP.set_lower_bound(mip.g[k], lb)
+    #     JuMP.set_upper_bound(mip.g[k], ub)
+    #     # unfix(md.theta[i])
+    # end
 end

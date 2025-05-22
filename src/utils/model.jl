@@ -5,36 +5,24 @@
 Configure the solver parameters.
 """
 function config!(params::Parameters, tep::TEPModel)
+    set_attribute(tep.jump_model, MOI.RawOptimizerAttribute("Threads"), 8)
     if params.model.optimizer == Gurobi.Optimizer
-        if params.log_level >= 3
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("LogFile"), 
-                          params.log_file)
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("LogToConsole"), 
-                          1)
-        else
-            JuMP.set_silent(tep.jump_model)
+        set_attribute(tep.jump_model, 
+                      MOI.RawOptimizerAttribute("LogFile"), params.log_file)
+        if tep isa LPModel
+            set_attribute(lp.jump_model, 
+                          MOI.RawOptimizerAttribute("Method"), 2)
+            set_attribute(lp.jump_model, 
+                          MOI.RawOptimizerAttribute("Crossover"), 0)
         end
-    end
-
-    return nothing
-end
-
-function config!(params::Parameters, lp::LPModel)
-    if params.model.optimizer == Gurobi.Optimizer
-        # Turn off Gurobi crossover procedure
-        set_attribute(lp.jump_model, MOI.RawOptimizerAttribute("Method"), 2)
-        set_attribute(lp.jump_model, MOI.RawOptimizerAttribute("Crossover"), 0)
-        if params.log_level >= 3
-            set_attribute(lp.jump_model, 
-                          MOI.RawOptimizerAttribute("LogFile"), 
-                          params.log_file)
-            set_attribute(lp.jump_model, 
-                          MOI.RawOptimizerAttribute("LogToConsole"), 
-                          1)
-        else
-            JuMP.set_silent(lp.jump_model)
+        if params.log_level == 0
+            JuMP.set_silent(tep.jump_model)
+        elseif params.log_level == 1
+            set_attribute(tep.jump_model, 
+                          MOI.RawOptimizerAttribute("LogToConsole"), 0)
+        elseif params.log_level == 2
+            set_attribute(tep.jump_model, 
+                          MOI.RawOptimizerAttribute("LogToConsole"), 1)
         end
     end
 
@@ -129,32 +117,31 @@ function update_g_vars!(inst::Instance, scen::Int64, tep::TEPModel)
 end
 
 """
-    add_symmetry_cons!(inst::Instance, 
-                       params::Parameters, 
-                       tep::TEPModel)
+    add_symmetry_cons!(inst::Instance, params::Parameters, mip::MIPModel)
 
 Add constraints to help breaking symmetry.
 
 For candidates k, k + 1, ..., k + n with the same gamma, x_k >= x_{k + 1} >= ...
 >= x_{k + n}.
 """
-function add_symmetry_cons!(inst::Instance, 
-                            params::Parameters, 
-                            tep::TEPModel)
+function add_symmetry_cons!(inst::Instance, params::Parameters, mip::MIPModel)
     for j in keys(inst.J)
         for l in 1:params.instance.num_candidates
             k = (j, l)
             k_plus = (j, l + 1)
             if k in keys(inst.K) && 
                iseq(inst.K[k].gamma, inst.K[k_plus].gamma)
-                @constraint(tep.jump_model, 
-                            tep.x[k] >= tep.x[k_plus], 
+                @constraint(mip.jump_model, 
+                            mip.x[k] >= mip.x[k_plus], 
                             base_name = "sym[$k,$kplus]")
             end
         end
     end
 
     return nothing
+end
+
+function add_symmetry_cons!(inst::Instance, params::Parameters, lp::LPModel)
 end
 
 """
@@ -166,12 +153,12 @@ function add_thermal_limits_cons!(inst::Instance, tep::TEPModel)
     # Existing lines
     for j in keys(inst.J)
         JuMP.set_lower_bound(tep.f[j], -inst.J[j].f_bar)
-        JuMP.set_upper_bound(tep.f[j], inst.J[j].f_bar)
+        JuMP.set_upper_bound(tep.f[j],  inst.J[j].f_bar)
     end
     # Candidates
     for k in keys(inst.K)
-        @constraint(tep.jump_model, -inst.K[k].f_bar * tep.x[k] <= tep.f[k])
-        @constraint(tep.jump_model, tep.f[k] <= inst.K[k].f_bar * tep.x[k])
+        @constraint(tep.jump_model, -tep.f[k] <= inst.K[k].f_bar * tep.x[k])
+        @constraint(tep.jump_model,  tep.f[k] <= inst.K[k].f_bar * tep.x[k])
     end
 
     return nothing
@@ -186,13 +173,13 @@ slack variables.
 function add_thermal_limits_cons!(inst::Instance, lp::LPModel)
     # Existing lines
     for j in keys(inst.J)
-        @constraint(lp.jump_model, lp.f[j] - inst.J[j].f_bar <= lp.s[j])
-        @constraint(lp.jump_model, -lp.f[j] - inst.J[j].f_bar <= lp.s[j])
+        @constraint(lp.jump_model, -lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
+        @constraint(lp.jump_model,  lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
     end
     # Candidates
     for k in keys(inst.K)
-        @constraint(lp.jump_model, lp.f[k] - inst.K[k].f_bar <= lp.s[k])
-        @constraint(lp.jump_model, -lp.f[k] - inst.K[k].f_bar <= lp.s[k])
+        @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
+        @constraint(lp.jump_model,  lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
     end
 
     return nothing
@@ -214,10 +201,10 @@ function add_ohms_law_cons!(inst::Instance, tep::TEPModel)
         bigM = comp_bigM(inst, k)
 
         @constraint(tep.jump_model, 
-                    -bigM * (1 - tep.x[k]) <= y, 
+                    -y <= bigM * (1.0 - tep.x[k]), 
                     base_name = "ol.lb[$k]")
         @constraint(tep.jump_model, 
-                    y <= bigM * (1 - tep.x[k]), 
+                    y <= bigM * (1.0 - tep.x[k]), 
                     base_name = "ol.ub[$k]")
     end
 
@@ -243,8 +230,7 @@ function add_ohms_law_cons!(inst::Instance, lp::LPModel)
     return nothing
 end
 
-function add_delta_theta_bounds_cons!(inst::Instance, 
-                                      mip::TEPModel)
+function add_delta_theta_bounds_cons!(inst::Instance, mip::MIPModel)
     bounds = Dict{Tuple{Int64, Int64}, Tuple{Float64, Float64}}()
     for j in keys(inst.J)
         if iseq(inst.J[j].delta_theta_bounds[1], 0.0) &&
@@ -263,10 +249,14 @@ function add_delta_theta_bounds_cons!(inst::Instance,
     end
     for (k, b) in bounds
         delta_theta = mip.theta[k[1]] - mip.theta[k[2]]
-        @constraint(mip.jump_model, b[1] <= delta_theta <= b[2])
+        @constraint(mip.jump_model, delta_theta >= b[1])
+        @constraint(mip.jump_model, delta_theta <= b[2])
     end
 
     return nothing
+end
+
+function add_delta_theta_bounds_cons!(inst::Instance, lp::LPModel)
 end
 
 function add_delta_theta_bounds_cons(inst::Instance, lp::LPModel)
@@ -481,4 +471,70 @@ function comp_viol(lp::LPModel)
     end
 
     return viol
+end
+
+function check_sol(inst::Instance, tep::TEPModel, md)
+    is_feas = true
+    filename = "check_sol.txt"
+
+    x = get_values(tep.x)
+    f = get_values(tep.f)
+    th = get_values(tep.theta)
+
+    open(filename, "w") do file
+        for k in keys(inst.J)
+            br_info = inst.J[k]
+            if isg(abs(f[k]), br_info.f_bar)
+                println(file, "F viol k:$k f:$(f[k]) f_bar:$(br_info.f_bar)")
+                is_feas = false
+            end
+        end
+
+        for k in keys(inst.K)
+            br_info = inst.K[k]
+            if iseq(x[k], 1.0)
+                if isg(abs(f[k]), br_info.f_bar)
+                    println(file, 
+                            "F viol k:$k f:$(f[k]) f_bar:$(br_info.f_bar)")
+                    is_feas = false
+                end
+
+                fr = k[1][2]
+                to = k[1][3]
+                if !iseq(f[k], br_info.gamma * (th[fr] - th[to]))
+                    println(file, 
+                         "T error k:$k f:$(f[k]) t_fr:$(th[fr]) t_to:$(th[to])")
+                    is_feas = false
+                end
+            elseif !iseq(f[k], 0.0)
+                println(file, "F viol k:$k f:$(f[k]) f_bar:0")
+                is_feas = false
+            end
+        end
+
+        # Check if a constraint is infeasible based on its attribute slack
+        for i in inst.I
+            a = MOI.get(md, 
+                        Gurobi.ConstraintAttribute("Slack"), 
+                        index(tep.fkl_cons[i]))
+            s = JuMP.value(a)
+            if isg(s, 0.0)
+                println(file, "C viol $i")
+                is_feas = false
+            end
+        end
+
+        g = get_values(tep.g)
+        for k in keys(g)
+            g_info = inst.scenarios[1].G[k]
+            lb = g_info.lower_bound
+            ub = g_info.upper_bound
+            if isl(g[k], lb) || isg(g[k], ub)
+                println(file, "G viol k:$k g:$(g[k]) lb:$(lb) ub:$(ub)")
+                is_feas = false
+            end
+        end
+    end
+
+    return is_feas
 end
