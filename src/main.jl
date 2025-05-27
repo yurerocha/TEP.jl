@@ -19,13 +19,14 @@ function run(logname::String = "log.md")
     params = Parameters()
 
     # Alterar logfile, start e end files
-    # logfile = "tep_build_batch1.md"
+    # tun1: 0.2, 0.1
+    # tun2: 0.3, 0.1
+    # tun3: 0.4, 0.1
+    # tun3: 0.5, 0.1
     logfile = "tep_build.md"
-    # Batch 1:  1, 2, 3, 4
-    # Batch 2: 5, 6, 7, 8
-    start_file = 40
-    end_file = 62
-    is_build_en = true
+    start_file = 48 # 40
+    end_file = 50 # 62
+    is_heur_en = false
     log_dir = "log_build/"
     
     # Number of seconds since the Unix epoch
@@ -46,12 +47,10 @@ function run(logname::String = "log.md")
     #         "pglib_opf_case9241_pegase.m",  # Numerical trouble encountered
     #         "pglib_opf_case13659_pegase.m"  # Numerical trouble encountered
     # ]
-    # files = ["pglib_opf_case162_ieee_dtc.m", "pglib_opf_case500_goc.m", 
-    #          "pglib_opf_case793_goc.m", "pglib_opf_case1354_pegase.m", 
-    #          "pglib_opf_case1803_snem.m", "pglib_opf_case1951_rte.m", 
-    #          "pglib_opf_case2000_goc.m", "pglib_opf_case2312_goc.m"]
-    # "pglib_opf_case1888_rte.m" unbounded
-    counter = 1
+    # files = ["pglib_opf_case4020_goc.m", "pglib_opf_case4661_sdet.m", 
+    #          "pglib_opf_case6470_rte.m", "pglib_opf_case6515_rte.m", 
+    #          "pglib_opf_case10000_goc.m"]
+    counter = start_file
     for file in files[start_file:end_file]
         if file in skip
             log(params, "Skipping instance $file num $counter")
@@ -70,34 +69,33 @@ function run(logname::String = "log.md")
         mip = nothing
         build_time = 0.0
         start_time = 0.0
-        ms_gap = 0.0
+        results = init_results()
 
         try
             log(params, "Build full model", true)
             build_time = @elapsed (mip = build_mip(inst, params))
 
-            if is_build_en
-                log(params, "Build heuristic solution", true)
-                (start, report) = build_solution(inst, params)
+            # TODO: Add parameter to indicate if an initial solution will be 
+            # used
+            log(params, "Build heuristic solution", true)
+            (start, report) = build_solution(inst, params, is_heur_en)
 
-                log(params, "Fix the start of the model", true)
-                start_time = @elapsed (fix_start!(inst, params, mip, start))
+            log(params, "Fix the start of the model", true)
+            start_time = 
+                    @elapsed (obj = fix_start!(inst, params, mip, start))
+            results["objective"] = obj
 
-                params.solver_time_limit -= (start_time + report.runtime)
-            end
+            params.solver_time_limit -= (start_time + report.runtime)
 
+            # TODO: Add tuning flag
             log(params, "Solve the model", true)
             results = solve!(inst, params, mip)
 
             results["build_time"] = build_time
-            if is_build_en
-                results["heur_rm"] = report.removed_ratio
+            if is_heur_en
+                results["impr_percent"] = report.improvement_percent
                 results["heur_time"] = report.runtime
                 results["start_time"] = start_time
-            else
-                results["heur_rm"] = "-"
-                results["heur_time"] = "-"
-                results["start_time"] = "-"
             end
             
             log_instance(logfile, file, inst, results)

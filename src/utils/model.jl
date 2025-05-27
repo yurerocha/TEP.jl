@@ -10,19 +10,16 @@ function config!(params::Parameters, tep::TEPModel)
         set_attribute(tep.jump_model, 
                       MOI.RawOptimizerAttribute("LogFile"), params.log_file)
         if tep isa LPModel
-            set_attribute(lp.jump_model, 
+            set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("Method"), 2)
-            set_attribute(lp.jump_model, 
+            set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("Crossover"), 0)
         end
         if params.log_level == 0
             JuMP.set_silent(tep.jump_model)
-        elseif params.log_level == 1
+        elseif params.log_level == 1 && tep isa LPModel
             set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("LogToConsole"), 0)
-        elseif params.log_level == 2
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("LogToConsole"), 1)
         end
     end
 
@@ -142,6 +139,7 @@ function add_symmetry_cons!(inst::Instance, params::Parameters, mip::MIPModel)
 end
 
 function add_symmetry_cons!(inst::Instance, params::Parameters, lp::LPModel)
+    return nothing
 end
 
 """
@@ -257,9 +255,6 @@ function add_delta_theta_bounds_cons!(inst::Instance, mip::MIPModel)
 end
 
 function add_delta_theta_bounds_cons!(inst::Instance, lp::LPModel)
-end
-
-function add_delta_theta_bounds_cons(inst::Instance, lp::LPModel)
     return nothing
 end
 
@@ -359,21 +354,20 @@ function set_obj!(inst::Instance,
                   scen::Int64, 
                   lp::LPModel)
     # Generation costs
-    # s_pen = 0.0
-    # for k in keys(lp.g)
-    #     c = reverse(inst.scenarios[scen].G[k].costs)
-    #     # TODO: Add generation costs?
-    #     # add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
-    #     if length(c) > 0
-    #         s_pen = max(s_pen, maximum(c))
-    #     end
-    # end
-    # The value used for penalizing flow violations is equal to the largest 
-    # generation cost times a constant
-    # s_pen *= params.model.penalty
-    # add_to_expression!(lp.obj, sum([s_pen * s for s in values(lp.s)]))
-    add_to_expression!(lp.obj, sum([s for s in values(lp.s)]))
-    # Violation costs
+    pen = 0.0
+    for k in keys(lp.g)
+        c = reverse(inst.scenarios[scen].G[k].costs)
+        # TODO: Add generation costs?
+        add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
+        # pen = max(pen, comp_largest_g(params, c, 
+        #                               inst.scenarios[scen].G[k].upper_bound))
+        if length(c) > 0
+            pen = max(pen, maximum(c))
+        end
+    end
+    pen *= params.model.penalty
+    add_to_expression!(lp.obj, sum([pen * s for s in values(lp.s)]))
+
     @objective(lp.jump_model, Min, lp.obj)
     
     return nothing
@@ -408,6 +402,26 @@ function comp_g_obj(params::Parameters,
         return costs[1] + costs[2]*g + costs[3]*g^2
     end
 end
+
+# """
+#     comp_largest_g(params::Parameters, 
+#                    costs::Vector{Float64}, 
+#                    upper_bound::Float64)
+# Compute the largest value between C^{mai} and C^{ope} * G^{max}_g
+# """
+# function comp_largest_g(params::Parameters, 
+#                         costs::Vector{Float64}, 
+#                         upper_bound::Float64)
+    
+#     if length(costs) == 1
+#         return costs[1]
+#     elseif length(costs) == 2
+#         @info costs[1], costs[2], upper_bound, costs[2]*upper_bound
+#         return max(costs[1], costs[2]*upper_bound)
+#     else
+#         return 0.0
+#     end
+# end
 
 """
     update_model!(inst::Instance, 

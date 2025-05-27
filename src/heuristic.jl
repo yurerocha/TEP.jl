@@ -7,6 +7,7 @@ Build solution with the full linear programming model.
 """
 function build_solution(inst::Instance, 
                         params::Parameters, 
+                        is_heur_en::Bool = true, 
                         scen::Int64 = 1)
     log(params, "Start heuristic to build initial solution", true)
     # At the first it, there are no candidate lines
@@ -17,35 +18,39 @@ function build_solution(inst::Instance,
     existing = collect(keys(inst.J))
     removed = Set{Any}()
 
-    optimize!(lp.jump_model)
+    start = nothing
+    report = NeighReport(0.0, 1.0, 1.0)
 
-    if params.debugging_level == 1
+    if is_heur_en
+        time_start = time()
+        num_rm_start = length(removed)
+        
+        optimize!(lp.jump_model)
+
         st = termination_status(lp.jump_model)
-        viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
-        # @assert iseq(viol, 0.0)
+        if params.debugging_level == 1 && st == MOI.OPTIMAL
+            @assert iseq(comp_s_viol(lp), 0.0)
+        end
+
+        cost = comp_obj(inst, params, lp, inserted)
+        init_cost = cost
+
+        best_cost, start= rm_and_fix(inst, params, scen, 
+                                     lp, inserted, removed, 
+                                     init_cost, init_cost)
+        report = NeighReport(time() - time_start, 
+                             (num_rm_start - length(removed)) / inst.num_K, 
+                             1.0 - best_cost / init_cost)
+    else
+        add_lines!(inst, params, lp, inserted, true)
+        f = get_values(lp.f)
+        g = get_values(lp.g)
+        start = Start(inserted, f, g)
     end
 
-    cost = comp_cost(inst, inserted)
-    init_cost = cost
-    best_cost = cost
-
-    best_cost, start, report = rm_and_fix(inst, 
-                                          params, 
-                                          scen, 
-                                          lp, 
-                                          inserted, 
-                                          removed, 
-                                          init_cost, 
-                                          best_cost)
-
-    # add_lines!(inst, params, lp, inserted, true)
-    # f = get_values(lp.f)
-    # g = get_values(lp.g)
-    # start = Start(inserted, f, g)
-    # report = NeighReport(0.0, 1.0, 1.0)
-
     @warn "Runtime", report.runtime
-    @warn "Rm ratio", report.removed_ratio
+    @warn "Impr ratio", report.improvement_percent
+    @warn "Rm ratio", report.removed_percent
 
     return start, report, inserted, removed
 end
@@ -60,15 +65,14 @@ function rm_and_fix(inst::Instance,
                     best_cost::Float64)
     log(params, "Remove and fix", true)
 
-    time_beg = time()
-    num_rm_beg = length(removed)
+    time_start = time()
 
     if params.debugging_level == 1
         @assert isdisjoint(inserted, removed)
     end
 
     rnf_percent = params.heuristic.rnf_percent
-    start_inserted = Set{Any}()
+    start_inserted = deepcopy(inserted)
     f = get_values(lp.f)
     g = get_values(lp.g)
     lines = comp_f_residuals(inst, lp, f, inserted)
@@ -76,22 +80,18 @@ function rm_and_fix(inst::Instance,
     while true
         num_itens = round(Int64, rnf_percent * length(lines))
         if num_itens == 0
-            log(params, "Insufficient num of lines")
+            log(params, "Break: no lines to evaluate")
             break
-        elseif iseq(best_cost, 0.0)
-            log(params, "All candidates removed!")
-            break
-        elseif isg(time() - time_beg, params.heuristic.rnf_time_limit)
-            log(params, "Time limit reached")
+        elseif isg(time() - time_start, params.heuristic.rnf_time_limit)
+            log(params, "Break: time limit reached")
             break
         end
+        log(params, "---------- It $it ----------", true)
 
         # Remove the barrier callback inserted in the remaining neighs
         function empty_callback(cb_data, cb_where::Cint)
         end
         set_attribute(lp.jump_model, Gurobi.CallbackFunction(), empty_callback)
-
-        log(params, "---------- It $it ----------", true)
 
         rm = lines[1:min(num_itens, length(lines))]
         
@@ -100,27 +100,25 @@ function rm_and_fix(inst::Instance,
         setdiff!(inserted, rm_set)
         union!(removed, rm_set)
         
-        st = termination_status(lp.jump_model)
-        viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
-        cost = 0.0
+        # st = termination_status(lp.jump_model)
+        # viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
+        viol = Inf64
+        if termination_status(lp.jump_model) == MOI.OPTIMAL
+            viol = comp_viol(lp)
+        end
 
-        has_impr = false
-        if iseq(viol, 0.0)
-            # Update data structures
-            cost = comp_new_cost(inst, best_cost, rm)
-            has_impr = true
-        else
+        if isg(viol, 0.0)
             # The following neigh changes both the removed and inserted sets
-            viol, _ = violated_flows_neigh!(inst, 
-                                            params, 
-                                            scen, 
-                                            lp, 
-                                            rm_set, 
-                                            removed, 
-                                            inserted, 
-                                            viol, 
-                                            viol, 
-                                            time_beg)
+            viol = violated_flows_neigh!(inst, 
+                                         params, 
+                                         scen, 
+                                         lp, 
+                                         rm_set, 
+                                         removed, 
+                                         inserted, 
+                                         viol, 
+                                         viol, 
+                                         time_start)
             
             # viol, _ = g_lines_neigh(inst, 
             #                         params, 
@@ -131,18 +129,12 @@ function rm_and_fix(inst::Instance,
             #                         inserted, 
             #                         viol, 
             #                         viol, 
-            #                         time_beg)
-
-            if iseq(viol, 0.0)
-                cost = comp_cost(inst, inserted)
-                if isl(cost, best_cost)
-                    has_impr = true
-                end
-            end
+            #                         time_start)
         end
 
-        # break
-        if has_impr
+        cost = iseq(viol, 0.0) ? comp_obj(inst, params, lp, inserted) : 0.0
+
+        if iseq(viol, 0.0) && isl(cost, best_cost)
             if params.debugging_level == 1
                 @assert length(inserted) + length(removed) == inst.num_K
                 lp_debug = build_lp(inst, params, scen)
@@ -155,12 +147,12 @@ function rm_and_fix(inst::Instance,
                           best_cost, 
                           cost, 
                           removed, 
-                          time() - time_beg)
+                          time() - time_start)
             best_cost = cost
 
-            if !has_values(lp.jump_model)
-                optimize!(lp.jump_model)
-            end
+            # if !has_values(lp.jump_model)
+            #     optimize!(lp.jump_model)
+            # end
             start_inserted = deepcopy(inserted)
             f = get_values(lp.f)
             g = get_values(lp.g)
@@ -173,22 +165,19 @@ function rm_and_fix(inst::Instance,
             #     break
             # end
         else
-            log(params, "Not improved! Add new lines...")
+            log(params, "Unable to improve")
             setdiff!(removed, rm_set)
             union!(inserted, rm_set)
             add_lines!(inst, params, lp, rm, false)
-            rnf_percent = max(0.0, rnf_percent - params.heuristic.rnf_delta)
+            # rnf_percent = max(0.0, rnf_percent - params.heuristic.rnf_delta)
+            break
         end
+
+        it += 1
     end
     log(params, "End remove and fix", true)
 
-    delta_runtime = time() - time_beg
-    delta_rm = length(removed) - num_rm_beg
-
-    report = NeighReport(delta_runtime, 100.0 * delta_rm / inst.num_K, 0.0)
-
-    return best_cost, Start(start_inserted, f, g), report
-    # return best_cost, Start(inserted, f, g), report
+    return best_cost, Start(start_inserted, f, g)
 end
 
 function violated_flows_neigh!(inst::Instance, 
@@ -200,42 +189,45 @@ function violated_flows_neigh!(inst::Instance,
                                inserted::Set{Any}, 
                                init_viol::Float64, 
                                best_viol::Float64, 
-                               rnf_time_beg::Float64)    
+                               rnf_time_start::Float64)    
     if iseq(best_viol, 0.0)
-        return best_viol, NeighReport()
-    end
-    log(params, "Violated flows neigh", true)
-
-    function barrier_callback(cb_data, cb_where::Cint)
-        if cb_where == GRB_CB_BARRIER
-            dual_obj = Ref{Cdouble}()
-            GRBcbget(cb_data, cb_where, GRB_CB_BARRIER_DUALOBJ, dual_obj)
-            if isg(dual_obj[], best_viol)
-                @warn dual_obj, best_viol, "Terminate Gurobi"
-                # readline()
-                GRBterminate(backend(lp.jump_model).optimizer.model.inner)
-            end
-        end
-    end
-    set_attribute(lp.jump_model, Gurobi.CallbackFunction(), barrier_callback)
-
-    time_beg = time()
-    num_inserted_beg = length(inserted)
-    viol_beg = best_viol
-
-    if params.debugging_level == 1
-        @assert isdisjoint(removed, inserted)
+        return best_viol
     end
 
     # Another option is to store the f values of the last successfull opt call
     if !has_values(lp.jump_model)
         optimize!(lp.jump_model)
     end
+    if termination_status(lp.jump_model) != MOI.OPTIMAL
+        return best_viol
+    end
+
+    log(params, "Violated flows neigh", true)
+
+    # function barrier_callback(cb_data, cb_where::Cint)
+    #     if cb_where == GRB_CB_BARRIER
+    #         dual_obj = Ref{Cdouble}()
+    #         GRBcbget(cb_data, cb_where, GRB_CB_BARRIER_DUALOBJ, dual_obj)
+    #         if isg(dual_obj[], best_viol)
+    #             @warn dual_obj, best_viol, "Terminate Gurobi"
+    #             # readline()
+    #             GRBterminate(backend(lp.jump_model).optimizer.model.inner)
+    #         end
+    #     end
+    # end
+    # set_attribute(lp.jump_model, Gurobi.CallbackFunction(), barrier_callback)
+
+    time_start = time()
+
+    if params.debugging_level == 1
+        @assert isdisjoint(removed, inserted)
+    end
+
     model_slacks = get_values(lp.s)
     lines = comp_viols(inst, params, model_slacks, inserted, removed)
 
-    it = 1
     lambda = params.heuristic.vf_lambda_start
+    it = 1
     while true
         num_itens = trunc(Int64, lambda * length(lines))
         if iseq(best_viol, 0.0)
@@ -244,7 +236,7 @@ function violated_flows_neigh!(inst::Instance,
         elseif num_itens == 0
             log(params, "Insufficient num of lines")
             break
-        elseif isg(time() - rnf_time_beg, params.heuristic.rnf_time_limit)
+        elseif isg(time() - rnf_time_start, params.heuristic.rnf_time_limit)
             log(params, "Time limit reached")
             break
         end
@@ -255,17 +247,16 @@ function violated_flows_neigh!(inst::Instance,
         
         add_lines!(inst, params, lp, insert)
 
-        st = termination_status(lp.jump_model)
-        viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
+        # st = termination_status(lp.jump_model)
+        # viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
+        viol = Inf64
+        if termination_status(lp.jump_model) == MOI.OPTIMAL
+            viol = comp_viol(lp)
+        end
 
         if isl(viol, best_viol)
-            log_neigh_run(inst, 
-                          params, 
-                          best_viol, 
-                          viol, 
-                          inserted, 
-                          time() - rnf_time_beg,
-                          "viol")
+            log_neigh_run(inst, params, best_viol, viol, inserted, 
+                          time() - rnf_time_start, "viol")
             # Update data structures
             insert_set = Set(insert)
             setdiff!(removed, insert_set)
@@ -273,11 +264,9 @@ function violated_flows_neigh!(inst::Instance,
             union!(inserted, insert_set)
             best_viol = viol
             model_slacks = get_values(lp.s)
-            lines = comp_viols(inst, 
-                               params, 
+            lines = comp_viols(inst, params, 
                                model_slacks, 
-                               inserted, 
-                               removed)
+                               inserted, removed)
 
             if params.debugging_level == 1
                 @assert length(inserted) + length(removed_all) == inst.num_K
@@ -295,15 +284,8 @@ function violated_flows_neigh!(inst::Instance,
         end
         it += 1
     end
-    delta_runtime = time() - time_beg
-    delta_inserted = length(inserted) - num_inserted_beg
-    delta_viol = viol_beg - best_viol
 
-    report = NeighReport(delta_runtime, 
-                         delta_inserted / inst.num_K, 
-                         delta_viol / init_viol)
-
-    return best_viol, report
+    return best_viol
 end
 
 function g_lines_neigh(inst::Instance, 
@@ -315,7 +297,7 @@ function g_lines_neigh(inst::Instance,
                        inserted::Set{Any},
                        init_viol::Float64, 
                        best_viol::Float64, 
-                       rnf_time_beg::Float64)
+                       rnf_time_start::Float64)
     if iseq(best_viol, 0.0)
         return best_viol, NeighReport()
     end
@@ -334,8 +316,8 @@ function g_lines_neigh(inst::Instance,
     end
     set_attribute(lp.jump_model, Gurobi.CallbackFunction(), barrier_callback)
 
-    time_beg = time()
-    num_rm_beg = length(removed)
+    time_start = time()
+    num_rm_start = length(removed)
     viol_beg = best_viol
 
     if params.debugging_level == 1
@@ -380,7 +362,7 @@ function g_lines_neigh(inst::Instance,
         if iseq(best_viol, 0.0)
             log(params, "All viol removed!")
             break
-        elseif isg(time() - rnf_time_beg, params.heuristic.rnf_time_limit)
+        elseif isg(time() - rnf_time_start, params.heuristic.rnf_time_limit)
             log(params, "Time limit reached")
             break
         elseif a > length(lines) || a > b
@@ -405,7 +387,7 @@ function g_lines_neigh(inst::Instance,
                           best_viol, 
                           viol, 
                           inserted, 
-                          time() - rnf_time_beg,
+                          time() - rnf_time_start,
                           "viol")
             # Update data structures
             insert_set = Set(insert)
@@ -426,8 +408,8 @@ function g_lines_neigh(inst::Instance,
     end
     log(params, "End g lines neigh")
 
-    delta_runtime = time() - time_beg
-    delta_rm = length(removed) - num_rm_beg
+    delta_runtime = time() - time_start
+    delta_rm = length(removed) - num_rm_start
     delta_viol = viol_beg - best_viol
 
     report = NeighReport(delta_runtime, 
@@ -534,14 +516,14 @@ function fix_start!(inst::Instance,
     for k in start.inserted
         JuMP.fix(mip.x[k], 1.0; force = true)
     end
-    # all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
-    # for l in all_keys
-    #     JuMP.fix(mip.f[l], start.f[l], force = true)
-    # end
-    # for k in keys(inst.scenarios[scen].G)
-    #     JuMP.fix(mip.g[k], start.g[k]; force = true)
-    #     # fix(md.theta[i], start.theta[i])
-    # end
+    all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
+    for l in all_keys
+        JuMP.fix(mip.f[l], start.f[l], force = true)
+    end
+    for k in keys(inst.scenarios[scen].G)
+        JuMP.fix(mip.g[k], start.g[k]; force = true)
+        # fix(md.theta[i], start.theta[i])
+    end
 
     optimize!(mip.jump_model)
     # To compare the objective value of this solution with the objective value
@@ -550,8 +532,11 @@ function fix_start!(inst::Instance,
 
     model = mip.jump_model
     status = JuMP.termination_status(model)
+    obj = const_infinite
     is_feas = true
-    if status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
+    if status == MOI.OPTIMAL
+        obj = JuMP.objective_value(model)
+    elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         log(params, "Infeasible model")
         if params.log_level >= 1
             JuMP.compute_conflict!(model)
@@ -572,16 +557,18 @@ function fix_start!(inst::Instance,
         # set_lower_bound(mip.x[k], 0.0)
         # set_upper_bound(mip.x[k], 1.0)
     end
-    # for l in all_keys
-    #     JuMP.unfix(mip.f[l])
-    # end
-    # # Some buses may not have generation
-    # for k in keys(inst.scenarios[scen].G)
-    #     JuMP.unfix(mip.g[k])
-    #     lb = inst.scenarios[scen].G[k].lower_bound
-    #     ub = inst.scenarios[scen].G[k].upper_bound
-    #     JuMP.set_lower_bound(mip.g[k], lb)
-    #     JuMP.set_upper_bound(mip.g[k], ub)
-    #     # unfix(md.theta[i])
-    # end
+    for l in all_keys
+        JuMP.unfix(mip.f[l])
+    end
+    # Some buses may not have generation
+    for k in keys(inst.scenarios[scen].G)
+        JuMP.unfix(mip.g[k])
+        lb = inst.scenarios[scen].G[k].lower_bound
+        ub = inst.scenarios[scen].G[k].upper_bound
+        JuMP.set_lower_bound(mip.g[k], lb)
+        JuMP.set_upper_bound(mip.g[k], ub)
+        # unfix(md.theta[i])
+    end
+
+    return obj
 end

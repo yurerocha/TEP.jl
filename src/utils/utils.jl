@@ -174,10 +174,16 @@ end
 function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build (s) | Incumbent (s) " * 
              "| Solve (s) | Status | Rt best bound | Rt solve (s) " * 
-             "| Lower bound | Obj | Gap (%) | Start (s) | Heur rm (%) " *
+             "| Lower bound | Obj | Gap (%) | Start (s) | Impr (%) " *
              "| Heur (s) | \n"
     outstr *= "|:---"^16 * "| \n"
     log(outputfile, outstr)
+end
+
+function get_keys_results()
+    return ["build_time", "incumbent_time", "solve_time", "status", 
+            "root_best_bound", "root_time", "lower_bound", "objective", 
+            "gap", "start_time", "impr_percent", "heur_time"]
 end
 
 """
@@ -194,10 +200,7 @@ function log_instance(outputfile::String,
     L = (inst.num_K + inst.num_J)
     s = "| $inst_name | $L | $N | $(round(L / N, digits=2)) |"
 
-    keys_order = ["build_time", "incumbent_time", "solve_time", "status", 
-                  "root_best_bound", "root_time", "lower_bound", "objective", 
-                  "gap", "start_time", "heur_rm", "heur_time"]
-    for k in keys_order
+    for k in get_keys_results()
         r = "-"
         if k in keys(results)
             r = results[k]
@@ -212,6 +215,14 @@ function log_instance(outputfile::String,
     log(outputfile, s)
 
     return nothing
+end
+
+function init_results()
+    d = Dict{String, Any}()
+    for k in get_keys_results()
+        d[k] = "-"
+    end
+    return d
 end
 
 """
@@ -362,7 +373,7 @@ function comp_f_residuals(inst::Instance,
         # j = map_to_existing_line(inst, k)
         delta = inst.K[k].f_bar - abs(f[k])
         # if !isl(delta, 0.0) # diff >= 0.0
-        r = delta / inst.K[k].f_bar
+        r = delta * inst.K[k].cost / inst.K[k].f_bar
         push!(f_residuals, (k, r))
         # end
     end
@@ -539,4 +550,14 @@ Compute the sparsity of a matrix.
 """
 function comp_sparsity(A)
     return 1.0 - count(!iszero, A) / length(A)
+end
+
+"""
+    comp_s_viol(lp::LPModel)
+
+Compute flow violation in LP model.
+"""
+function comp_s_viol(lp::LPModel)
+    s = get_values(lp.s)
+    return sum(values(s))
 end

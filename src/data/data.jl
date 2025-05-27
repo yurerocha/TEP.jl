@@ -14,15 +14,15 @@ end
 
 struct NeighReport
     runtime::Float64
-    removed_ratio::Float64
-    improvement_ratio::Float64
+    removed_percent::Float64
+    improvement_percent::Float64
 
     NeighReport() = new(0.0, 0.0, 0.0)
     NeighReport(runtime::Float64, 
                 removed_ratio::Float64, 
                 improvement_ratio::Float64) = new(runtime, 
-                                                  removed_ratio, 
-                                                  improvement_ratio)
+                                                  100.0 * removed_ratio, 
+                                                  100.0 * improvement_ratio)
 end
 
 # -------------------------- Instance data structures --------------------------
