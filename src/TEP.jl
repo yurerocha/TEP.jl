@@ -48,13 +48,14 @@ include("utils/utils.jl")
 
 include("main.jl")
 
-include("beam_search.jl")
 include("deterministic.jl")
 include("heuristic.jl")
 include("instance.jl")
 include("model.jl")
+include("parallel_bs.jl")
 include("parallel_ph.jl")
 include("ptdf.jl")
+include("serial_bs.jl")
 include("serial_ph.jl")
 
 end

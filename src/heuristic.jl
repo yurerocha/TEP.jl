@@ -516,14 +516,14 @@ function fix_start!(inst::Instance,
     for k in start.inserted
         JuMP.fix(mip.x[k], 1.0; force = true)
     end
-    all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
-    for l in all_keys
-        JuMP.fix(mip.f[l], start.f[l], force = true)
-    end
-    for k in keys(inst.scenarios[scen].G)
-        JuMP.fix(mip.g[k], start.g[k]; force = true)
-        # fix(md.theta[i], start.theta[i])
-    end
+    # all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
+    # for l in all_keys
+    #     JuMP.fix(mip.f[l], start.f[l], force = true)
+    # end
+    # for k in keys(inst.scenarios[scen].G)
+    #     JuMP.fix(mip.g[k], start.g[k]; force = true)
+    #     # fix(md.theta[i], start.theta[i])
+    # end
 
     optimize!(mip.jump_model)
     # To compare the objective value of this solution with the objective value
@@ -557,18 +557,18 @@ function fix_start!(inst::Instance,
         # set_lower_bound(mip.x[k], 0.0)
         # set_upper_bound(mip.x[k], 1.0)
     end
-    for l in all_keys
-        JuMP.unfix(mip.f[l])
-    end
-    # Some buses may not have generation
-    for k in keys(inst.scenarios[scen].G)
-        JuMP.unfix(mip.g[k])
-        lb = inst.scenarios[scen].G[k].lower_bound
-        ub = inst.scenarios[scen].G[k].upper_bound
-        JuMP.set_lower_bound(mip.g[k], lb)
-        JuMP.set_upper_bound(mip.g[k], ub)
-        # unfix(md.theta[i])
-    end
+    # for l in all_keys
+    #     JuMP.unfix(mip.f[l])
+    # end
+    # # Some buses may not have generation
+    # for k in keys(inst.scenarios[scen].G)
+    #     JuMP.unfix(mip.g[k])
+    #     lb = inst.scenarios[scen].G[k].lower_bound
+    #     ub = inst.scenarios[scen].G[k].upper_bound
+    #     JuMP.set_lower_bound(mip.g[k], lb)
+    #     JuMP.set_upper_bound(mip.g[k], ub)
+    #     # unfix(md.theta[i])
+    # end
 
     return obj
 end

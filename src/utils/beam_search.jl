@@ -46,51 +46,21 @@ Compute the residuals of the line flows.
 """
 function select_lines(inst::Instance, 
                       params::Parameters, 
-                      ptdf::PTDFSystem, 
+                      # ptdf::PTDFSystem, 
                       lp, 
                       node::Node,
                       K, 
                       params_w::Int64, 
                       params_b::Int64)
-    # scen = 1
-    # lines = Vector{Tuple{Tuple3I, Int64}}()
-    # for k in K
-    #     fr = k[1][2]
-    #     to = k[1][3]
-
-    #     cond_a = true
-    #     cond_b = false
-
-    #     D = inst.scenarios[scen].D
-    #     G = inst.scenarios[scen].G
-
-    #     if params.heuristic.gl_strategy == 1
-    #         cond_a = fr in keys(G)
-    #         cond_b = to in keys(G)
-    #     elseif params.heuristic.gl_strategy == 2
-    #         cond_a = fr in keys(D)
-    #         cond_b = to in keys(D)
-    #     elseif params.heuristic.gl_strategy == 3
-    #         cond_a = fr in keys(D) || fr in keys(G)
-    #         cond_b = to in keys(D) || to in keys(G)
-    #     elseif params.heuristic.gl_strategy == 4
-    #         cond_a = !(fr in keys(D)) || fr in keys(G)
-    #         cond_b = !(to in keys(D)) || to in keys(G)
-    #     end
-
-    #     if cond_a || cond_b
-    #         push!(lines, k)
-    #     end
-    # end
-    
     candidates = K
     lines = Vector{Tuple{Any, Float64}}()
     f = get_values(lp.f)
     for k in candidates
         # Map to the existing lines
         j = k[1]
-        l = ptdf.line_to_idx[j]
-        r = abs(f[j] / inst.J[j].f_bar)
+        # l = ptdf.line_to_idx[j]
+        # r = abs(f[j] / inst.J[j].f_bar)
+        r = inst.K[k].cost
         # delta = inst.K[k].f_bar - abs(f[k])
         # r = delta / inst.K[k].f_bar
         push!(lines, (k, r))
@@ -98,7 +68,7 @@ function select_lines(inst::Instance,
     # TODO: Normalizar os custos?
 
     max_idx = min(params_w * params_b, length(lines))
-    partialsort!(lines, 1:max_idx, by = x -> x[2], rev = false)
+    partialsort!(lines, 1:max_idx, by = x -> x[2], rev = true)
     # @warn lines[1:5]
     # k = lines[1][1]
     # delta = inst.K[k].f_bar - abs(f[k])
@@ -144,3 +114,80 @@ function comp_viol(inst::Instance,
 
     return viol, f
 end
+
+
+function select!(LB, K, N)
+    sort!(LB, by = x -> x.obj)
+    # @info [lb.obj for lb in LB]
+    # readline()
+    # l = floor(Int64, 1.5 * N)
+    N = min(N, length(LB))
+    # Select the best l LBs
+    # for node in LB
+    #     for k in node.latest_candidate
+    #         delete_value!(K, k)
+    #     end
+    # end
+    LB = LB[1:N]
+    # Return, randomly, N samples among the best l LBs
+    return LB
+end
+
+function delete_value!(vec::Vector, val)
+    idx = findfirst(==(val), vec)
+    if idx !== nothing
+        deleteat!(vec, idx)
+        return true
+    end
+    return false
+end
+
+function add_node!(LB, obj, viol, node, latest)
+    # inserted = vcat(node.inserted, latest)
+    # candidates = setdiff(node.candidates, latest)
+    inserted = setdiff(node.inserted, latest)
+    candidates = vcat(node.candidates, latest)
+    push!(LB, Node{Float64}(obj, viol, inserted, candidates))
+    return nothing
+end
+
+function update_lp(inst::Instance, 
+                   params::Parameters, 
+                   lp::LPModel, 
+                   inserted, 
+                   it::Int64)
+    log(params, "It update $it", true)
+    rm_lines!(inst, params, lp, keys(inst.K), false)
+    add_lines!(inst, params, lp, inserted, true)
+    
+    return termination_status(lp.jump_model) == MOI.OPTIMAL
+end
+
+function get_data(inst::Instance, 
+                  lp::LPModel, 
+                  ptdf::PTDFSystem)
+    g_bus = get_g_bus_values(inst, ptdf, lp)
+    bus_inj = comp_bus_inj(ptdf.d, g_bus)
+    viol = comp_viol(lp)
+    
+    return g_bus, bus_inj, viol
+end
+
+function comp_obj(inst::Instance, 
+                  params::Parameters, 
+                  tep::TEPModel, 
+                  inserted, 
+                  scen::Int64 = 1)
+    g = get_values(tep.g)
+    obj = 0.0
+    for k in keys(tep.g)
+        c = reverse(inst.scenarios[scen].G[k].costs)
+        obj += comp_g_obj(params, g[k], c)
+    end
+    for k in inserted
+        obj += inst.K[k].cost
+    end
+
+    return obj
+end
+    

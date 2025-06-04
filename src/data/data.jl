@@ -223,9 +223,24 @@ end
 mutable struct Node{T <: AbstractFloat}
     obj::Float64
     viol::Float64
-    beta::Matrix{T}
-    bus_inj::Vector{T}
-    f::Vector{Float64} # m x 1 vec of line flows
-    inserted::Vector
-    candidates::Vector
+    # beta::Matrix{T}
+    # bus_inj::Vector{T}
+    # f::Vector{Float64} # m x 1 vec of line flows
+    inserted::Vector{Any}
+    candidates::Vector{Any}
+end
+
+mutable struct BSControllerMessage
+    it::Int64
+    node_idx::Int64
+    node::Node
+    k::Vector{Any}
+end
+
+mutable struct BSWorkerMessage
+    node_idx::Int64
+    k::Vector{Any}
+    result_count::Int64
+    obj::Float64
+    viol::Float64
 end

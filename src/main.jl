@@ -19,15 +19,13 @@ function run(logname::String = "log.md")
     params = Parameters()
 
     # Alterar logfile, start e end files
-    # tun1: 0.2, 0.1
-    # tun2: 0.3, 0.1
-    # tun3: 0.4, 0.1
-    # tun3: 0.5, 0.1
-    logfile = "tep_build.md"
-    start_file = 48 # 40
-    end_file = 50 # 62
-    is_heur_en = false
-    log_dir = "log_build/"
+    # tun1: 0.4, 0.1
+    # tun2: 0.5, 0.1
+    logfile = "tep_build_heur.md"
+    start_file = 1 # 40
+    end_file = 39 # 62
+    is_heur_en = true
+    log_dir = "log_build_heur/"
     
     # Number of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))

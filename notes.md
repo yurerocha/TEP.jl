@@ -153,7 +153,7 @@ Sem restrições de simetria
 - param_rnf_delta = 0.1, 0.2, 0.3
 - param_rnf_time_limit = 10.0, 20.0
 
-# TODO
+## TODO
 - Dobrar a demanda e deixar o slack em 15%.
 - Utilizar o simplex dual em vez da barreira no b&b pra aproveitar a base
 - Estocástico
@@ -365,3 +365,32 @@ tep3: 0.95, 0.05
 
 - Rápida convergência em modelos menores (2k barras) não é necessariamente um 
 problema
+
+- Adicionar log apenas para o modelo tep
+
+- 0: sem logs
+- 1: log mip em ambos arquivo e terminal
+- 2: log mip e lp em ambos arquivo e terminal
+
+Reportar a melhora com relação ao custo de inserir todos
+
+
+## TODO
+- Plotar gráfico gap em função do número de barras
+  - Nos dois casos, construindo todos e com a heurística
+- Testar no caso da Califórnia
+- No PG, dar duas soluções: a do problema anterior e a da heurística de 
+  construção
+- Guardar a proporção do custo de geração para comparação com a nova proporção
+  após mudança nos custos de investimento
+- Fazer testes com 5min e 30min
+
+## Improvements
+- Linhas que deixam o modelo inviável devem ser removidas, mas o nó não pode ser podado. Em vez disso, diminuir a sua prioridade, apenas
+- Critério de parada: número de iterações
+- No BS, criar o modelo apenas os candidatos que serão manipulados
+- No BS, não é preciso adicionar as variáveis s
+  - Add parâmetro para isso
+  - Apenas verificar se a configuração é viável
+  - Se for, calcular o custo: soma dos custos dos construídos + soma do valor
+    da fo, que já pode ser obtido diretamente do novo modelo

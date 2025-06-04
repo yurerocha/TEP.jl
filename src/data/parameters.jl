@@ -22,7 +22,7 @@ end
 
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
-    penalty::Float64 = 1e1
+    penalty::Float64 = 1.0
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
     optimizer = Gurobi.Optimizer
@@ -30,7 +30,7 @@ end
 
 Base.@kwdef mutable struct HeuristicParameters
     rnf_time_limit::Float64 = 3600.0
-    rnf_percent::Float64 = 0.5 # 0.9
+    rnf_percent::Float64 = 0.4 # 0.9
     rnf_delta::Float64 = 0.1
     # Initial percentage of violated candidates to insert
     vf_lambda_start::Float64 = 1.0
