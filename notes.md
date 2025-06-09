@@ -394,3 +394,13 @@ Reportar a melhora com relação ao custo de inserir todos
   - Apenas verificar se a configuração é viável
   - Se for, calcular o custo: soma dos custos dos construídos + soma do valor
     da fo, que já pode ser obtido diretamente do novo modelo
+- Tentar remover e adicionar o menor número possível de candidatos entre
+  iterações consecutivas
+- Vale a pena remover candidatos que não melhoram a solução?
+  - Para cada nó, caso não melhore, continuar sem inserir os candidatos
+- Se remover um candidato tornar piorar a fo, continuar com a configuração do nó pai
+  - O mesmo caso torne inviável
+  - Em ambos os casos, remover os candidatos de todas as listas
+  - Colocar limite de iterações
+  - Fazer testes para verificar qual a melhor estratégia
+- Vale a pena fazer alguns testes com os parâmetros Method e Crossover do Gurobi

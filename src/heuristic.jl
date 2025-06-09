@@ -11,7 +11,10 @@ function build_solution(inst::Instance,
                         scen::Int64 = 1)
     log(params, "Start heuristic to build initial solution", true)
     # At the first it, there are no candidate lines
+    is_req = params.model.is_lp_model_s_var_set_req
+    params.model.is_lp_model_s_var_set_req = true
     lp = build_lp(inst, params, scen)
+    params.model.is_lp_model_s_var_set_req = is_req
 
     lines = collect(keys(inst.K))
     inserted = Set{Any}(lines)
@@ -434,17 +437,18 @@ function rm_lines!(inst::Instance,
                    lp::LPModel,  
                    candidates, 
                    is_opt::Bool = false)
-    log(params, "Rm $(length(candidates)) line(s)")
+    # log(params, "Rm $(length(candidates)) line(s)")
 
     for k in candidates
-        if !is_fixed(lp.s[k])
+        if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
             fix(lp.s[k], 0.0; force = true)
         end
 
-        set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
-                                   [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
-                                   [0, 0])
-        fix(lp.f[k], 0.0; force = true)
+        # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
+        #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
+        #                            [0, 0])
+        set_normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]], 0)
+        # fix(lp.f[k], 0.0; force = true)
     end
     if is_opt
         optimize!(lp.jump_model)
@@ -464,10 +468,10 @@ function add_lines!(inst::Instance,
                     lp::LPModel,
                     new_candidates, 
                     is_opt::Bool = true)
-    log(params, "Add $(length(new_candidates)) line(s)")
+    # log(params, "Add $(length(new_candidates)) line(s)")
 
     for k in new_candidates
-        if is_fixed(lp.s[k])
+        if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
             unfix(lp.s[k])
             set_lower_bound(lp.s[k], 0.0)
         end
@@ -476,9 +480,12 @@ function add_lines!(inst::Instance,
             unfix(lp.f[k])
         end
 
-        set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
-                                   [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
-                                   [-inst.K[k].gamma, inst.K[k].gamma])
+        # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
+        #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
+        #                            [-inst.K[k].gamma, inst.K[k].gamma])
+        set_normalized_coefficient(lp.f_cons[k], 
+                                   lp.Dtheta[k[1][2:3]], 
+                                   -inst.K[k].gamma)
     end
     if is_opt
         optimize!(lp.jump_model)

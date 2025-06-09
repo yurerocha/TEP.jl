@@ -10,10 +10,10 @@ function config!(params::Parameters, tep::TEPModel)
         set_attribute(tep.jump_model, 
                       MOI.RawOptimizerAttribute("LogFile"), params.log_file)
         if tep isa LPModel
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("Method"), 2)
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("Crossover"), 0)
+            # set_attribute(tep.jump_model, 
+            #               MOI.RawOptimizerAttribute("Method"), 2)
+            # set_attribute(tep.jump_model, 
+            #               MOI.RawOptimizerAttribute("Crossover"), 0)
         end
         if params.log_level == 0
             JuMP.set_silent(tep.jump_model)
@@ -26,7 +26,10 @@ function config!(params::Parameters, tep::TEPModel)
     return nothing
 end
 
-function add_vars!(inst::Instance, scen::Int64, mip::MIPModel)
+function add_vars!(inst::Instance, 
+                   params::Parameters, 
+                   scen::Int64, 
+                   mip::MIPModel)
     for j in keys(inst.J)
         mip.f[j] = @variable(mip.jump_model, base_name = "f[$j]")
     end
@@ -42,18 +45,22 @@ function add_vars!(inst::Instance, scen::Int64, mip::MIPModel)
     return nothing
 end
 
-function add_vars!(inst::Instance, scen::Int64, lp::LPModel)
+function add_vars!(inst::Instance, params::Parameters, scen::Int64, lp::LPModel)
     for j in keys(inst.J)
         lp.f[j] = @variable(lp.jump_model, base_name = "f[$j]")
-        lp.s[j] = @variable(lp.jump_model, 
-                            lower_bound = 0.0, 
-                            base_name = "s[$j]")
+        if params.model.is_lp_model_s_var_set_req
+            lp.s[j] = @variable(lp.jump_model, 
+                                lower_bound = 0.0, 
+                                base_name = "s[$j]")
+        end
     end
     for k in keys(inst.K)
         lp.f[k] = @variable(lp.jump_model, base_name = "f[$k]")
-        lp.s[k] = @variable(lp.jump_model, 
-                            lower_bound = 0.0, 
-                            base_name = "s[$k]")
+        if params.model.is_lp_model_s_var_set_req
+            lp.s[k] = @variable(lp.jump_model, 
+                                lower_bound = 0.0, 
+                                base_name = "s[$k]")
+        end
     end
 
     for i in inst.I
@@ -61,6 +68,18 @@ function add_vars!(inst::Instance, scen::Int64, lp::LPModel)
     end
 
     return nothing
+end
+
+function add_Dtheta_vars_cons!(inst::Instance, tep::TEPModel)
+    for j in keys(inst.J)
+        br = j[2:3]
+        if !haskey(tep.Dtheta, br)
+            tep.Dtheta[br] = @variable(tep.jump_model, 
+                                       base_name = "Dtheta[$br]")
+            @constraint(tep.jump_model, 
+                        tep.Dtheta[br] == tep.theta[j[2]] - tep.theta[j[3]])
+        end
+    end
 end
 
 """
@@ -147,7 +166,9 @@ end
 
 Add flow variables to the model and thermal limits constraints.
 """
-function add_thermal_limits_cons!(inst::Instance, tep::TEPModel)
+function add_thermal_limits_cons!(inst::Instance, 
+                                  params::Parameters, 
+                                  tep::TEPModel)
     # Existing lines
     for j in keys(inst.J)
         JuMP.set_lower_bound(tep.f[j], -inst.J[j].f_bar)
@@ -168,16 +189,29 @@ end
 Add flow variables to the model and thermal limits constraints considering the
 slack variables.
 """
-function add_thermal_limits_cons!(inst::Instance, lp::LPModel)
+function add_thermal_limits_cons!(inst::Instance, 
+                                  params::Parameters, 
+                                  lp::LPModel)
     # Existing lines
     for j in keys(inst.J)
-        @constraint(lp.jump_model, -lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
-        @constraint(lp.jump_model,  lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
+        if params.model.is_lp_model_s_var_set_req
+            @constraint(lp.jump_model, -lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
+            @constraint(lp.jump_model,  lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
+        else
+            JuMP.set_lower_bound(lp.f[j], -inst.J[j].f_bar)
+            JuMP.set_upper_bound(lp.f[j],  inst.J[j].f_bar)
+        end
     end
     # Candidates
     for k in keys(inst.K)
-        @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
-        @constraint(lp.jump_model,  lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
+        if params.model.is_lp_model_s_var_set_req
+            s = lp.s[k]
+            @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
+            @constraint(lp.jump_model,  lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
+        else
+            JuMP.set_lower_bound(lp.f[k], -inst.K[k].f_bar)
+            JuMP.set_upper_bound(lp.f[k],  inst.K[k].f_bar)
+        end
     end
 
     return nothing
@@ -186,15 +220,17 @@ end
 function add_ohms_law_cons!(inst::Instance, tep::TEPModel)
     # Ohm's law for existing circuits
     for j in keys(inst.J)
-        delta_theta = tep.theta[j[2]] - tep.theta[j[3]]
+        # Dtheta = tep.theta[j[2]] - tep.theta[j[3]]
         @constraint(tep.jump_model, 
-                    tep.f[j] == inst.J[j].gamma * delta_theta,
+                    tep.f[j] == inst.J[j].gamma * tep.Dtheta[j[2:3]],
+                    # tep.f[j] == inst.J[j].gamma * Dtheta,
                     base_name = "ol[$j]")
     end
     # Ohm's law for candidate circuits
     for k in keys(inst.K)
-        delta_theta = tep.theta[k[1][2]] - tep.theta[k[1][3]]
-        y = tep.f[k] - inst.K[k].gamma * delta_theta
+        # Dtheta = tep.theta[k[1][2]] - tep.theta[k[1][3]]
+        # y = tep.f[k] - inst.K[k].gamma * Dtheta
+        y = tep.f[k] - inst.K[k].gamma * tep.Dtheta[k[1][2:3]]
 
         bigM = comp_bigM(inst, k)
 
@@ -212,31 +248,33 @@ end
 function add_ohms_law_cons!(inst::Instance, lp::LPModel)
     # Ohm's law for existing circuits
     for j in keys(inst.J)
-        delta_theta = lp.theta[j[2]] - lp.theta[j[3]]
+        # Dtheta = lp.theta[j[2]] - lp.theta[j[3]]
         lp.f_cons[j] = @constraint(lp.jump_model, 
-                                   lp.f[j] == inst.J[j].gamma * delta_theta,
-                                   base_name = "ol.j[$j]")
+                                lp.f[j] == inst.J[j].gamma * lp.Dtheta[j[2:3]],
+                                # lp.f[j] == inst.J[j].gamma * Dtheta,
+                                base_name = "ol.j[$j]")
     end
     # Ohm's law for candidate circuits
     for k in keys(inst.K)
-        delta_theta = lp.theta[k[1][2]] - lp.theta[k[1][3]]
+        # Dtheta = lp.theta[k[1][2]] - lp.theta[k[1][3]]
         lp.f_cons[k] = @constraint(lp.jump_model, 
-                                   lp.f[k] == inst.K[k].gamma * delta_theta,
-                                   base_name = "ol.k[$k]")
+                        lp.f[k] == inst.K[k].gamma * lp.Dtheta[k[1][2:3]],
+                        # lp.f[k] == inst.K[k].gamma * Dtheta,
+                        base_name = "ol.k[$k]")
     end
 
     return nothing
 end
 
-function add_delta_theta_bounds_cons!(inst::Instance, mip::MIPModel)
+function add_Dtheta_bounds_cons!(inst::Instance, mip::MIPModel)
     bounds = Dict{Tuple{Int64, Int64}, Tuple{Float64, Float64}}()
     for j in keys(inst.J)
-        if iseq(inst.J[j].delta_theta_bounds[1], 0.0) &&
-           iseq(inst.J[j].delta_theta_bounds[2], 0.0)
+        if iseq(inst.J[j].Dtheta_bounds[1], 0.0) &&
+           iseq(inst.J[j].Dtheta_bounds[2], 0.0)
             continue
         end
         k = (j[2], j[3])
-        b = inst.J[j].delta_theta_bounds
+        b = inst.J[j].Dtheta_bounds
         if k in keys(bounds)
             lb = max(bounds[k][1], b[1])
             ub = min(bounds[k][2], b[2])
@@ -246,15 +284,15 @@ function add_delta_theta_bounds_cons!(inst::Instance, mip::MIPModel)
         end
     end
     for (k, b) in bounds
-        delta_theta = mip.theta[k[1]] - mip.theta[k[2]]
-        @constraint(mip.jump_model, delta_theta >= b[1])
-        @constraint(mip.jump_model, delta_theta <= b[2])
+        Dtheta = mip.theta[k[1]] - mip.theta[k[2]]
+        @constraint(mip.jump_model, Dtheta >= b[1])
+        @constraint(mip.jump_model, Dtheta <= b[2])
     end
 
     return nothing
 end
 
-function add_delta_theta_bounds_cons!(inst::Instance, lp::LPModel)
+function add_Dtheta_bounds_cons!(inst::Instance, lp::LPModel)
     return nothing
 end
 
@@ -366,7 +404,9 @@ function set_obj!(inst::Instance,
         end
     end
     pen *= params.model.penalty
-    add_to_expression!(lp.obj, sum([pen * s for s in values(lp.s)]))
+    if params.model.is_lp_model_s_var_set_req
+        add_to_expression!(lp.obj, sum([pen * s for s in values(lp.s)]))
+    end
 
     @objective(lp.jump_model, Min, lp.obj)
     

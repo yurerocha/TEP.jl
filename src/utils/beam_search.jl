@@ -139,16 +139,22 @@ function delete_value!(vec::Vector, val)
         deleteat!(vec, idx)
         return true
     end
+
     return false
 end
 
-function add_node!(LB, obj, viol, node, latest)
+function add_node!(LB, best_obj, msg, node)
     # inserted = vcat(node.inserted, latest)
     # candidates = setdiff(node.candidates, latest)
-    inserted = setdiff(node.inserted, latest)
-    candidates = vcat(node.candidates, latest)
-    push!(LB, Node{Float64}(obj, viol, inserted, candidates))
-    return nothing
+    inserted = node.inserted
+    if isl(msg.obj, best_obj)
+        best_obj = msg.obj
+        inserted = setdiff(node.inserted, msg.k)
+    end
+    candidates = vcat(node.candidates, msg.k)
+    push!(LB, Node{Float64}(msg.obj, msg.viol, inserted, candidates))
+
+    return best_obj
 end
 
 function update_lp(inst::Instance, 
@@ -190,4 +196,12 @@ function comp_obj(inst::Instance,
 
     return obj
 end
-    
+
+function comp_build_obj(inst::Instance, inserted)
+    obj = 0.0
+    for k in inserted
+        obj += inst.K[k].cost
+    end
+
+    return obj
+end

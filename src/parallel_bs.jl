@@ -49,8 +49,6 @@ function run_parallel_bs(file::String)
     root = Node{Float64}(obj, 0.0, collect(inserted), K)
     Q = [root]
 
-    beta = Matrix{Float64}(undef, 1, 1)
-
     params_w = 2
     params_b = 5 # Number of candidates per batch
     params_N = 3
@@ -64,6 +62,8 @@ function run_parallel_bs(file::String)
     count_lp_updates = 0
     best_obj = obj
 
+    param_max_num_it_wo_impr = 20
+    num_it_wo_impr = 0
 
     while true
         LB = []
@@ -74,11 +74,12 @@ function run_parallel_bs(file::String)
                                  node, node.inserted, 
                                  params_w, params_b)
             for k in lines
-                msg = BSControllerMessage(it, i, node, k)
+                msg = BSControllerMessage(it, i, node, best_obj, k)
                 JQM.add_job_to_queue!(controller, msg)
             end
         end
 
+        has_impr = false
         # Recover results
         while !has_finished_all_jobs(controller)
             if !JQM.is_job_queue_empty(controller)
@@ -89,33 +90,31 @@ function run_parallel_bs(file::String)
                 if !isnothing(job_answer)
                     msg = JQM.get_message(job_answer)
                     node = Q[msg.node_idx]
-                    # if termination_status(lp.jump_model) != MOI.OPTIMAL
-                    if msg.result_count == 0
-                        # log(params, "Feasible solution found! Skipping it...", true)
-                        log(params, "No sol to explore! Skipping it...", true)
-                        continue
-                    end
 
-                    @warn msg.obj, msg.viol
-                    
-                    if isg(msg.viol, 0.01)
-                        log(params, "Infeasible solution found!", true)
-                        continue
-                    end
+                    old_best_obj = best_obj
 
-                    add_node!(LB, msg.obj, msg.viol, node, msg.k)
+                    best_obj = add_node!(LB, best_obj, msg, node)
 
-                    if iseq(msg.viol, 0.0) && isl(msg.obj, best_obj)
-                        best_obj = msg.obj
-                        log(params, "Inserted update", true)
+                    if msg.is_feas && isl(msg.obj, old_best_obj)
+                        has_impr = true
                         inserted = node.inserted
+                        inserted_end = length(LB[end].inserted)
+                        log(params, "Inserted update", true)
+                        @warn it, msg.obj, 
+                              inserted_end, 
+                              time() - time_beg
                     end
-
-                    inserted_end = length(LB[end].inserted)
-                    @warn it, msg.obj, 
-                          inserted_end, 
-                          time() - time_beg
                 end
+            end
+        end
+        if has_impr
+            num_it_wo_impr = 0
+        else
+            num_it_wo_impr += 1
+
+            if num_it_wo_impr >= param_max_num_it_wo_impr
+                @warn "Max it wo impr reached"
+                break
             end
         end
 
@@ -152,7 +151,7 @@ function run_parallel_bs(file::String)
     log(params, "Solve the model", true)
     results = solve!(inst, params, mip)
 
-    @warn "Obj $(objective_value(mip.jump_model))"
+    @warn "Obj $(JuMP.objective_value(mip.jump_model))"
     readline()
 
     return nothing
@@ -171,18 +170,40 @@ function bs_workers_loop(inst::Instance, params::Parameters)
                 break
             end
 
+            ins_candidates = setdiff(msg.node.inserted, msg.k)
+            # build_obj = comp_build_obj(inst, ins_candidates)
+            # function barrier_callback(cb_data, cb_where::Cint)
+            #     if cb_where == GRB_CB_BARRIER
+            #         dual_obj = Ref{Cdouble}()
+            #         GRBcbget(cb_data, cb_where, 
+            #                  GRB_CB_BARRIER_DUALOBJ, dual_obj)
+            #         if isg(build_obj + dual_obj[], msg.best_obj)
+            #             # @warn build_obj + dual_obj[], 
+            #             #       msg.best_obj, "Terminate Gurobi"
+            #             # readline()
+            #             GRBterminate(
+            #                     backend(lp.jump_model).optimizer.model.inner)
+            #         end
+            #     end
+            # end
+            # set_attribute(lp.jump_model, Gurobi.CallbackFunction(), barrier_callback)
+
             # Update the model according to the current data
             # rm_lines!(inst, params, lp, Set(keys(inst.K)), false)
             rm_lines!(inst, params, lp, keys(inst.K), false)
-            sd = setdiff(msg.node.inserted, msg.k)
-            add_lines!(inst, params, lp, sd, true)
+            add_lines!(inst, params, lp, ins_candidates, true)
 
-            obj = comp_obj(inst, params, lp, sd)
-            viol = comp_viol(lp)
+            obj = const_infinite
+            is_feas = false
+            viol = 0.0
+            if JuMP.result_count(lp.jump_model) > 0
+                obj = comp_obj(inst, params, lp, ins_candidates)
+                is_feas = true
+                viol = comp_viol(lp)
+            end
             
             ret_msg = BSWorkerMessage(msg.node_idx, msg.k, 
-                                      JuMP.result_count(lp.jump_model), 
-                                      obj, viol)
+                                      is_feas, obj, viol)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end

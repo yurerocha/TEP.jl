@@ -26,14 +26,15 @@ function build_model(inst::Instance,
                      tep::TEPModel)
     config!(params, tep)
 
-    add_vars!(inst, scen, tep)
+    add_vars!(inst, params, scen, tep)
     add_g_vars!(inst, params, scen, tep)
+    add_Dtheta_vars_cons!(inst, tep)
     
     if params.model.is_symmetry_en && !params.model.is_dcp_power_model_en
         add_symmetry_cons!(inst, tep)
     end
 
-    add_thermal_limits_cons!(inst, tep)
+    add_thermal_limits_cons!(inst, params, tep)
     
     add_fkl_cons!(inst, scen, tep)
 

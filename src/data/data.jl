@@ -52,7 +52,7 @@ mutable struct BranchInfo
     x::Float64 # Reactance of circuits
     gamma::Float64 # Susceptance of circuits
     cost::Float64 # Cost of candidate circuits
-    delta_theta_bounds::Tuple{Float64, Float64}
+    Dtheta_bounds::Tuple{Float64, Float64}
 end
 
 mutable struct Instance
@@ -61,7 +61,7 @@ mutable struct Instance
     K::Dict{Tuple{Tuple3I, Int64}, BranchInfo} # Candidates
     # f_bar::Vector{Float64} # Capacity of circuits
     # gamma::Vector{Float64} # Susceptance of circuits
-    # delta_theta_limits::Vector{Tuple{Float64, Float64}} 
+    # Dtheta_limits::Vector{Tuple{Float64, Float64}} 
     # costs::Vector{Float64} # Cost of candidate circuits
     num_I::Int64 # Number of buses
     num_J::Int64 # Number of existing circuits
@@ -83,6 +83,7 @@ struct MIPModel <: TEPModel
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
     theta::Dict{Int64, JuMP.VariableRef}
+    Dtheta::Dict{Tuple{Int64, Int64}, JuMP.VariableRef}
     fkl_cons::Dict{Int64, JuMP.ConstraintRef}
 
     MIPModel(params::Parameters) = 
@@ -93,6 +94,7 @@ struct MIPModel <: TEPModel
                     Dict{Any, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.AffExpr}(), 
+                    Dict{Int64, JuMP.VariableRef}(),
                     Dict{Int64, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.ConstraintRef}())
 end
@@ -105,6 +107,7 @@ struct LPModel <: TEPModel
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
     theta::Dict{Int64, JuMP.VariableRef}
+    Dtheta::Dict{Tuple{Int64, Int64}, JuMP.VariableRef}
     fkl_cons::Dict{Int64, JuMP.ConstraintRef}
     f_cons::Dict{Any, JuMP.ConstraintRef}
 
@@ -116,6 +119,7 @@ struct LPModel <: TEPModel
                                       Dict{Int64, JuMP.AffExpr}(), 
                                       Dict{Int64, JuMP.VariableRef}(), 
                                       Dict{Int64, JuMP.VariableRef}(), 
+                                      Dict{Int64, JuMP.ConstraintRef}(), 
                                       Dict{Any, JuMP.ConstraintRef}())
 end
 
@@ -221,7 +225,7 @@ end
 
 # ------------------------- Beam Search data structures ------------------------
 mutable struct Node{T <: AbstractFloat}
-    obj::Float64
+    obj::Float64 # Build + generation
     viol::Float64
     # beta::Matrix{T}
     # bus_inj::Vector{T}
@@ -234,13 +238,14 @@ mutable struct BSControllerMessage
     it::Int64
     node_idx::Int64
     node::Node
+    best_obj::Float64 # Build + generation
     k::Vector{Any}
 end
 
 mutable struct BSWorkerMessage
     node_idx::Int64
     k::Vector{Any}
-    result_count::Int64
-    obj::Float64
+    is_feas::Bool
+    obj::Float64 # Build + generation
     viol::Float64
 end
