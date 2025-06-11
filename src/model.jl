@@ -49,6 +49,10 @@ function build_model(inst::Instance,
     set_obj!(inst, params, scen, tep)
 
     # write_to_file(tep.jump_model, "model.lp")
+    # open("model.lp", "w") do f
+    #     write(f, 
+    #       JuMP.objective_function_string(MIME("text/plain"), tep.jump_model))
+    # end
 
     return tep
 end
@@ -88,6 +92,9 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
 
                 rt_runtime = runtime[]
                 rt_best_bound = root_bound[]
+                # Terminate the optimization process as soon as pre-processing 
+                # and the computation of the root relaxation is finished
+                # GRBterminate(backend(model).optimizer.model.inner)
             end
         elseif cb_where == GRB_CB_MIPSOL && 
                iseq(incumbent_time, params.solver_time_limit)
@@ -112,27 +119,26 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
         set_attribute(model, Gurobi.CallbackFunction(), root_node_callback)
     end
     
-    optimize!(model)
+    JuMP.optimize!(model)
 
-    status = termination_status(model)
+    status = JuMP.termination_status(model)
     
     lower_bound = "-"
     obj = "-"
     gap = "-"
+    build_obj_rat = "-"
 
     # If the solver found a solution
-    if result_count(model) > 0
+    if JuMP.has_values(model)
+        lower_bound = JuMP.objective_value(model)
+        obj = JuMP.objective_value(model)
         if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED
-            lower_bound = objective_value(model)
-            obj = objective_value(model)
             gap = 0.0
-        elseif status == MOI.TIME_LIMIT
-            lower_bound = objective_bound(model)
-            obj = objective_value(model)
-            gap = 100.0 * relative_gap(model)
+        else # if status == MOI.TIME_LIMIT
+            gap = 100.0 * JuMP.relative_gap(model)
         end
 
-        grb_model = backend(model)
+        grb_model = JuMP.backend(model)
         is_feas = check_sol(inst, mip, grb_model)
         if !is_feas 
             status = "MODEL_ERROR"

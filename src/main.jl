@@ -21,11 +21,11 @@ function run(logname::String = "log.md")
     # Alterar logfile, start e end files
     # tun1: 0.4, 0.1
     # tun2: 0.5, 0.1
-    logfile = "tep_build_heur.md"
+    logfile = "tep_wo_bs.md"
     start_file = 1 # 40
-    end_file = 39 # 62
+    end_file = 1 # 62
     is_heur_en = true
-    log_dir = "log_build_heur/"
+    log_dir = "log_wo_bs/"
     
     # Number of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
@@ -49,6 +49,7 @@ function run(logname::String = "log.md")
     #          "pglib_opf_case6470_rte.m", "pglib_opf_case6515_rte.m", 
     #          "pglib_opf_case10000_goc.m"]
     counter = start_file
+    files = ["pglib_opf_case8387_pegase.m"]
     for file in files[start_file:end_file]
         if file in skip
             log(params, "Skipping instance $file num $counter")
@@ -90,6 +91,12 @@ function run(logname::String = "log.md")
             results = solve!(inst, params, mip)
 
             results["build_time"] = build_time
+            if isa(results["objective"], Number)
+                results["build_obj_rat"] = comp_build_obj_rat(inst, 
+                                                        results["objective"], 
+                                                        start.inserted)
+            end
+
             if is_heur_en
                 results["impr_percent"] = report.improvement_percent
                 results["heur_time"] = report.runtime
@@ -98,7 +105,7 @@ function run(logname::String = "log.md")
             
             log_instance(logfile, file, inst, results)
         catch e
-            @warn e
+            # @warn e
             log_instance(logfile, "<s>" * file * "</s>", inst, Dict())
         end
 

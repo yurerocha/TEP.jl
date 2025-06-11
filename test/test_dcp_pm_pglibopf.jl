@@ -1,4 +1,4 @@
-module TestPGLibOPF
+module TestDCPPMPGLibOPF
 
 using TEP
 using Test
@@ -18,7 +18,7 @@ eps = 1e-3
 
 # BASELINE.md solution costs do not have precision
 
-@testset "DC OPF Library" begin
+@testset "[DCP PM] PG Lib OPF" begin
     for (i, file) in enumerate(files)
         TEP.log(params, "Test $i $file")
         

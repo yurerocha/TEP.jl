@@ -404,3 +404,21 @@ Reportar a melhora com relação ao custo de inserir todos
   - Colocar limite de iterações
   - Fazer testes para verificar qual a melhor estratégia
 - Vale a pena fazer alguns testes com os parâmetros Method e Crossover do Gurobi
+- BS
+  - No primeiro estágio, considerar o custo de construção
+  - No segundo estágio, considerar apenas o custo de geração ou continuar
+    levando em conta o custo total?
+- Fix
+  [ Info: End remove and fix
+  ┌ Warning: ("Runtime", 2.5952651500701904)
+  └ @ TEP /imports/yure/Documents/TEP.jl/src/heuristic.jl:54
+  ┌ Warning: ("Impr ratio", 2.077730083466567)
+  └ @ TEP /imports/yure/Documents/TEP.jl/src/heuristic.jl:55
+  ┌ Warning: ("Rm ratio", -39.99713795077275)
+- Double check na porcentagem de construção
+- Gerar todos os arquivos .md de testes em test/
+
+## TODO
+- Fazer testes com a CATS
+- Ajustar o BS
+- Mirar o custo de geração nos 10%

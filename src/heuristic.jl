@@ -42,7 +42,7 @@ function build_solution(inst::Instance,
                                      lp, inserted, removed, 
                                      init_cost, init_cost)
         report = NeighReport(time() - time_start, 
-                             (num_rm_start - length(removed)) / inst.num_K, 
+                             length(removed) / inst.num_K, 
                              1.0 - best_cost / init_cost)
     else
         add_lines!(inst, params, lp, inserted, true)
@@ -52,8 +52,8 @@ function build_solution(inst::Instance,
     end
 
     @warn "Runtime", report.runtime
-    @warn "Impr ratio", report.improvement_percent
     @warn "Rm ratio", report.removed_percent
+    @warn "Impr ratio", report.improvement_percent
 
     return start, report, inserted, removed
 end
@@ -551,6 +551,7 @@ function fix_start!(inst::Instance,
                MOI.CONFLICT_FOUND
                 iis_model, _ = copy_conflict(model)
                 print(iis_model)
+                print_cons(iis_model, "model.iis")
             end
         end
         is_feas = false

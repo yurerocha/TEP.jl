@@ -172,18 +172,18 @@ function log(file::String, msg::String)
 end
 
 function log_header(outputfile::String)
-    outstr = "| Instance | L | N | L/N | Build (s) | Incumbent (s) " * 
-             "| Solve (s) | Status | Rt best bound | Rt solve (s) " * 
-             "| Lower bound | Obj | Gap (%) | Start (s) | Impr (%) " *
-             "| Heur (s) | \n"
-    outstr *= "|:---"^16 * "| \n"
+    outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
+             "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
+             "| Rt solve (s) | Lower bound | Obj | Gap (%) | Start (s) " *
+             "| Impr (%) | Heur (s) | \n"
+    outstr *= "|:---"^17 * "| \n"
     log(outputfile, outstr)
 end
 
 function get_keys_results()
-    return ["build_time", "incumbent_time", "solve_time", "status", 
-            "root_best_bound", "root_time", "lower_bound", "objective", 
-            "gap", "start_time", "impr_percent", "heur_time"]
+    return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
+            "status", "root_best_bound", "root_time", "lower_bound", 
+            "objective", "gap", "start_time", "impr_percent", "heur_time"]
 end
 
 """
@@ -560,4 +560,17 @@ Compute flow violation in LP model.
 function comp_s_viol(lp::LPModel)
     s = get_values(lp.s)
     return sum(values(s))
+end
+
+"""
+    comp_build_obj_rat(inst::Instance, 
+                       obj::Float64, 
+                       inserted::Vector{Any})
+
+Compute the percentage ratio of the build cost over the total objective value.
+"""
+function comp_build_obj_rat(inst::Instance, 
+                            obj::Float64, 
+                            inserted)
+    return 100.0 * comp_build_obj(inst, inserted) / obj
 end

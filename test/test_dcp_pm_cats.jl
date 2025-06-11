@@ -1,4 +1,4 @@
-module TestCATS
+module TestDCPPMCATS
 
 using TEP
 using Test
@@ -20,7 +20,7 @@ eps = 0.5
 # constraints within the TEP model, the OVFs equal. This is probably due to the 
 # quadractic terms in the objective function
 
-@testset "California Test System" begin
+@testset "[DCP PM] California Test System" begin
     # Read scenarios and solve coresponding DCP PMs
     TEP.log(params, "Build instances and solve corresponding DCP PMs", true)
     inst, sols = TEP.build_cats_instance(params, num_scenarios)

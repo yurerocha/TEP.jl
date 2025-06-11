@@ -16,7 +16,7 @@ Base.@kwdef mutable struct InstanceParameters
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
     max_rand::Int64 = 100 # Max random value for the new cost (see text)
     num_candidates::Int64 = 2 # Number of candidates available per existing line
-    cost_mult::Float64 = 100.0 # Value multiplied by gamma to build the costs
+    cost_mult::Float64 = 1e4 # Value multiplied by gamma to build the costs
     ref_bus::Int64 = 1 # Default reference bus used when none is found
 end
 
@@ -39,6 +39,7 @@ Base.@kwdef mutable struct HeuristicParameters
     gl_ins::Float64 = 0.1 
     # 1 - g lines; 2 - d lines; 3 - g or d lines; 4 - !(g or d) lines
     gl_strategy::Int64 = 3
+    bs_time_limit = 300
 end
 
 # TODO: ProgressiveHedging -> PH
@@ -52,7 +53,7 @@ Base.@kwdef mutable struct Parameters
     log_level::Int64 = 1
     log_file::String = "log.txt"
     debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 10.0
+    solver_time_limit::Float64 = 3600.0
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()

@@ -76,7 +76,7 @@ end
 abstract type TEPModel end
 
 struct MIPModel <: TEPModel
-    jump_model::JuMP.GenericModel
+    jump_model::JuMP.Model
     obj::AffQuadExpr
     x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}
     f::Dict{Any, JuMP.VariableRef}
@@ -87,8 +87,8 @@ struct MIPModel <: TEPModel
     fkl_cons::Dict{Int64, JuMP.ConstraintRef}
 
     MIPModel(params::Parameters) = 
-                new(direct_model(Gurobi.Optimizer()), 
-                    # JuMP.Model(params.model.optimizer), 
+                new(# direct_model(Gurobi.Optimizer()), 
+                    JuMP.Model(params.model.optimizer), 
                     params.model.is_dcp_power_model_en ? QuadExpr() : AffExpr(), 
                     Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}(), 
                     Dict{Any, JuMP.VariableRef}(), 

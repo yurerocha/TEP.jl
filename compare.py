@@ -34,13 +34,14 @@ def compare_columns(file1, file2, column_index):
         status = "MATCH" if val1 == val2 else "DIFFERENT"
         print(f"Row {i+1}: {val1}  vs  {val2}  -->  {status}")
 
-# Col 11: obj 
-# Col 12: gap (%)
-# Col 14: impr (%)
-# Col 15: heur (s) 
+# Col 5: build/obj
+# Col 12: obj 
+# Col 13: gap (%)
+# Col 15: impr (%)
+# Col 16: heur (s) 
 if __name__ == "__main__":
-    file1 = "tep_build.md" # //////// = 8
-    file2 = "tep_build_heur.md" # /////////// = 11
-    column_index = 12  # Change to the column you want (0-based index)
+    file1 = "tep_rnf_heur copy.md" # //////// = 8
+    file2 = "tep_bs copy.md" # /////////// = 11
+    column_index = 13  # Change to the column you want (0-based index)
 
     compare_columns(file1, file2, column_index)

@@ -1,11 +1,5 @@
-function run_parallel_bs(file::String)
-    # Read input data
-    params = Parameters()
-    # params.log_level = 1
-    params.log_file = "log/" * get_inst_name(file) * ".txt"
-
-    mp_data = PowerModels.parse_file(file)
-    inst = build_instance(params, mp_data)
+function run_parallel_bs!(inst::Instance, params::Parameters)
+    log(params, "Parallel beam search heuristic", true)
 
     # Config JobQueueMPI
     JQM = JobQueueMPI
@@ -22,10 +16,29 @@ function run_parallel_bs(file::String)
     # Initialization
     controller = JQM.Controller(JQM.num_workers())
 
-    # Build initial solution
-    _, _, inserted, candidates = build_solution(inst, params)
+    start_time = time()
 
     lp = build_lp(inst, params)
+
+    # # Build initial solution
+    # start, report, inserted, candidates = build_solution(inst, params)
+
+    # log(params, "Build full model", true)
+    # build_time = @elapsed (mip = build_mip(inst, params))
+
+    # update_lp(inst, params, lp, inserted, 1)
+    # # g_bus, bus_inj, viol_update = get_data(inst, lp, ptdf)
+
+    # f = get_values(lp.f)
+    # g = get_values(lp.g)
+    # start = Start(Set(inserted), f, g)
+
+    # log(params, "Fix the start of the model", true)
+    # start_time = @elapsed (fix_start!(inst, params, mip, start))
+
+    # log(params, "Solve the model", true)
+    # results = solve!(inst, params, mip)
+    # readline()
 
     rm_lines!(inst, params, lp, Set(keys(inst.K)), false)
     add_lines!(inst, params, lp, inserted, true)
@@ -66,6 +79,11 @@ function run_parallel_bs(file::String)
     num_it_wo_impr = 0
 
     while true
+        if isg(time() - start_time, 
+               params.heuristic.bs_time_limit - report.runtime)
+            log(params, "BS Time limit reached", true)
+            break
+        end
         LB = []
 
         # Send jobs
@@ -150,11 +168,14 @@ function run_parallel_bs(file::String)
 
     log(params, "Solve the model", true)
     results = solve!(inst, params, mip)
+    results["build_time"] = build_time
+    results["build_obj_rat"] = comp_build_obj_rat(inst, 
+                                                  results["objective"], 
+                                                  start.inserted)
 
     @warn "Obj $(JuMP.objective_value(mip.jump_model))"
-    readline()
 
-    return nothing
+    return results
 end
     
 function bs_workers_loop(inst::Instance, params::Parameters)
@@ -186,7 +207,9 @@ function bs_workers_loop(inst::Instance, params::Parameters)
             #         end
             #     end
             # end
-            # set_attribute(lp.jump_model, Gurobi.CallbackFunction(), barrier_callback)
+            # set_attribute(lp.jump_model, 
+            #               Gurobi.CallbackFunction(), 
+            #               barrier_callback)
 
             # Update the model according to the current data
             # rm_lines!(inst, params, lp, Set(keys(inst.K)), false)
@@ -196,7 +219,7 @@ function bs_workers_loop(inst::Instance, params::Parameters)
             obj = const_infinite
             is_feas = false
             viol = 0.0
-            if JuMP.result_count(lp.jump_model) > 0
+            if JuMP.has_values(lp.jump_model)
                 obj = comp_obj(inst, params, lp, ins_candidates)
                 is_feas = true
                 viol = comp_viol(lp)
