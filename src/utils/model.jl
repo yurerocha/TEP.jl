@@ -5,7 +5,9 @@
 Configure the solver parameters.
 """
 function config!(params::Parameters, tep::TEPModel)
-    set_attribute(tep.jump_model, MOI.RawOptimizerAttribute("Threads"), 8)
+    set_attribute(tep.jump_model, 
+                  MOI.RawOptimizerAttribute("Threads"), 
+                  params.solver_num_threads)
     if params.model.optimizer == Gurobi.Optimizer
         set_attribute(tep.jump_model, 
                       MOI.RawOptimizerAttribute("LogFile"), params.log_file)

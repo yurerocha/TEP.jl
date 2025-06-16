@@ -8,6 +8,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
 
     @warn JQM.is_worker_process(), JQM.num_workers()
     if JQM.is_worker_process()
+        params.solver_num_threads = 1
         bs_workers_loop(inst, params)
         JQM.mpi_barrier()
         return nothing
@@ -18,10 +19,11 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
 
     start_time = time()
 
+    params.solver_num_threads = 8
     lp = build_lp(inst, params)
 
-    # # Build initial solution
-    # start, report, inserted, candidates = build_solution(inst, params)
+    # Build initial solution
+    start, report, inserted, candidates = build_solution(inst, params)
 
     # log(params, "Build full model", true)
     # build_time = @elapsed (mip = build_mip(inst, params))
@@ -59,15 +61,8 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     #     @assert abs(viol_lp - viol_ptdf) < 1e-1
     # end
 
-    root = Node{Float64}(obj, 0.0, collect(inserted), K)
+    root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K)
     Q = [root]
-
-    params_w = 2
-    params_b = 5 # Number of candidates per batch
-    params_N = 3
-    params_it_update = 5
-
-    it = 1
 
     inserted_beg = length(inserted)
     inserted_end = 0
@@ -75,9 +70,8 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     count_lp_updates = 0
     best_obj = obj
 
-    param_max_num_it_wo_impr = 20
+    it = 1
     num_it_wo_impr = 0
-
     while true
         if isg(time() - start_time, 
                params.heuristic.bs_time_limit - report.runtime)
@@ -88,9 +82,9 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
 
         # Send jobs
         for (i, node) in enumerate(Q)
+            @warn it, i
             lines = select_lines(inst, params, lp, 
-                                 node, node.inserted, 
-                                 params_w, params_b)
+                                 node, node.inserted)
             for k in lines
                 msg = BSControllerMessage(it, i, node, best_obj, k)
                 JQM.add_job_to_queue!(controller, msg)
@@ -130,7 +124,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
         else
             num_it_wo_impr += 1
 
-            if num_it_wo_impr >= param_max_num_it_wo_impr
+            if num_it_wo_impr >= params.beam_search.num_max_it_wo_impr
                 @warn "Max it wo impr reached"
                 break
             end
@@ -140,7 +134,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
             log(params, "No new nodes to investigate")
             break
         end
-        Q = select!(LB, K, params_N)
+        Q = select!(params, LB, K)
         
         it += 1
     end
@@ -154,6 +148,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
           time() - time_beg
 
     log(params, "Build full model", true)
+    params.solver_num_threads = 8
     build_time = @elapsed (mip = build_mip(inst, params))
 
     update_lp(inst, params, lp, inserted, it)
@@ -219,14 +214,16 @@ function bs_workers_loop(inst::Instance, params::Parameters)
             obj = const_infinite
             is_feas = false
             viol = 0.0
+            f = Set{Any}()
             if JuMP.has_values(lp.jump_model)
                 obj = comp_obj(inst, params, lp, ins_candidates)
+                f = get_values(lp.f)
                 is_feas = true
                 viol = comp_viol(lp)
             end
             
-            ret_msg = BSWorkerMessage(msg.node_idx, msg.k, 
-                                      is_feas, obj, viol)
+            ret_msg = BSWorkerMessage(msg.node_idx, msg.k, is_feas, 
+                                      obj, f, viol)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end

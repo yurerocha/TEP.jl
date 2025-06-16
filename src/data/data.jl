@@ -224,12 +224,12 @@ mutable struct WorkerCache
 end
 
 # ------------------------- Beam Search data structures ------------------------
-mutable struct Node{T <: AbstractFloat}
+mutable struct Node # {T <: AbstractFloat}
     obj::Float64 # Build + generation
+    f # m x 1 vec of line flows
     viol::Float64
     # beta::Matrix{T}
     # bus_inj::Vector{T}
-    # f::Vector{Float64} # m x 1 vec of line flows
     inserted::Vector{Any}
     candidates::Vector{Any}
 end
@@ -247,5 +247,6 @@ mutable struct BSWorkerMessage
     k::Vector{Any}
     is_feas::Bool
     obj::Float64 # Build + generation
+    f # m x 1 vec of line flows
     viol::Float64
 end

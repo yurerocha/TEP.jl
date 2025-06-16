@@ -386,7 +386,8 @@ Reportar a melhora com relação ao custo de inserir todos
 - Fazer testes com 5min e 30min
 
 ## Improvements
-- Linhas que deixam o modelo inviável devem ser removidas, mas o nó não pode ser podado. Em vez disso, diminuir a sua prioridade, apenas
+- Linhas que deixam o modelo inviável devem ser removidas, mas o nó não pode ser 
+  podado. Em vez disso, diminuir a sua prioridade, apenas
 - Critério de parada: número de iterações
 - No BS, criar o modelo apenas os candidatos que serão manipulados
 - No BS, não é preciso adicionar as variáveis s
@@ -422,3 +423,11 @@ Reportar a melhora com relação ao custo de inserir todos
 - Fazer testes com a CATS
 - Ajustar o BS
 - Mirar o custo de geração nos 10%
+
+## TODO
+- Salvar todo o log julia por instância
+
+## Tests
+- log_bs1: params_b = 5
+- log_bs2: params_b = 10
+- log_bs3: params_b = 

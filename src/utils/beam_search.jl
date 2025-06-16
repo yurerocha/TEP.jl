@@ -49,26 +49,31 @@ function select_lines(inst::Instance,
                       # ptdf::PTDFSystem, 
                       lp, 
                       node::Node,
-                      K, 
-                      params_w::Int64, 
-                      params_b::Int64)
+                      K)
     candidates = K
     lines = Vector{Tuple{Any, Float64}}()
-    f = get_values(lp.f)
+    # f = get_values(lp.f)
+    if length(node.f) == 0
+        @warn "Tamanho 0"
+        @warn node
+        readline()
+    end
     for k in candidates
         # Map to the existing lines
         j = k[1]
         # l = ptdf.line_to_idx[j]
         # r = abs(f[j] / inst.J[j].f_bar)
-        r = inst.K[k].cost
+        r = node.f[j] / inst.K[k].cost
         # delta = inst.K[k].f_bar - abs(f[k])
         # r = delta / inst.K[k].f_bar
         push!(lines, (k, r))
     end
     # TODO: Normalizar os custos?
 
-    max_idx = min(params_w * params_b, length(lines))
-    partialsort!(lines, 1:max_idx, by = x -> x[2], rev = true)
+    w = params.beam_search.num_children_per_parent
+    b = params.beam_search.num_candidates_per_batch
+    max_idx = min(w * b, length(lines))
+    partialsort!(lines, 1:max_idx, by = x -> x[2], rev = false)
     # @warn lines[1:5]
     # k = lines[1][1]
     # delta = inst.K[k].f_bar - abs(f[k])
@@ -77,11 +82,11 @@ function select_lines(inst::Instance,
     lines = [lines[i][1] for i in eachindex(lines)]
 
     batches = Vector{Vector{Any}}()
-    for i in 1:params_w
+    for i in 1:w
         if length(lines) > 0
-            if params_b < length(lines)
-                push!(batches, lines[1:params_b])
-                lines = lines[params_b + 1:end]
+            if b < length(lines)
+                push!(batches, lines[1:b])
+                lines = lines[b + 1:end]
             else
                 push!(batches, lines[1:length(lines)])
                 break
@@ -116,11 +121,12 @@ function comp_viol(inst::Instance,
 end
 
 
-function select!(LB, K, N)
+function select!(params::Parameters, LB, K)
     sort!(LB, by = x -> x.obj)
     # @info [lb.obj for lb in LB]
     # readline()
     # l = floor(Int64, 1.5 * N)
+    N = params.beam_search.num_children_per_level
     N = min(N, length(LB))
     # Select the best l LBs
     # for node in LB
@@ -152,7 +158,7 @@ function add_node!(LB, best_obj, msg, node)
         inserted = setdiff(node.inserted, msg.k)
     end
     candidates = vcat(node.candidates, msg.k)
-    push!(LB, Node{Float64}(msg.obj, msg.viol, inserted, candidates))
+    push!(LB, Node(msg.obj, msg.f, msg.viol, inserted, candidates))
 
     return best_obj
 end

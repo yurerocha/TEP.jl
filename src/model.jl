@@ -94,7 +94,7 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
                 rt_best_bound = root_bound[]
                 # Terminate the optimization process as soon as pre-processing 
                 # and the computation of the root relaxation is finished
-                # GRBterminate(backend(model).optimizer.model.inner)
+                GRBterminate(backend(model).optimizer.model.inner)
             end
         elseif cb_where == GRB_CB_MIPSOL && 
                iseq(incumbent_time, params.solver_time_limit)

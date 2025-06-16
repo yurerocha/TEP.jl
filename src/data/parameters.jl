@@ -42,6 +42,13 @@ Base.@kwdef mutable struct HeuristicParameters
     bs_time_limit = 300
 end
 
+Base.@kwdef mutable struct BeamSearchParameters
+    num_children_per_parent::Int64 = 2 # w
+    num_children_per_level::Int64 = 3 # N
+    num_candidates_per_batch::Int64 = 5
+    num_max_it_wo_impr::Int64 = 20
+end
+
 # TODO: ProgressiveHedging -> PH
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     rho::Float64 = 1.0
@@ -54,9 +61,11 @@ Base.@kwdef mutable struct Parameters
     log_file::String = "log.txt"
     debugging_level::Int64 = 0
     solver_time_limit::Float64 = 3600.0
+    solver_num_threads::Int64 = 8
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()
+    beam_search::BeamSearchParameters = BeamSearchParameters()
     progressive_hedging::ProgressiveHedgingParameters = 
                                                   ProgressiveHedgingParameters()
     rng::MersenneTwister = Random.MersenneTwister(123)

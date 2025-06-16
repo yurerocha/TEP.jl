@@ -169,8 +169,9 @@ function build_candidate_circuits(params::Parameters,
             K[(j, l)] = v
             # Compute the new costs based on the gamma values
             c = params.instance.cost_mult * abs(v.x)
-            n = rand(params.rng, 1:params.instance.max_rand)
-            K[(j, l)].cost = c / (params.instance.num_candidates + 1) + c / n
+            # n = rand(params.rng, 1:params.instance.max_rand)
+            # K[(j, l)].cost = c / (params.instance.num_candidates + 1) + c / n
+            K[(j, l)].cost = c / (params.instance.num_candidates + 1)
         end
     end
     return K

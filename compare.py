@@ -40,8 +40,8 @@ def compare_columns(file1, file2, column_index):
 # Col 15: impr (%)
 # Col 16: heur (s) 
 if __name__ == "__main__":
-    file1 = "tep_rnf_heur copy.md" # //////// = 8
-    file2 = "tep_bs copy.md" # /////////// = 11
+    file1 = "tep_rnf_heur.md" # //////// = 8
+    file2 = "tep_bs.md" # /////////// = 11
     column_index = 13  # Change to the column you want (0-based index)
 
     compare_columns(file1, file2, column_index)

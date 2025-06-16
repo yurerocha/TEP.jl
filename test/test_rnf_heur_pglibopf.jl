@@ -7,7 +7,7 @@ using Random
 params = TEP.Parameters()
 
 start_file = 1 # 40
-end_file = 1 # 62
+end_file = 62 # 62
 log_dir = "test/log_rnf_heur/"
 log_file = log_dir * "tep_rnf_heur.md"
 
@@ -31,7 +31,6 @@ files = TEP.select_files(dir, end_file)
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
 skip = []
-files = ["pglib_opf_case2737sop_k.m"]
 
 for (i, file) in enumerate(files[start_file:end_file])
     if file in skip
@@ -70,8 +69,6 @@ for (i, file) in enumerate(files[start_file:end_file])
         # TODO: Add tuning flag
         TEP.log(params, "Solve the model", true)
         results = TEP.solve!(inst, params, mip)
-
-        readline()
 
         results["build_time"] = build_time
         if isa(results["objective"], Number)
