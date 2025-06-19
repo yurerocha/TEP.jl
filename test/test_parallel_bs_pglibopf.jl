@@ -4,10 +4,11 @@ using TEP
 using MPI
 using Random
 
-start_file = 3 # 40
-end_file = 3 # 62
-log_dir = "test/log_bs3/"
-log_file = log_dir * "tep_bs.md"
+start_file = 55 # 40
+end_file = 55 # 62
+log_dir = "test/log/"
+log_file = log_dir * "tep.md"
+dir = "submodules/pglib-opf"
 
 if isdir(log_dir)
     if !isempty(log_dir)
@@ -22,7 +23,6 @@ rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 
-dir = "submodules/pglib-opf"
 files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
@@ -42,7 +42,7 @@ for (i, file) in enumerate(files[start_file:end_file])
 
     mpiexec(exe -> run(`$exe -n 8 $(Base.julia_cmd()) \
                         --project=$(project_dir) $(parallel_script) \
-                        $log_file $start_file $end_file $log_dir $dir $file `))
+                        $log_file $start_file $end_file $log_dir $dir $file`))
 end
 # mpiexec(exe -> run(`$exe -n 7 $(Base.julia_cmd()) \
 #                     --project=$(project_dir) $(parallel_script)`))

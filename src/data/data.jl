@@ -232,6 +232,7 @@ mutable struct Node # {T <: AbstractFloat}
     # bus_inj::Vector{T}
     inserted::Vector{Any}
     candidates::Vector{Any}
+    ignore::Vector{Any} # Candidate lines whose removal lead to infeasibls sols
 end
 
 mutable struct BSControllerMessage

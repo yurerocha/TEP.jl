@@ -41,19 +41,19 @@ end
 
 Associate ids with indices in a vector.
 """
-function build_buses(mp_data::Dict{String, Any})
+function build_buses(mpc::Dict{String, Any})
     I = Set{Int64}()
     # Get all ids
-    for l in mp_data["load"]
+    for l in mpc["load"]
         push!(I, l[2]["load_bus"])
     end
-    for g in mp_data["gen"]
+    for g in mpc["gen"]
         # If generator is in service
         if g[2]["gen_status"] > 0
             push!(I, g[2]["gen_bus"])
         end
     end
-    for b in mp_data["branch"]
+    for b in mpc["branch"]
         # If branch is in service
         if b[2]["br_status"] > 0
             push!(I, b[2]["f_bus"])
@@ -65,18 +65,18 @@ end
 
 """
     build_loads(params::Parameters, 
-                mp_data::Dict{String, Any})
+                mpc::Dict{String, Any})
 
 Build Vector of loads (Pd) from the MATPOWER file.
 """
 function build_loads(params::Parameters, 
-                     mp_data::Dict{String, Any})
+                     mpc::Dict{String, Any})
     D = Dict{Int64, Float64}()
-    for l in mp_data["load"]
+    for l in mpc["load"]
         D[l[2]["load_bus"]] = params.instance.load_gen_mult * l[2]["pd"]
     end
     if params.model.is_dcp_power_model_en
-        for s in mp_data["shunt"]
+        for s in mpc["shunt"]
             bus = s[2]["shunt_bus"]
             if bus in keys(D)
                 D[bus] += s[2]["gs"] * 1.0 ^ 2
@@ -91,14 +91,14 @@ end
 
 """
     build_gens(params::Parameters, 
-               mp_data::Dict{String, Any})
+               mpc::Dict{String, Any})
 
 Build generation data from MATPOWER file.
 """
 function build_gens(params::Parameters, 
-                    mp_data::Dict{String, Any})
+                    mpc::Dict{String, Any})
     G = Dict{Int64, GeneratorInfo}()
-    for g in mp_data["gen"]
+    for g in mpc["gen"]
         dt = g[2]
         # Machine our of service
         if dt["gen_status"] <= 0
@@ -113,15 +113,15 @@ function build_gens(params::Parameters,
 end
 
 """
-    build_existing_circuits(params::Parameters, mp_data::Dict{String, Any})
+    build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
 
 Build existing lines, gamma values and capacities of circuits.
 """
-function build_existing_circuits(params::Parameters, mp_data::Dict{String, Any})
+function build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
     J = Dict{Tuple{Int64, Int64, Int64}, BranchInfo}()
     # min_gamma = 1e15
     # max_gamma = 0.0
-    for b in mp_data["branch"]
+    for b in mpc["branch"]
         dt = b[2]
         # Branch out of service
         if dt["br_status"] <= 0
@@ -178,31 +178,31 @@ function build_candidate_circuits(params::Parameters,
 end
 
 """
-    function rm_g_quadratic_coeffs!(mp_data)
+    function rm_g_quadratic_coeffs!(mpc)
 
 Remove nonlinear coefficients of the generation terms to be used in the 
 objective function.
 """
-function rm_g_nonlinear_coeffs!(mp_data::Dict{String, Any})
-    for (i, g) in mp_data["gen"]
+function rm_g_nonlinear_coeffs!(mpc::Dict{String, Any})
+    for (i, g) in mpc["gen"]
         if length(g["cost"]) > 0
             new_g = reverse(g["cost"])[1:2]
-            mp_data["gen"][i]["cost"] = reverse(new_g)
+            mpc["gen"][i]["cost"] = reverse(new_g)
         end
     end
     return nothing
 end
 
 """
-    read_reference_bus(params::Parameters, mp_data::Dict{String, Any})
+    read_reference_bus(params::Parameters, mpc::Dict{String, Any})
 
 Read reference bus to instance.
 
 Defaults to 1 if none is found.
 """
-function read_reference_bus(params::Parameters, mp_data::Dict{String, Any})
+function read_reference_bus(params::Parameters, mpc::Dict{String, Any})
     ref_bus = params.instance.ref_bus
-    for b in mp_data["bus"]
+    for b in mpc["bus"]
         if b[2]["bus_type"] == mp_type_ref_bus
             ref_bus = b[2]["bus_i"]
             break

@@ -430,4 +430,19 @@ Reportar a melhora com relação ao custo de inserir todos
 ## Tests
 - log_bs1: params_b = 5
 - log_bs2: params_b = 10
-- log_bs3: params_b = 
+- log_bs3: params_b = 5, flow / cost, partialsort = false
+- log_bs4: params_b = 5, shuffle
+
+## TODO
+- Improve logs
+- https://discourse.julialang.org/t/how-to-save-logging-output-to-a-log-file/14004/3
+- Testar removendo os inseridos cuja remoção não melhore o custo
+- Usar nomes distintos para o log do resolvedor e o log resumido
+- Criar parâmetros para o resolvedor?
+- Começar removendo os mais caros, quando não conseguir melhorar, começar a 
+  remover aleatoriamente
+- Aumentar ou diminuir o tamanho dos batches de acordo com a convergência do
+  algoritmo
+  - Verificar a diferença entre a exec anterior e a atual e. Se maior do que a 
+    anterior armazenada, aumentar o delta. Cc, diminuir. Em ambos os casos, 
+    salvar o valor ao final da execução

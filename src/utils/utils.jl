@@ -175,15 +175,16 @@ function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
              "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
              "| Rt solve (s) | Lower bound | Obj | Gap (%) | Start (s) " *
-             "| Impr (%) | Heur (s) | \n"
-    outstr *= "|:---"^17 * "| \n"
+             "| RNF impr (%) | RNF (s) | BS (s) | \n"
+    outstr *= "|:---"^18 * "| \n"
     log(outputfile, outstr)
 end
 
 function get_keys_results()
     return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
             "status", "root_best_bound", "root_time", "lower_bound", 
-            "objective", "gap", "start_time", "impr_percent", "heur_time"]
+            "objective", "gap", "start_time", "rnf_impr_percent", "rnf_time", 
+            "bs_time"]
 end
 
 """

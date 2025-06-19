@@ -50,51 +50,49 @@ function select_lines(inst::Instance,
                       lp, 
                       node::Node,
                       K)
-    candidates = K
-    lines = Vector{Tuple{Any, Float64}}()
-    # f = get_values(lp.f)
-    if length(node.f) == 0
-        @warn "Tamanho 0"
-        @warn node
-        readline()
-    end
-    for k in candidates
-        # Map to the existing lines
-        j = k[1]
-        # l = ptdf.line_to_idx[j]
-        # r = abs(f[j] / inst.J[j].f_bar)
-        r = node.f[j] / inst.K[k].cost
-        # delta = inst.K[k].f_bar - abs(f[k])
-        # r = delta / inst.K[k].f_bar
-        push!(lines, (k, r))
-    end
+    # Disregard nodes that lead to an infeasible solution
+    candidates = setdiff(K, node.ignore)
+    # lines = Vector{Tuple{Any, Float64}}()
+    # for k in candidates
+    #     # Map to the existing lines
+    #     j = k[1]
+    #     r = inst.K[k].cost * node.f[j]
+    #     push!(lines, (k, r))
+    # end
+    lines = [(k, inst.K[k].cost) for k in candidates]
     # TODO: Normalizar os custos?
 
     w = params.beam_search.num_children_per_parent
     b = params.beam_search.num_candidates_per_batch
     max_idx = min(w * b, length(lines))
-    partialsort!(lines, 1:max_idx, by = x -> x[2], rev = false)
-    # @warn lines[1:5]
-    # k = lines[1][1]
-    # delta = inst.K[k].f_bar - abs(f[k])
-    # @warn  inst.K[k].cost, (1.0 - delta / inst.K[k].f_bar)
-    # readline()
+    partialsort!(lines, 1:max_idx, by = x -> x[2], rev = true)
     lines = [lines[i][1] for i in eachindex(lines)]
 
+    return disjoint_samples(params::Parameters, lines, w, b)
+end
+
+
+"""
+Select m disjoint samples of size n from a vector.
+"""
+function disjoint_samples(params::Parameters, 
+                          lines::Vector, 
+                          m::Int, n::Int)
+    # Shuffle the indices, if needed
+    is_en = params.beam_search.is_shuffle_en
+    indices = is_en ? randperm(length(lines)) : 1:length(lines)
+    selected = lines[indices[1:min(m * n, length(indices))]]
+
+    # Divide the elements into batches
     batches = Vector{Vector{Any}}()
-    for i in 1:w
-        if length(lines) > 0
-            if b < length(lines)
-                push!(batches, lines[1:b])
-                lines = lines[b + 1:end]
-            else
-                push!(batches, lines[1:length(lines)])
-                break
-            end
+    for i in 1:m
+        j = (i - 1)*n + 1
+        if j > length(selected)
+            break
         end
+        push!(batches, selected[j:min(i * n, length(selected))])
     end
 
-    # return [lines[i][1] for i in 1:min(params_w, length(lines))]
     return batches
 end
 
@@ -153,14 +151,18 @@ function add_node!(LB, best_obj, msg, node)
     # inserted = vcat(node.inserted, latest)
     # candidates = setdiff(node.candidates, latest)
     inserted = node.inserted
+    candidates = node.candidates
+    ignore = node.ignore
     if isl(msg.obj, best_obj)
-        best_obj = msg.obj
         inserted = setdiff(node.inserted, msg.k)
+        candidates = vcat(node.candidates, msg.k)
+    elseif !msg.is_feas
+        # If infeasible, place the lines in the ignore list 
+        ignore = vcat(node.ignore, msg.k)
     end
-    candidates = vcat(node.candidates, msg.k)
-    push!(LB, Node(msg.obj, msg.f, msg.viol, inserted, candidates))
+    push!(LB, Node(msg.obj, msg.f, msg.viol, inserted, candidates, ignore))
 
-    return best_obj
+    return nothing
 end
 
 function update_lp(inst::Instance, 

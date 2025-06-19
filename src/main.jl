@@ -98,8 +98,8 @@ function run(logname::String = "log.md")
             end
 
             if is_heur_en
-                results["impr_percent"] = report.improvement_percent
-                results["heur_time"] = report.runtime
+                results["rnf_impr_percent"] = report.improvement_percent
+                results["rnf_time"] = report.runtime
                 results["start_time"] = start_time
             end
             
