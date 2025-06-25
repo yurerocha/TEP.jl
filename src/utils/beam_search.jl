@@ -63,7 +63,8 @@ function select_lines(inst::Instance,
     # TODO: Normalizar os custos?
 
     w = params.beam_search.num_children_per_parent
-    b = params.beam_search.num_candidates_per_batch
+    b = params.beam_search.mult_candidates_per_batch * length(candidates)
+    b = max(ceil(Int64, b), 1)
     max_idx = min(w * b, length(lines))
     partialsort!(lines, 1:max_idx, by = x -> x[2], rev = true)
     lines = [lines[i][1] for i in eachindex(lines)]
@@ -147,17 +148,25 @@ function delete_value!(vec::Vector, val)
     return false
 end
 
-function add_node!(LB, best_obj, msg, node)
+function add_node!(params::Parameters, LB, best_obj, msg, node)
     # inserted = vcat(node.inserted, latest)
     # candidates = setdiff(node.candidates, latest)
     inserted = node.inserted
     candidates = node.candidates
     ignore = node.ignore
-    if isl(msg.obj, best_obj)
+    # TODO: Se o obj for menor do que o obj anterior para o mesmo nó, remover.
+    # Só remover quando melhorar o best obj, pode fazer com que um mesmo batch
+    # seja reavaliado multiplas vezes
+    # TODO: Se não melhorar e !params.beam_search.is_shuffle_en, colocar na
+    # lista de ignore. Fazer testes apenas com essa alteração. Em seguida, fazer
+    # testes trocando os ifs a seguir.
+    if isl(msg.obj, node.obj)
+    # if isl(msg.obj, node.obj)
         inserted = setdiff(node.inserted, msg.k)
         candidates = vcat(node.candidates, msg.k)
-    elseif !msg.is_feas
-        # If infeasible, place the lines in the ignore list 
+    # elseif !msg.is_feas
+    elseif !params.beam_search.is_shuffle_en
+        # If infeasible, place the lines in the ignore list
         ignore = vcat(node.ignore, msg.k)
     end
     push!(LB, Node(msg.obj, msg.f, msg.viol, inserted, candidates, ignore))

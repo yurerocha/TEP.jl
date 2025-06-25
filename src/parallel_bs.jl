@@ -31,17 +31,23 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     inserted_end = 0
     time_beg = time()
     count_lp_updates = 0
+    prev_best_obj = 0.0
     best_obj = 0.0
 
+    # num_candidates_per_batch = params.beam_search.num_candidates_per_batch
+
     it = 1
-    num_it_wo_impr = 0
     for bs_it in 1:params.beam_search.num_max_it
         rm_lines!(inst, params, lp, Set(keys(inst.K)), false)
         add_lines!(inst, params, lp, inserted, true)
         obj = comp_obj(inst, params, lp, inserted)
+        # params.beam_search.num_candidates_per_batch = 
+        #                                             num_candidates_per_batch
 
+        num_it_wo_impr = 0
         if bs_it == 1
             best_obj = obj
+            prev_best_obj = obj
         end
 
         root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K, [])
@@ -76,7 +82,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
                         msg = JQM.get_message(job_answer)
                         node = Q[msg.node_idx]
 
-                        add_node!(LB, best_obj, msg, node)
+                        add_node!(params, LB, best_obj, msg, node)
 
                         if msg.is_feas && isl(msg.obj, best_obj)
                             log(params, "Inserted update", true)
@@ -91,6 +97,21 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
                     end
                 end
             end
+
+            # if isl(best_obj, prev_best_obj)
+            #     params.beam_search.num_candidates_per_batch += 1
+            #     log(params, 
+            #         "Increase $(params.beam_search.num_candidates_per_batch)", 
+            #         true)
+            # else
+            #     params.beam_search.num_candidates_per_batch = 
+            #         ceil(Int64, params.beam_search.num_candidates_per_batch / 2.0)
+            #     log(params, 
+            #         "Decrease $(params.beam_search.num_candidates_per_batch)", 
+            #         true)
+            # end
+            prev_best_obj = best_obj
+
             if has_impr
                 num_it_wo_impr = 0
             else
@@ -118,8 +139,6 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
         else
             log(params, "Change shuffle strategy", true)
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
-            @warn params.beam_search.is_shuffle_en
-            readline()
         end
     end
     elapsed_time = time() - time_beg
@@ -169,6 +188,7 @@ function bs_workers_loop(inst::Instance, params::Parameters)
     if JQM.is_worker_process()
         worker = JQM.Worker()
         # Build the model for the first scenario
+        # Também é possível criar a instância aqui
         lp = build_lp(inst, params)
         while true
             job = JQM.receive_job(worker)
@@ -177,6 +197,7 @@ function bs_workers_loop(inst::Instance, params::Parameters)
                 break
             end
 
+            # TODO: Reduzir os dados em msg para o mínimo necessário
             ins_candidates = setdiff(msg.node.inserted, msg.k)
             # build_obj = comp_build_obj(inst, ins_candidates)
             # function barrier_callback(cb_data, cb_where::Cint)

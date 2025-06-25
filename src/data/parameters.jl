@@ -45,7 +45,7 @@ end
 Base.@kwdef mutable struct BeamSearchParameters
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
-    num_candidates_per_batch::Int64 = 5
+    mult_candidates_per_batch::Float64 = 1e-3
     num_max_it::Int64 = 2
     num_max_it_wo_impr::Int64 = 20
     is_shuffle_en::Bool = true
