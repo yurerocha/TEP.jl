@@ -55,7 +55,7 @@ function build_cats_cases(params::Parameters, num_scenarios::Int64 = 111)
 
     # inst = build_instance(params, NetworkData)
     # scenarios = Vector{Scenario}()
-    mp_files = Vector{Any}()
+    mp_cases = Vector{Any}()
     # p = 1.0 / (num_scenarios)
 
     # results = Vector{Dict{String, Any}}()
@@ -67,11 +67,11 @@ function build_cats_cases(params::Parameters, num_scenarios::Int64 = 111)
             # println("k = $k")
             # println(k)
             # Change renewable generators' pg for the current scenario
-            # update_rgen!(k,NetworkData,gen_data,SolarGeneration,WindGeneration,PMaxOG,SolarCap,WindCap)
-            #println(sum(NetworkData["gen"][string(i)]["pmax"] for i in 1:size(gen_data)[1]))
+            update_rgen!(k,NetworkData,gen_data,SolarGeneration,WindGeneration,PMaxOG,SolarCap,WindCap)
+            # println(sum(NetworkData["gen"][string(i)]["pmax"] for i in 1:size(gen_data)[1]))
 
             # Change load buses' Pd and Qd for the current scenario
-            # update_loads!(k, load_scenarios, NetworkData, load_mapping)
+            update_loads!(k, load_scenarios, NetworkData, load_mapping)
 
             # D = build_loads(params, NetworkData)
             # G = build_gens(params, NetworkData)
@@ -84,7 +84,7 @@ function build_cats_cases(params::Parameters, num_scenarios::Int64 = 111)
             #     # push!(results, (renewable_scenarios[!,1][k], solution["termination_status"]))
             #     push!(results, solution)
             # end
-            push!(mp_files, deepcopy(NetworkData))
+            push!(mp_cases, deepcopy(NetworkData))
 
             #Save solution dictionary to JSON
             # if save_to_JSON == true
@@ -114,5 +114,5 @@ function build_cats_cases(params::Parameters, num_scenarios::Int64 = 111)
     # end
 
     # inst.scenarios = scenarios
-    return mp_files
+    return mp_cases
 end
