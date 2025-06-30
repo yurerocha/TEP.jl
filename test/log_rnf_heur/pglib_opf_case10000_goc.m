@@ -1,0 +1,430 @@
+
+Gurobi 12.0.0 (linux64) logging started Thu Jun 26 12:40:53 2025
+
+Set parameter LogFile to value "test/log_rnf_heur/pglib_opf_case10000_goc.m"
+
+Gurobi 12.0.0 (linux64) logging started Thu Jun 26 12:41:01 2025
+
+Set parameter LogFile to value "test/log_rnf_heur/pglib_opf_case10000_goc.m"
+Set parameter LogToConsole to value 0
+
+Gurobi 12.0.0 (linux64) logging started Thu Jun 26 12:41:05 2025
+
+Set parameter LogFile to value "test/log_rnf_heur/pglib_opf_case10000_goc.m"
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+LogToConsole  0
+Threads  8
+
+Optimize a model with 141480 rows, 103916 columns and 356875 nonzeros
+Model fingerprint: 0xed67d100
+Coefficient statistics:
+  Matrix range     [5e-02, 2e+03]
+  Objective range  [8e+02, 7e+03]
+  Bounds range     [8e-04, 3e+01]
+  RHS range        [6e-05, 1e+03]
+Presolve removed 78757 rows and 67537 columns
+Presolve time: 0.15s
+Presolved: 62723 rows, 36379 columns, 167490 nonzeros
+
+Concurrent LP optimizer: primal simplex, dual simplex, and barrier
+Showing barrier log only...
+
+Ordering time: 0.02s
+
+Barrier statistics:
+ Free vars  : 1777
+ AA' NZ     : 2.349e+05
+ Factor NZ  : 5.913e+05 (roughly 20 MB of memory)
+ Factor Ops : 3.258e+07 (less than 1 second per iteration)
+ Threads    : 6
+
+                  Objective                Residual
+Iter       Primal          Dual         Primal    Dual     Compl     Time
+   0   6.88250835e+12 -8.37799811e+09  8.35e+04 3.48e+06  2.84e+09     0s
+   1   5.98958486e+12 -1.87290279e+10  1.22e+04 3.79e+05  4.49e+08     0s
+   2   1.95028142e+12 -1.46571091e+10  5.49e+02 3.00e+04  6.80e+07     0s
+   3   1.42773274e+11 -1.27501143e+10  3.27e+01 4.70e-03  4.72e+06     0s
+   4   2.91471896e+10 -3.69034070e+09  5.64e+00 2.56e-04  9.90e+05     0s
+   5   4.91456939e+09 -5.91149544e+08  9.06e-01 2.35e-05  1.65e+05     0s
+   6   1.46370246e+09 -3.59561446e+08  2.90e-01 3.04e-05  5.46e+04     0s
+   7   2.48150369e+08 -1.81014645e+08  5.43e-02 2.18e-05  1.27e+04     0s
+   8   5.61206850e+07 -5.57897734e+07  1.24e-02 1.25e-05  3.30e+03     0s
+   9   3.27044389e+07 -1.94350832e+07  7.82e-03 4.05e-05  1.54e+03     0s
+  10   2.24966334e+07 -3.86743748e+06  5.32e-03 6.57e-05  7.75e+02     0s
+  11   8.72839110e+06  6.37442538e+05  1.71e-03 1.32e-04  2.38e+02     0s
+  12   4.37102093e+06  1.67508840e+06  5.21e-04 8.15e-05  7.92e+01     0s
+  13   3.37136959e+06  2.13890199e+06  2.57e-04 3.69e-05  3.62e+01     0s
+  14   2.61176086e+06  2.34546273e+06  4.54e-05 1.59e-05  7.82e+00     0s
+  15   2.44477089e+06  2.44025958e+06  2.11e-06 2.38e-06  1.33e-01     0s
+  16   2.44409142e+06  2.44408467e+06  2.80e-07 8.21e-09  1.98e-04     0s
+  17   2.44408965e+06  2.44408965e+06  4.32e-12 1.16e-10  2.18e-10     0s
+
+Barrier solved model in 17 iterations and 0.39 seconds (0.50 work units)
+Optimal objective 2.44408965e+06
+
+Crossover log...
+
+       8 DPushes remaining with DInf 0.0000000e+00                 0s
+       0 DPushes remaining with DInf 0.0000000e+00                 0s
+
+     302 PPushes remaining with PInf 0.0000000e+00                 0s
+       0 PPushes remaining with PInf 0.0000000e+00                 1s
+
+  Push phase complete: Pinf 0.0000000e+00, Dinf 0.0000000e+00      1s
+
+
+Solved with barrier
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+     313    2.4440897e+06   0.000000e+00   0.000000e+00      1s
+
+Use crossover to convert LP symmetric solution to basic solution...
+Crossover log...
+
+     305 PPushes remaining with PInf 0.0000000e+00                 1s
+       0 PPushes remaining with PInf 0.0000000e+00                 1s
+
+  Push phase complete: Pinf 0.0000000e+00, Dinf 0.0000000e+00      1s
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+     621    2.4440897e+06   0.000000e+00   0.000000e+00      1s
+
+Solved in 621 iterations and 0.90 seconds (1.36 work units)
+Optimal objective  2.444089653e+06
+
+User-callback calls 1206, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+LogToConsole  0
+Threads  8
+
+Optimize a model with 141480 rows, 103916 columns and 346321 nonzeros
+Coefficient statistics:
+  Matrix range     [5e-02, 2e+03]
+  Objective range  [8e+02, 7e+03]
+  Bounds range     [8e-04, 3e+01]
+  RHS range        [6e-05, 1e+03]
+LP warm-start: use basis
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    2.4440897e+06   1.475545e+02   0.000000e+00      0s
+Warning: Markowitz tolerance tightened to 0.0625
+     129    2.5013594e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 129 iterations and 0.31 seconds (0.63 work units)
+Optimal objective  2.501359432e+06
+
+User-callback calls 156, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+LogToConsole  0
+Threads  8
+
+Optimize a model with 141480 rows, 103916 columns and 346343 nonzeros
+Coefficient statistics:
+  Matrix range     [5e-02, 2e+03]
+  Objective range  [8e+02, 7e+03]
+  Bounds range     [8e-04, 3e+01]
+  RHS range        [6e-05, 1e+03]
+LP warm-start: use basis
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0   -7.8943946e+34   2.296730e+34   7.894395e+04      0s
+Warning: Markowitz tolerance tightened to 0.0625
+     127    2.4877247e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 127 iterations and 0.45 seconds (0.92 work units)
+Optimal objective  2.487724734e+06
+
+User-callback calls 311, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+LogToConsole  0
+Threads  8
+
+Optimize a model with 141480 rows, 103916 columns and 346355 nonzeros
+Coefficient statistics:
+  Matrix range     [5e-02, 2e+03]
+  Objective range  [8e+02, 7e+03]
+  Bounds range     [8e-04, 3e+01]
+  RHS range        [6e-05, 1e+03]
+LP warm-start: use basis
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0   -1.3035221e+34   3.746952e+33   1.303522e+04      0s
+Warning: Markowitz tolerance tightened to 0.03125
+     153    2.4779526e+06   0.000000e+00   0.000000e+00      1s
+
+Solved in 153 iterations and 0.55 seconds (1.10 work units)
+Optimal objective  2.477952630e+06
+
+User-callback calls 492, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+LogToConsole  0
+Threads  8
+
+Optimize a model with 141480 rows, 103916 columns and 346361 nonzeros
+Coefficient statistics:
+  Matrix range     [5e-02, 2e+03]
+  Objective range  [8e+02, 7e+03]
+  Bounds range     [8e-04, 3e+01]
+  RHS range        [6e-05, 1e+03]
+LP warm-start: use basis
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    2.4669110e+06   9.810129e+00   0.000000e+00      0s
+       5    2.4828577e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 5 iterations and 0.09 seconds (0.11 work units)
+Optimal objective  2.482857652e+06
+
+User-callback calls 524, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+LogToConsole  0
+Threads  8
+
+Optimize a model with 141480 rows, 103916 columns and 346358 nonzeros
+Coefficient statistics:
+  Matrix range     [5e-02, 2e+03]
+  Objective range  [8e+02, 7e+03]
+  Bounds range     [8e-04, 3e+01]
+  RHS range        [6e-05, 1e+03]
+LP warm-start: use basis
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    2.4811421e+06   1.408823e-01   0.000000e+00      0s
+       2    2.4813443e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 2 iterations and 0.08 seconds (0.10 work units)
+Optimal objective  2.481344263e+06
+
+User-callback calls 553, time in user-callback 0.00 sec
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+LogToConsole  0
+Threads  8
+
+Optimize a model with 141480 rows, 103916 columns and 346356 nonzeros
+Coefficient statistics:
+  Matrix range     [5e-02, 2e+03]
+  Objective range  [8e+02, 7e+03]
+  Bounds range     [8e-04, 3e+01]
+  RHS range        [6e-05, 1e+03]
+LP warm-start: use basis
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    2.4798909e+06   8.617092e-02   0.000000e+00      0s
+       1    2.4805250e+06   0.000000e+00   0.000000e+00      0s
+
+Solved in 1 iterations and 0.08 seconds (0.09 work units)
+Optimal objective  2.480524957e+06
+
+User-callback calls 581, time in user-callback 0.00 sec
+Set parameter SolutionLimit to value 1
+
+Gurobi 12.0.0 (linux64) logging started Thu Jun 26 12:41:09 2025
+
+Set parameter LogFile to value "test/log_rnf_heur/pglib_opf_case10000_goc.m"
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+SolutionLimit  1
+Threads  8
+
+Optimize a model with 141480 rows, 90723 columns and 409647 nonzeros
+Model fingerprint: 0x06c843a7
+Variable types: 64337 continuous, 26386 integer (26386 binary)
+Coefficient statistics:
+  Matrix range     [7e-03, 2e+03]
+  Objective range  [2e+00, 6e+04]
+  Bounds range     [8e-04, 1e+03]
+  RHS range        [6e-05, 1e+03]
+Presolve removed 131782 rows and 79387 columns
+Presolve time: 0.07s
+Presolved: 9698 rows, 11336 columns, 33341 nonzeros
+Variable types: 10747 continuous, 589 integer (0 binary)
+Performing another presolve...
+Presolve removed 2593 rows and 2683 columns
+Presolve time: 0.04s
+Warning: Markowitz tolerance tightened to 0.125
+
+Root relaxation: objective 6.616996e+06, 8802 iterations, 2.53 seconds (4.48 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+*    0     0               0    6616995.8533 6616995.85  0.00%     -    2s
+
+Explored 1 nodes (8802 simplex iterations) in 2.72 seconds (4.72 work units)
+Thread count was 8 (of 20 available processors)
+
+Solution count 1: 6.617e+06 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 6.616995853322e+06, best bound 6.616995853322e+06, gap 0.0000%
+
+User-callback calls 348, time in user-callback 0.00 sec
+Set parameter SolutionLimit to value 2000000000
+Set parameter TimeLimit to value 4.9977778708466406e+02
+Set parameter FeasibilityTol to value 1e-06
+Gurobi Optimizer version 12.0.0 build v12.0.0rc1 (linux64 - "Ubuntu 24.04.2 LTS")
+
+CPU model: 12th Gen Intel(R) Core(TM) i7-12700, instruction set [SSE2|AVX|AVX2]
+Thread count: 20 physical cores, 20 logical processors, using up to 8 threads
+
+Non-default parameters:
+TimeLimit  4.9977778708466406e+02
+Threads  8
+
+Optimize a model with 141480 rows, 90723 columns and 409647 nonzeros
+Model fingerprint: 0x8fc251d0
+Variable types: 64337 continuous, 26386 integer (26386 binary)
+Coefficient statistics:
+  Matrix range     [7e-03, 2e+03]
+  Objective range  [2e+00, 6e+04]
+  Bounds range     [8e-04, 1e+03]
+  RHS range        [6e-05, 1e+03]
+
+MIP start from previous solve produced solution with objective 6.617e+06 (2.68s)
+MIP start from previous solve produced solution with objective 6.617e+06 (2.69s)
+Loaded MIP start from previous solve with objective 6.617e+06
+Processed MIP start in 2.69 seconds (4.85 work units)
+
+Presolve removed 42558 rows and 33727 columns
+Presolve time: 0.72s
+Presolved: 98922 rows, 56996 columns, 303606 nonzeros
+Found heuristic solution: objective 6593326.4533
+Variable types: 35214 continuous, 21782 integer (21782 binary)
+
+Deterministic concurrent LP optimizer: primal and dual simplex (primal and dual model)
+Showing primal log only...
+
+Root relaxation presolved: 98922 rows, 56996 columns, 303606 nonzeros
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+   30185    5.5274060e+05   8.906826e+03   9.045575e+09      5s
+   36297    5.5502812e+05   3.271117e+03   5.997069e+09     10s
+Warning: Markowitz tolerance tightened to 0.03125
+   40560    5.5654905e+05   2.269561e+03   6.594255e+09     15s
+   44582    5.9385258e+05   1.202660e+03   2.805589e+09     20s
+   48510    5.5819352e+05   7.424295e+02   5.239285e+09     25s
+   52274    5.3857634e+05   5.869817e+02   4.752818e+09     30s
+   55887    4.9049670e+05   4.554326e+02   2.681377e+09     35s
+   59395    4.8604529e+05   3.715399e+02   5.693226e+09     40s
+   62865    4.7350987e+05   3.030923e+02   2.138516e+09     45s
+   66427    4.5519950e+05   2.317505e+02   5.864325e+09     50s
+   69865    4.3545319e+05   1.672352e+02   3.576354e+12     55s
+   73332    4.1000746e+05   1.132339e+02   6.591710e+09     60s
+   76775    3.9604526e+05   7.541056e+01   2.279154e+09     65s
+   80968    3.7483388e+05   3.596576e+01   1.045922e+10     70s
+   85634    3.5484983e+05   2.062245e+01   6.538725e+09     75s
+   89231    3.3525171e+05   8.942912e+00   2.869399e+08     80s
+   92716    3.2256308e+05   2.808402e+00   1.333465e+09     85s
+   95863    3.0554458e+05   6.061235e-01   1.880821e+08     90s
+   98218    3.7077820e+06   0.000000e+00   1.025204e+08     94s
+   99272    3.5486179e+06   0.000000e+00   8.442545e+08     95s
+  103380    3.2393710e+06   0.000000e+00   2.612808e+08    100s
+  106568    3.0434408e+06   0.000000e+00   3.723091e+09    105s
+  108850    2.9055474e+06   0.000000e+00   4.739719e+08    110s
+  111270    2.7948364e+06   0.000000e+00   1.887777e+09    115s
+  113560    2.6986489e+06   0.000000e+00   1.543725e+09    120s
+  115925    2.6368421e+06   0.000000e+00   1.891996e+08    125s
+  118230    2.5789832e+06   0.000000e+00   6.899555e+06    130s
+  120584    2.5304350e+06   0.000000e+00   2.548343e+08    135s
+  122994    2.4949155e+06   0.000000e+00   1.726122e+07    140s
+  125485    2.4714376e+06   0.000000e+00   1.156664e+07    145s
+  128275    2.4575245e+06   0.000000e+00   5.251285e+05    150s
+  131485    2.4526695e+06   0.000000e+00   7.964399e+06    155s
+  134965    2.4512257e+06   0.000000e+00   6.713953e+04    160s
+  138745    2.4509277e+06   0.000000e+00   1.991644e+02    165s
+  139178    2.4509261e+06   0.000000e+00   0.000000e+00    166s
+
+Use crossover to convert LP symmetric solution to basic solution...
+
+Root crossover log...
+
+     383 DPushes remaining with DInf 0.0000000e+00               166s
+       0 DPushes remaining with DInf 0.0000000e+00               167s
+
+    2352 PPushes remaining with PInf 0.0000000e+00               167s
+       0 PPushes remaining with PInf 0.0000000e+00               167s
+
+  Push phase complete: Pinf 0.0000000e+00, Dinf 1.2374287e-08    167s
+
+
+Root simplex log...
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+  141914    2.4509261e+06   0.000000e+00   0.000000e+00    167s
+Concurrent spin time: 20.31s (can be avoided by choosing Method=3)
+
+Solved with primal simplex
+
+Root relaxation: objective 2.450926e+06, 141914 iterations, 182.76 seconds (216.31 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 2450926.14    0  624 6593326.45 2450926.14  62.8%     -  188s
+H    0     0                    6486443.6867 2450926.14  62.2%     -  192s
+H    0     0                    6457008.3200 2451851.94  62.0%     -  208s
+     0     0 2451851.94    0  742 6457008.32 2451851.94  62.0%     -  209s
+     0     0 2452408.38    0  738 6457008.32 2452408.38  62.0%     -  216s
+     0     0 2452408.38    0  738 6457008.32 2452408.38  62.0%     -  216s
+     0     0 2452998.61    0  746 6457008.32 2452998.61  62.0%     -  218s
+     0     0 2452998.61    0  747 6457008.32 2452998.61  62.0%     -  218s
+     0     0 2455874.19    0  818 6457008.32 2455874.19  62.0%     -  259s
+     0     0 2455888.91    0  811 6457008.32 2455888.91  62.0%     -  261s
+
+Cutting planes:
+  Gomory: 34
+  Implied bound: 317
+  MIR: 634
+  RLT: 1
+  Relax-and-lift: 1
+
+Explored 1 nodes (160969 simplex iterations) in 300.04 seconds (351.71 work units)
+Thread count was 8 (of 20 available processors)
+
+Solution count 4: 6.45701e+06 6.48644e+06 6.59333e+06 6.617e+06 
+
+Solve interrupted
+Best objective 6.457008319990e+06, best bound 2.455888911350e+06, gap 61.9655%
+
+User-callback calls 115864, time in user-callback 0.28 sec
