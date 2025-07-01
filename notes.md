@@ -432,6 +432,9 @@ Reportar a melhora com relação ao custo de inserir todos
 - log_bs2: params_b = 10
 - log_bs3: params_b = 5, flow / cost, partialsort = false
 - log_bs4: params_b = 5, shuffle
+- log_bs5: params_b = 5, shuffle + insertion per cost with partial sort
+- log_bs6: params_b = 5, shuffle + insertion per cost with partial sort + 
+  changes in batch size
 
 ## TODO
 - Improve logs
@@ -446,3 +449,36 @@ Reportar a melhora com relação ao custo de inserir todos
   - Verificar a diferença entre a exec anterior e a atual e. Se maior do que a 
     anterior armazenada, aumentar o delta. Cc, diminuir. Em ambos os casos, 
     salvar o valor ao final da execução
+  - Fazer essa checagem por nível
+- Selecionar aleatoriamente a partir de uma lista mais restrita?
+- Struct para os parâmetros do resolvedor (consistência)
+
+## Improvements
+- Montar uma versão reduzida do modelo, apenas com os candidatos que sobraram da 
+  primeira heurístca
+- Testes: No rnf, deixar rodar até resolver a raiz e o tempo de execução tenha 
+  ultrapassado 300s
+
+## Bug
+- Cálculo do improvement ratio
+
+## TODO
+- Salvar o resultado de check_sol em um arquivo com o mesmo nome da instância, 
+  em uma pasta específica
+- No RNF, testar outras regras, e.g., remover os mais custosos e inserir onde 
+  está violando mais
+- Nas últimas 10 instâncias da pglibopf, rodar com tempo limite de 30min
+- Rodar as intâncias CATS com tempo limite de 30min
+- Antes dos testes acima, rodar a versão construindo todos
+- Verificar o motivo da solução inicial construindo todos os candidatos na 
+  instância CATS 10 não ter sido aceita
+
+## Apresentação
+- Destacar que na instância 8387, está tendo um problema no cálculo do gap. Para
+  isso, pegar o caso tep_bs7 (bs pglibopf com 5min) e bs_pglibopf (30min) que, 
+  apesar de haver melhora no obj, o gap piora
+- E quanto ao best bound negativo?
+- Plot pglibopf 35-62 construindo todos, rnf e bs, 5min e 30min
+- Plot cats construindo todos, rnf e bs, 5min e 30min
+- Será que agora faz sentido utilizar GPUs?
+- Por vacilo, apaguei os logs do tep_bs_pglibopf_30.md

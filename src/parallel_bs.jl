@@ -25,11 +25,12 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     # Build initial solution
     start, report, inserted, candidates = build_solution(inst, params)
 
+    remaining_time = params.beam_search.time_limit - report.runtime
+
     K = collect(candidates)
 
     inserted_beg = length(inserted)
     inserted_end = 0
-    time_beg = time()
     count_lp_updates = 0
     prev_best_obj = 0.0
     best_obj = 0.0
@@ -53,8 +54,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
         root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K, [])
         Q = [root]
         while true
-            if isg(time() - start_time, 
-                params.heuristic.bs_time_limit - report.runtime)
+            if isg(time() - start_time, remaining_time)
                 log(params, "BS Time limit reached", true)
                 break
             end
@@ -92,7 +92,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
                             inserted_end = length(LB[end].inserted)
                             @warn it, msg.obj, 
                                 inserted_end, 
-                                time() - time_beg
+                                time() - start_time
                         end
                     end
                 end
@@ -133,15 +133,14 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
         end
 
         if bs_it >= params.beam_search.num_max_it || 
-           isg(time() - start_time, params.heuristic.bs_time_limit - 
-                                    report.runtime)
+           isg(time() - start_time, remaining_time)
             break
         else
             log(params, "Change shuffle strategy", true)
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
-    elapsed_time = time() - time_beg
+    elapsed_time = time() - start_time
 
     JQM.send_termination_message()
     JQM.mpi_finalize()
@@ -163,14 +162,17 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     start = Start(Set(inserted), f, g)
 
     log(params, "Fix the start of the model", true)
-    start_time = @elapsed (fix_start!(inst, params, mip, start))
+    fix_start_time = @elapsed (fix_start!(inst, params, mip, start))
+
+    params.beam_search.time_limit = max(remaining_time - elapsed_time, 0.0)
 
     log(params, "Solve the model", true)
     results = solve!(inst, params, mip)
 
-    results["rnf_impr_percent"] = report.improvement_percent
     results["rnf_time"] = report.runtime
-    results["start_time"] = start_time
+    results["rnf_rm_percent"] = report.removed_percent
+    results["rnf_impr_percent"] = report.improvement_percent
+    results["fix_start_time"] = fix_start_time
     results["bs_time"] = elapsed_time
 
     results["build_time"] = build_time

@@ -4,26 +4,27 @@ using TEP
 using MPI
 using Random
 
-start_file = 55 # 40
-end_file = 55 # 62
-log_dir = "test/log/"
-log_file = log_dir * "tep.md"
-dir = "submodules/pglib-opf"
-
-if isdir(log_dir)
-    if !isempty(log_dir)
-        rm(log_dir, recursive = true)
-    end
-end
-mkdir(log_dir)
+include("utils.jl")
 
 params = TEP.Parameters()
+
+start_file = 52 # 40
+end_file = 62 # 62
+log_dir = "test/log_bs_pglibopf_30"
+log_file = "$log_dir/tep_bs_pglibopf_30.md"
+dir = "submodules/pglib-opf"
+
+try
+    rm_dir(log_dir)
+catch e
+    @warn e
+end
 
 rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 
-files = TEP.select_files(dir, end_file)
+files = select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
