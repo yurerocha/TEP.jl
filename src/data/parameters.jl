@@ -39,7 +39,6 @@ Base.@kwdef mutable struct HeuristicParameters
     gl_ins::Float64 = 0.1 
     # 1 - g lines; 2 - d lines; 3 - g or d lines; 4 - !(g or d) lines
     gl_strategy::Int64 = 3
-    bs_time_limit = 300
 end
 
 Base.@kwdef mutable struct BeamSearchParameters
@@ -49,6 +48,7 @@ Base.@kwdef mutable struct BeamSearchParameters
     num_max_it::Int64 = 2
     num_max_it_wo_impr::Int64 = 20
     is_shuffle_en::Bool = true
+    time_limit::Float64 = 1800.0
 end
 
 # TODO: ProgressiveHedging -> PH

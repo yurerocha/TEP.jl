@@ -72,8 +72,7 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     incumbent_time = params.solver_time_limit
     rt_best_bound = 0.0
     mip_start_gap = Inf64
-    # Callback to get the root node best bound and runtime (if), and the time to 
-    # find the first incumbent solution (elseif)
+    has_solved_rt_relaxation = false
     function root_node_callback(cb_data, cb_where::Cint)
         # if cb_where == GRB_CB_MESSAGE
         #     buff = Vector{Cchar}(undef, 100)
@@ -81,6 +80,17 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
         #     buff = [Char(abs(ch)) for ch in buff]
         #     @warn String(buff)
         #     readline()
+        if has_solved_rt_relaxation
+            runtime = Ref{Cdouble}()
+            GRBcbget(cb_data, cb_where, GRB_CB_RUNTIME, runtime)
+            if isg(runtime[], params.beam_search.time_limit)
+                # Terminate as soon as pre-processing and the computation of the 
+                # root relaxation is finished and the beam search time limit is 
+                # reached
+                GRBterminate(backend(model).optimizer.model.inner)
+            end
+        end
+
         if cb_where == GRB_CB_MIPNODE
             node_count = Ref{Cdouble}()
             GRBcbget(cb_data, cb_where, GRB_CB_MIPNODE_NODCNT, node_count)
@@ -92,9 +102,8 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
 
                 rt_runtime = runtime[]
                 rt_best_bound = root_bound[]
-                # Terminate the optimization process as soon as pre-processing 
-                # and the computation of the root relaxation is finished
-                GRBterminate(backend(model).optimizer.model.inner)
+                has_solved_rt_relaxation = true
+                # GRBterminate(backend(model).optimizer.model.inner)
             end
         elseif cb_where == GRB_CB_MIPSOL && 
                iseq(incumbent_time, params.solver_time_limit)

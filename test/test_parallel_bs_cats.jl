@@ -1,35 +1,40 @@
 module TestBeamSearchCATS
 
-using TEP
 using MPI
 using Random
+using TEP
 
-num_scenarios = 1
-log_dir = "test/log_bs_cats/"
-log_file = log_dir * "tep_bs_cats.md"
-dir = "../submodules/CATS-CaliforniaTestSystem/MATPOWER/"
-file = "CaliforniaTestSystem.m"
+include("utils.jl")
 
-if isdir(log_dir)
-    if !isempty(log_dir)
-        rm(log_dir, recursive = true)
-    end
+start_file = 1
+end_file = 10
+# log_dir = "test/log_bs_cats"
+log_dir = "test/log"
+log_file = "$log_dir/tep_bs_cats.md"
+dir = "input"
+base_file = "CaliforniaTestSystem"
+
+try
+    rm_dir(log_dir)
+catch e
+    @warn e
 end
-mkdir(log_dir)
-
-params = TEP.Parameters()
 
 rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 
+files = select_files(dir, end_file)
+# Sort files so that the smallest instances are solved first
+sort!(files, by=x->parse(Int, match(r"\d+", x).match))
+
 project_dir = dirname(Base.active_project())
 parallel_script = joinpath(@__DIR__, "parallel_bs_cats.jl")
 
-for scen in 1:num_scenarios
+for (i, file) in enumerate(files[start_file:end_file])
     mpiexec(exe -> run(`$exe -n 8 $(Base.julia_cmd()) \
                         --project=$(project_dir) $(parallel_script) \
-                        $log_file $scen $log_dir $dir $file`))
+                        $log_file $log_dir $dir $file`))
 end
 
 end # module

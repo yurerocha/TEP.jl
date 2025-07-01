@@ -509,9 +509,9 @@ function fix_start!(inst::Instance,
     JuMP.set_attribute(mip.jump_model, 
                        MOI.RawOptimizerAttribute("SolutionLimit"), 
                        1)
-    JuMP.set_attribute(mip.jump_model, 
-                       MOI.RawOptimizerAttribute("FeasibilityTol"), 
-                       1e-3)
+    # JuMP.set_attribute(mip.jump_model, 
+    #                    MOI.RawOptimizerAttribute("FeasibilityTol"), 
+    #                    1e-3)
 
     if params.model.is_symmetry_en
         fix_for_symmetry_contrs(inst, params, mip, start)

@@ -559,7 +559,8 @@ function check_sol(inst::Instance, tep::TEPModel, md)
                 to = k[1][3]
                 if !iseq(f[k], br_info.gamma * (th[fr] - th[to]))
                     println(file, 
-                         "T error k:$k f:$(f[k]) t_fr:$(th[fr]) t_to:$(th[to])")
+                            "T error k:$k f:$(f[k]) Gamma: $(br_info.gamma) " * 
+                            " t_fr:$(th[fr]) t_to:$(th[to])")
                     is_feas = false
                 end
             elseif !iseq(f[k], 0.0)

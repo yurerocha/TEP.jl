@@ -175,16 +175,16 @@ function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
              "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
              "| Rt solve (s) | Lower bound | Obj | Gap (%) | Start (s) " *
-             "| RNF impr (%) | RNF (s) | BS (s) | \n"
-    outstr *= "|:---"^18 * "| \n"
+             "| RNF (s) | RNF rm (%) | RNF impr (%) | BS (s) | \n"
+    outstr *= "|:---"^19 * "| \n"
     log(outputfile, outstr)
 end
 
 function get_keys_results()
     return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
             "status", "root_best_bound", "root_time", "lower_bound", 
-            "objective", "gap", "start_time", "rnf_impr_percent", "rnf_time", 
-            "bs_time"]
+            "objective", "gap", "fix_start_time", "rnf_time", "rnf_rm_percent", 
+            "rnf_impr_percent", "bs_time"]
 end
 
 """
@@ -526,23 +526,6 @@ function config_dcp_pm_tests!(params::Parameters)
     params.model.is_dcp_power_model_en = true
     params.log_level = 0
 end    
-
-"""
-    select_files(path::String, num_files::Int64)
-
-Benchmark: https://github.com/power-grid-lib/pglib-opf
-"""
-function select_files(path::String, num_files::Int64)
-    files = []
-    for file in readdir(path)
-        if endswith(file, ".m")
-            push!(files, file)
-        end
-    end
-    # Sort files so that instances with less buses are sovled first
-    sort!(files, by=x->parse(Int, match(r"\d+", x).match))
-    return files[1:num_files]
-end
 
 """
     comp_sparsity(A)
