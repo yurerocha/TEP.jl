@@ -54,6 +54,7 @@ function build_solution(inst::Instance,
     @warn "Runtime", report.runtime
     @warn "Rm ratio", report.removed_percent
     @warn "Impr ratio", report.improvement_percent
+    @warn 1.0 * length(start.inserted) / length(inst.K)
 
     return start, report, inserted, removed
 end

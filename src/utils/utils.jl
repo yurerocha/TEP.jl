@@ -124,37 +124,38 @@ end
 
 """
     comp_existing_incident_flows(inst::Instance,
-                                 f::Vector{JuMP.VariableRef}, 
+                                 tep::TEPModel, 
                                  i::Int64)
 
 Compute the incident flow at node i for the existing lines.
 """
-function comp_existing_incident_flows(inst::Instance, f, i::Int64)
+function comp_existing_incident_flows(inst::Instance, tep::TEPModel, i::Int64)
     e = AffExpr(0.0)
     for j in keys(inst.J)
         if j[2] == i
-            add_to_expression!(e, -1.0, f[j])
+            add_to_expression!(e, -1.0, tep.f[j])
         elseif j[3] == i
-            add_to_expression!(e, 1.0, f[j])
+            add_to_expression!(e, 1.0, tep.f[j])
         end
     end
     return e
 end
 
 """
-    comp_candidate_incident_flows(inst::Instance,
-                                  f::Vector{JuMP.VariableRef}, 
+    comp_candidate_incident_flows(inst::Instance, 
+                                  tep::TEPModel, 
                                   i::Int64)
 
 Compute the incident flow at node i for the candidate lines.
 """
-function comp_candidate_incident_flows(inst::Instance, f,  i::Int64)
+function comp_candidate_incident_flows(inst::Instance, tep::TEPModel, i::Int64)
     e = AffExpr(0.0)
-    for k in keys(inst.K)
+    K = (tep isa MIPModel) ? keys(inst.K) : inst.restricted_K
+    for k in K
         if k[1][2] == i
-            add_to_expression!(e, -1.0, f[k])
+            add_to_expression!(e, -1.0, tep.f[k])
         elseif k[1][3] == i
-            add_to_expression!(e, 1.0, f[k])
+            add_to_expression!(e, 1.0, tep.f[k])
         end
     end
     return e
@@ -374,7 +375,9 @@ function comp_f_residuals(inst::Instance,
         # j = map_to_existing_line(inst, k)
         delta = inst.K[k].f_bar - abs(f[k])
         # if !isl(delta, 0.0) # diff >= 0.0
-        r = delta * inst.K[k].cost / inst.K[k].f_bar
+        # r = delta * inst.K[k].cost / inst.K[k].f_bar
+        # r = (delta + inst.K[k].cost) / inst.K[k].f_bar
+        r = delta / inst.K[k].f_bar
         push!(f_residuals, (k, r))
         # end
     end

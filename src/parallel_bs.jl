@@ -4,26 +4,31 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     # Config JobQueueMPI
     JQM = JobQueueMPI
     JQM.mpi_init()
+
+    start_time = time()
+    report = nothing
+    inserted = nothing
+    candidates = nothing
+    if JQM.is_controller_process()
+        # Build initial solution
+        _, report, inserted, candidates = build_solution(inst, params)
+        inst.restricted_K = Set(inserted)
+    end
+
     JQM.mpi_barrier()
 
     @warn JQM.is_worker_process(), JQM.num_workers()
     if JQM.is_worker_process()
         params.solver_num_threads = 1
         bs_workers_loop(inst, params)
-        JQM.mpi_barrier()
         return nothing
     end
 
     # Initialization
     controller = JQM.Controller(JQM.num_workers())
 
-    start_time = time()
-
     params.solver_num_threads = 8
     lp = build_lp(inst, params)
-
-    # Build initial solution
-    start, report, inserted, candidates = build_solution(inst, params)
 
     remaining_time = params.beam_search.time_limit - report.runtime
 
@@ -39,8 +44,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
 
     it = 1
     for bs_it in 1:params.beam_search.num_max_it
-        rm_lines!(inst, params, lp, Set(keys(inst.K)), false)
-        add_lines!(inst, params, lp, inserted, true)
+        update_lp!(inst, params, lp, inserted)
         obj = comp_obj(inst, params, lp, inserted)
         # params.beam_search.num_candidates_per_batch = 
         #                                             num_candidates_per_batch
@@ -154,7 +158,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     params.solver_num_threads = 8
     build_time = @elapsed (mip = build_mip(inst, params))
 
-    update_lp(inst, params, lp, inserted, it)
+    update_lp!(inst, params, lp, inserted)
     # g_bus, bus_inj, viol_update = get_data(inst, lp, ptdf)
 
     f = get_values(lp.f)
@@ -190,7 +194,7 @@ function bs_workers_loop(inst::Instance, params::Parameters)
     if JQM.is_worker_process()
         worker = JQM.Worker()
         # Build the model for the first scenario
-        # Também é possível criar a instância aqui
+        # lp = LPModel(params)
         lp = build_lp(inst, params)
         while true
             job = JQM.receive_job(worker)
@@ -222,8 +226,7 @@ function bs_workers_loop(inst::Instance, params::Parameters)
 
             # Update the model according to the current data
             # rm_lines!(inst, params, lp, Set(keys(inst.K)), false)
-            rm_lines!(inst, params, lp, keys(inst.K), false)
-            add_lines!(inst, params, lp, ins_candidates, true)
+            update_lp!(inst, params, lp, ins_candidates)
 
             obj = const_infinite
             is_feas = false

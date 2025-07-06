@@ -174,16 +174,16 @@ function add_node!(params::Parameters, LB, best_obj, msg, node)
     return nothing
 end
 
-function update_lp(inst::Instance, 
-                   params::Parameters, 
-                   lp::LPModel, 
-                   inserted, 
-                   it::Int64)
-    log(params, "It update $it", true)
-    rm_lines!(inst, params, lp, keys(inst.K), false)
+function update_lp!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel, 
+                    inserted)
+    # log(params, "It update $it", true)
+    rm_lines!(inst, params, lp, inst.restricted_K, false)
     add_lines!(inst, params, lp, inserted, true)
     
-    return termination_status(lp.jump_model) == MOI.OPTIMAL
+    # return termination_status(lp.jump_model) == MOI.OPTIMAL
+    return nothing
 end
 
 function get_data(inst::Instance, 

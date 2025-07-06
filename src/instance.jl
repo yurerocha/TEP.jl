@@ -26,7 +26,7 @@ function build_instance(params::Parameters,
 
     scenarios = [Scenario(1.0, D, G)]
 
-    return Instance(I, J, K, 
+    return Instance(I, J, K, keys(K), 
                     length(I), length(J), length(K),
                     ref_bus, 
                     scenarios, length(scenarios))

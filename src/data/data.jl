@@ -59,6 +59,7 @@ mutable struct Instance
     I::Set{Int64} # Buses
     J::Dict{Tuple3I, BranchInfo} # Existing lines
     K::Dict{Tuple{Tuple3I, Int64}, BranchInfo} # Candidates
+    restricted_K::Set{Tuple{Tuple3I, Int64}} # Restricted K
     # f_bar::Vector{Float64} # Capacity of circuits
     # gamma::Vector{Float64} # Susceptance of circuits
     # Dtheta_limits::Vector{Tuple{Float64, Float64}} 

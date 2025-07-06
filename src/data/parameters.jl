@@ -48,7 +48,7 @@ Base.@kwdef mutable struct BeamSearchParameters
     num_max_it::Int64 = 2
     num_max_it_wo_impr::Int64 = 20
     is_shuffle_en::Bool = true
-    time_limit::Float64 = 1800.0
+    time_limit::Float64 = 300.0
 end
 
 # TODO: ProgressiveHedging -> PH

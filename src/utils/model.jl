@@ -56,7 +56,7 @@ function add_vars!(inst::Instance, params::Parameters, scen::Int64, lp::LPModel)
                                 base_name = "s[$j]")
         end
     end
-    for k in keys(inst.K)
+    for k in inst.restricted_K
         lp.f[k] = @variable(lp.jump_model, base_name = "f[$k]")
         if params.model.is_lp_model_s_var_set_req
             lp.s[k] = @variable(lp.jump_model, 
@@ -205,7 +205,7 @@ function add_thermal_limits_cons!(inst::Instance,
         end
     end
     # Candidates
-    for k in keys(inst.K)
+    for k in inst.restricted_K
         if params.model.is_lp_model_s_var_set_req
             s = lp.s[k]
             @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
@@ -257,7 +257,7 @@ function add_ohms_law_cons!(inst::Instance, lp::LPModel)
                                 base_name = "ol.j[$j]")
     end
     # Ohm's law for candidate circuits
-    for k in keys(inst.K)
+    for k in inst.restricted_K
         # Dtheta = lp.theta[k[1][2]] - lp.theta[k[1][3]]
         lp.f_cons[k] = @constraint(lp.jump_model, 
                         lp.f[k] == inst.K[k].gamma * lp.Dtheta[k[1][2:3]],
@@ -309,9 +309,9 @@ function add_fkl_cons!(inst::Instance,
                        scen::Int64, 
                        tep::TEPModel)
     for i in inst.I
-        e = comp_candidate_incident_flows(inst, tep.f, i)
+        e = comp_candidate_incident_flows(inst, tep, i)
         # e += comp_existing_incident_flows(inst, f, i)
-        add_to_expression!(e, comp_existing_incident_flows(inst, tep.f, i))
+        add_to_expression!(e, comp_existing_incident_flows(inst, tep, i))
         
         # Some buses may not have load or generation
         d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
