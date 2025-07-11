@@ -10,7 +10,14 @@ end
 
 function update_loads!(k,load_scenarios,NetworkData,load_mapping)
     for i in 1:size(load_scenarios)[1]
-        load_split = split(load_scenarios[i,k],"+")
+        # load_split = split(load_scenarios[i,k],"+")
+        load = ""
+        if load_scenarios isa DataFrames.DataFrame
+            load = load_scenarios[i,k]
+        else
+            load = load_scenarios[i][k]
+        end
+        load_split = split(load, "+")
         P = Base.parse(Float64,load_split[1])
         Q = Base.parse(Float64,split(load_split[2],"i")[1])
         if haskey(load_mapping,i)

@@ -70,13 +70,14 @@ end
 Build Vector of loads (Pd) from the MATPOWER file.
 """
 function build_loads(params::Parameters, 
-                     mpc::Dict{String, Any})
+                     load::Dict{String, Any}, 
+                     shunt::Dict{String, Any})
     D = Dict{Int64, Float64}()
-    for l in mpc["load"]
+    for l in load
         D[l[2]["load_bus"]] = params.instance.load_gen_mult * l[2]["pd"]
     end
     if params.model.is_dcp_power_model_en
-        for s in mpc["shunt"]
+        for s in shunt
             bus = s[2]["shunt_bus"]
             if bus in keys(D)
                 D[bus] += s[2]["gs"] * 1.0 ^ 2
@@ -96,9 +97,9 @@ end
 Build generation data from MATPOWER file.
 """
 function build_gens(params::Parameters, 
-                    mpc::Dict{String, Any})
+                    gen::Dict{String, Any})
     G = Dict{Int64, GeneratorInfo}()
-    for g in mpc["gen"]
+    for g in gen
         dt = g[2]
         # Machine our of service
         if dt["gen_status"] <= 0

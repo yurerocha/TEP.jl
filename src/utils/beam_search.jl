@@ -63,10 +63,13 @@ function select_lines(inst::Instance,
     # TODO: Normalizar os custos?
 
     w = params.beam_search.num_children_per_parent
-    b = params.beam_search.mult_candidates_per_batch * length(candidates)
+    b = params.beam_search.candidates_per_batch_mult * length(candidates)
     b = max(ceil(Int64, b), 1)
-    max_idx = min(w * b, length(lines))
-    partialsort!(lines, 1:max_idx, by = x -> x[2], rev = true)
+    batch_size = round(Int64, 
+                       params.beam_search.restricted_batch_mult * (w * b))
+    max_idx = min(batch_size, length(lines))
+    # partialsort!(lines, 1:max_idx, by = x -> x[2], rev = true)
+    sort!(lines, by = x -> x[2], rev = true)
     lines = [lines[i][1] for i in eachindex(lines)]
 
     return disjoint_samples(params::Parameters, lines, w, b)
@@ -81,6 +84,7 @@ function disjoint_samples(params::Parameters,
                           m::Int, n::Int)
     # Shuffle the indices, if needed
     is_en = params.beam_search.is_shuffle_en
+    lines = lines[1:round(Int64, 0.5 * length(lines))]
     indices = is_en ? randperm(length(lines)) : 1:length(lines)
     selected = lines[indices[1:min(m * n, length(indices))]]
 

@@ -44,11 +44,12 @@ end
 Base.@kwdef mutable struct BeamSearchParameters
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
-    mult_candidates_per_batch::Float64 = 1e-3
+    candidates_per_batch_mult::Float64 = 1e-3
     num_max_it::Int64 = 2
     num_max_it_wo_impr::Int64 = 20
     is_shuffle_en::Bool = true
-    time_limit::Float64 = 300.0
+    time_limit::Float64 = 1800.0
+    restricted_batch_mult::Float64 = 2.0
 end
 
 # TODO: ProgressiveHedging -> PH
@@ -62,7 +63,7 @@ Base.@kwdef mutable struct Parameters
     log_level::Int64 = 1
     log_file::String = "log.txt"
     debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 3600.0
+    solver_time_limit::Float64 = 10.0
     solver_num_threads::Int64 = 8
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()

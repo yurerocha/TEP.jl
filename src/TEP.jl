@@ -44,6 +44,7 @@ include("utils/instance.jl")
 include("utils/model.jl")
 include("utils/ptdf.jl")
 include("utils/ph.jl")
+include("utils/stochastic_instance.jl")
 include("utils/utils.jl")
 
 include("main.jl")
@@ -57,5 +58,6 @@ include("parallel_ph.jl")
 include("ptdf.jl")
 include("serial_bs.jl")
 include("serial_ph.jl")
+include("stochastic_instance.jl")
 
 end
