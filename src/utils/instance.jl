@@ -65,7 +65,8 @@ end
 
 """
     build_loads(params::Parameters, 
-                mpc::Dict{String, Any})
+                load::Dict{String, Any}, 
+                shunt::Dict{String, Any})
 
 Build Vector of loads (Pd) from the MATPOWER file.
 """
@@ -91,13 +92,11 @@ function build_loads(params::Parameters,
 end
 
 """
-    build_gens(params::Parameters, 
-               mpc::Dict{String, Any})
+    build_gens(params::Parameters, mpc::Dict{String, Any})
 
 Build generation data from MATPOWER file.
 """
-function build_gens(params::Parameters, 
-                    gen::Dict{String, Any})
+function build_gens(params::Parameters, gen::Dict{String, Any})
     G = Dict{Int64, GeneratorInfo}()
     for g in gen
         dt = g[2]
@@ -175,6 +174,7 @@ function build_candidate_circuits(params::Parameters,
             K[(j, l)].cost = c / (params.instance.num_candidates + 1)
         end
     end
+
     return K
 end
 
@@ -191,6 +191,7 @@ function rm_g_nonlinear_coeffs!(mpc::Dict{String, Any})
             mpc["gen"][i]["cost"] = reverse(new_g)
         end
     end
+
     return nothing
 end
 

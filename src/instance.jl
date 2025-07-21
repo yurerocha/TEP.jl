@@ -11,12 +11,13 @@ function build_instance(params::Parameters,
     G = build_gens(params, mpc["gen"])
 
     sumD = sum(d for d in values(D))
-    sumG = sum([g.upper_bound for g in values(G)])
+    sum_lb = sum([g.lower_bound for g in values(G)])
+    sum_ub = sum([g.upper_bound for g in values(G)])
     
-    log(params, "$sumD, $sumG, $(sumD / sumG)", true)
+    log(params, "$sumD, $sum_lb, $sum_ub, $(sumD / sum_ub)", true)
     if params.debugging_level == 1
-        @assert isl(sum(d for d in values(D)), 
-                    sum([g.upper_bound for g in values(G)]))
+        @assert isl(sum_lb, sumD)
+        @assert isl(sumD, sum_ub)
     end
 
     J = build_existing_circuits(params, mpc)

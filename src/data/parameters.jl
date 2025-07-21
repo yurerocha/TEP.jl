@@ -16,7 +16,7 @@ Base.@kwdef mutable struct InstanceParameters
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
     max_rand::Int64 = 100 # Max random value for the new cost (see text)
     num_candidates::Int64 = 2 # Number of candidates available per existing line
-    cost_mult::Float64 = 1e4 # Value multiplied by gamma to build the costs
+    cost_mult::Float64 = 1e4 # Value multiplied by x to build the costs
     ref_bus::Int64 = 1 # Default reference bus used when none is found
 end
 

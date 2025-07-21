@@ -43,8 +43,8 @@ function build_stochastic_instance(params::Parameters,
     wind_gen = dict_hourly_data(hourly_data, scenarios, "Wind")
 
     # ----- Build base PGLib-OPF scen generators with renewable penetration ----
-    solar_cap, solar_avg = comp_ren_cap_and_avg(mpc, gen_data, "solar")
-    wind_cap, wind_avg = comp_ren_cap_and_avg(mpc, gen_data, "wind")
+    solar_cap, solar_avg = comp_ren_and_avg_cap(mpc, gen_data, "solar")
+    wind_cap, wind_avg = comp_ren_and_avg_cap(mpc, gen_data, "wind")
     gen_cap = sum(g["pmax"] for (i, g) in mpc["gen"])
 
     pglib_mpc = PowerModels.parse_file(filename)
@@ -70,26 +70,29 @@ function build_stochastic_instance(params::Parameters,
         update_loads!(scen, load_scens, mpc, load_mapping)
 
         D = scale_loads(params, mpc, pglib_mpc, G)
-        # D = deepcopy(pglib_mpc["load"])
-        
-        @warn sum(g["pmin"] for g in values(G))
-        @warn sum(g["pmax"] for g in values(G))
-        @warn sum(d["pd"] for d in values(D))
 
         # Parse to the Instance format
         D = build_loads(params, D, pglib_mpc["shunt"])
         G = build_gens(params, G)
-        # D = build_loads(params, pglib_mpc["load"], pglib_mpc["shunt"])
-        # G = build_gens(params, pglib_mpc["gen"])
+
+        sumD = sum(d for d in values(D))
+        sum_lb = sum([g.lower_bound for g in values(G)])
+        sum_ub = sum([g.upper_bound for g in values(G)])
+
+        # log(params, "$sumD, $sum_lb, $sum_ub, $(sumD / sum_ub)", true)
+        if params.debugging_level == 1
+            @assert isl(sum_lb, sumD)
+            @assert isl(sumD, sum_ub)
+        end
 
         push!(inst.scenarios, Scenario(prob, D, G))
-        mip = build_mip(inst, params, i)
-        solve!(inst, params, mip)
-        if JuMP.has_values(mip.jump_model)
-            x = get_values(mip.x)
-            @warn "$(round(Int64, sum([v for (_, v) in x])))/$(length(x))"
-        end
-        readline()
+        # mip = build_mip(inst, params, i)
+        # solve!(inst, params, mip)
+        # if JuMP.has_values(mip.jump_model)
+        #     x = get_values(mip.x)
+        #     @warn "$(round(Int64, sum([v for (_, v) in x])))/$(length(x))"
+        # end
+        # readline()
     end
     
     return inst
