@@ -65,7 +65,9 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
         set_attribute(model, 
                       MOI.RawOptimizerAttribute("TimeLimit"), 
                       params.solver_time_limit)
-        set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-6)
+        # set_attribute(model, MOI.RawOptimizerAttribute("IntFeasTol"), 1e-9)
+        # set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-9)
+        # set_attribute(model, MOI.RawOptimizerAttribute("OptimalityTol"), 1e-9)
     end
 
     rt_runtime = 0.0
@@ -147,11 +149,11 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
             gap = 100.0 * JuMP.relative_gap(model)
         end
 
-        grb_model = JuMP.backend(model)
-        is_feas = check_sol(inst, mip, grb_model)
-        if !is_feas 
-            status = "MODEL_ERROR"
-        end
+        # grb_model = JuMP.backend(model)
+        # is_feas = check_sol(inst, mip, grb_model)
+        # if !is_feas 
+        #     status = "MODEL_ERROR"
+        # end
     # elseif status == MOI.INFEASIBLE_OR_UNBOUNDED
     #     grb_model = backend(model)
     #     # relaxobjtype = 2: the objective of the feasibility relaxation is to 
@@ -171,6 +173,12 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     #     GRBoptimize(grb_model)
     #     check_sol(inst, mip, grb_model)
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
+        # grb_model = backend(model)
+        # GRBreset(grb_model, 1)
+        # GRPoptimize(grb_model)
+        # set_attribute(grb_model, 
+        #               MOI.RawOptimizerAttribute("DualReductions"), 
+        #               0)
         # TODO: Add param to compute conflict when infeasible
         # https://jump.dev/JuMP.jl/stable/manual/solutions/#Conflicts
         compute_conflict!(model)

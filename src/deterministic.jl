@@ -20,12 +20,13 @@ function solve_deterministic!(inst::Instance, params::Parameters)
         subproblems[scen] = subproblem
     end
     add_non_anticipativity_cons!(inst, mip.jump_model, subproblems)
-    results = solve!(params, mip)
+    results = solve!(inst, params, mip)
 
     if has_values(mip.jump_model)
         for scen in 1:inst.num_scenarios
             update_cache_incumbent!(cache, scen, subproblems[scen])
-            println("Scen#$(scen): $(cache.scenarios[scen].state.x))")
+            x = cache.scenarios[scen].state.x
+            println("Scen#$(scen): $(round(Int64, sum(x)))/$(length(x))")
         end
     end
 

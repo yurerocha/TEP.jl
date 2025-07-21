@@ -482,3 +482,21 @@ Reportar a melhora com relação ao custo de inserir todos
 - Plot cats construindo todos, rnf e bs, 5min e 30min
 - Será que agora faz sentido utilizar GPUs?
 - Por vacilo, apaguei os logs do tep_bs_pglibopf_30.md
+
+## TODO
+- Para cada gerador renovável na cats, calcular a porcentagem da sua capacidade 
+com relação à capacidade total de geração
+- Fazer o mesmo para a instância base da pglib
+- Para cada gerador renovável da cats
+
+Não só a capacidade de geração renovável com relação à geração total tem que
+bater, mas também a quantidade de geradores com relação à quantidade total
+
+Calcular a capacidade média de geração dos geradores renováveis
+Enquanto a razão de capacidade for menor do que a da cats
+- Em cada iteração, selecionar o candidato cuja capacidade mais se aproxime à 
+capacidade média de geração
+
+## Bug instâncias?
+- Não construindo nenhum candidato
+- Não alterar as demandas negativas

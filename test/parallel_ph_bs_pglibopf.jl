@@ -1,0 +1,37 @@
+module TestProgressiveHedgingBeamSearchPGLibOPF
+
+using TEP
+using Test
+using JuMP
+using PowerModels
+
+path = "submodules/pglib-opf/"
+# num_tests = 10
+# files = TEP.select_files(path, num_tests)
+# file = "pglib_opf_case3_lmbd.m"
+file = "pglib_opf_case162_ieee_dtc.m"
+
+params = TEP.Parameters()
+
+@testset "[Parallel Progressive Hedging and Beam Search] PG Lib OPF" begin
+    TEP.log(params, "Test $file")
+
+    inst = TEP.build_stochastic_instance(params, path * file)
+    
+    params.log_file *= "/" * TEP.get_inst_name(file) * ".txt"
+
+    cache_ph = TEP.run_parallel_ph!(inst, params)
+    if TEP.isl(cache_ph.best_convergence_delta, 
+                params.progressive_hedging.convergence_eps)
+        cache_de, results_de = TEP.solve_deterministic!(inst, params)
+        if results_de[3] == MOI.OPTIMAL
+            x_ph = cache_ph.scenarios[1].state.x
+            x_de = cache_de.scenarios[1].state.x
+            for i in eachindex(x_ph)
+                @test TEP.iseq(x_ph[i], x_de[i])
+            end
+        end
+    end
+end
+
+end # module

@@ -101,7 +101,7 @@ function build_gens(params::Parameters,
     G = Dict{Int64, GeneratorInfo}()
     for g in gen
         dt = g[2]
-        # Machine our of service
+        # Machine out of service
         if dt["gen_status"] <= 0
             continue
         end

@@ -8,6 +8,9 @@ function config!(params::Parameters, tep::TEPModel)
     set_attribute(tep.jump_model, 
                   MOI.RawOptimizerAttribute("Threads"), 
                   params.solver_num_threads)
+    set_attribute(tep.jump_model, 
+                  MOI.RawOptimizerAttribute("DualReductions"), 
+                  0)
     if params.model.optimizer == Gurobi.Optimizer
         set_attribute(tep.jump_model, 
                       MOI.RawOptimizerAttribute("LogFile"), params.log_file)

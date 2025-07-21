@@ -1,4 +1,4 @@
-module TestPGLibOPF
+module TestProgressiveHedgingPGLibOPF
 
 using TEP
 using Test

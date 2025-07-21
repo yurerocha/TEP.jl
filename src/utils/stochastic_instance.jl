@@ -1,27 +1,47 @@
 """
-    select_ren(pglib_mpc::Dict{String, Any}, 
-               cats_ren_ratio::Float64, 
-               candidates::Set{String})
+    select_ren!(pglib_mpc::Dict{String, Any}, 
+                cats_ren_avg::Float64, 
+                cats_ren_ratio::Float64, 
+                candidates::Set{String})
 
 Randomly select generators from the PGLib-OPF system to act as renewable 
 generators.
 
 The generation profile from the corresponding CATS scenario is preserved.
 """
-function select_ren(pglib_mpc::Dict{String, Any}, 
-                    cats_ren_ratio::Float64, 
-                    candidates::Set{String})
+function select_ren!(pglib_mpc::Dict{String, Any}, 
+                     cats_ren_avg::Float64, 
+                     cats_ren_ratio::Float64, 
+                     candidates::Set{String})
     gen_cap = sum(g["pmax"] for (i, g) in pglib_mpc["gen"])
     ren_cap = 0.0
     ren_index = Set{String}()
     while isl(ren_cap / gen_cap, cats_ren_ratio) && length(candidates) > 0
-        k = rand(candidates)
-        pglib_mpc["gen"][k]["pmin"] = 0.0
-        ren_cap += pglib_mpc["gen"][k]["pmax"]
+        k = select_cand(pglib_mpc, cats_ren_avg, candidates)
         pop!(candidates, k)
-        push!(ren_index, k)
+        # Machine in service
+        if pglib_mpc["gen"][k]["gen_status"] > 0
+            ren_cap += pglib_mpc["gen"][k]["pmax"]
+            push!(ren_index, k)
+        end
     end
+
     return ren_index
+end
+
+function select_cand(pglib_mpc::Dict{String, Any}, 
+                     cats_ren_avg::Float64, 
+                     candidates::Set{String})
+    sel_k = 0
+    min_delta = const_infinite
+    for k in candidates
+        delta = abs(pglib_mpc["gen"][k]["pmax"] - cats_ren_avg) 
+        if isl(delta, min_delta)
+            sel_k = k
+            min_delta = delta
+        end
+    end
+    return sel_k
 end
 
 """
@@ -43,6 +63,7 @@ function scale_ren_gen!(scen::Int64,
                         cats_ren_gen::Dict{Int64, Float64}, 
                         cats_ren_cap::Float64)
     for k in pglib_ren_gen_indices
+        G[k]["pmin"] = 0.0
         G[k]["pmax"] = comp_gen(cats_ren_gen[scen], 
                                 pglib_mpc["baseMVA"], 
                                 pglib_mpc["gen"][k]["pmax"], 
@@ -66,6 +87,32 @@ function comp_gen(ren_gen::Float64,
     return ren_gen/baseMVA * gen/cap
 end
 
+function scale_gen_lb!(params::Parameters, 
+                       cats_mpc::Dict{String, Any}, 
+                       pglib_mpc::Dict{String, Any}, 
+                       G::Dict{String, Any})
+    gen_lb = sum(g["pmin"] for (i, g) in cats_mpc["gen"])
+    gen_ub = sum(g["pmax"] for (i, g) in cats_mpc["gen"])
+    cats_ratio = gen_lb / gen_ub
+
+    gen_lb = sum(g["pmin"] for (i, g) in G)
+    gen_ub = sum(g["pmax"] for (i, g) in G)
+    new_ratio = gen_lb / gen_ub
+
+    m = cats_ratio / new_ratio
+    for (k, g) in G
+        G[k]["pmin"] = m * g["pmin"]
+    end
+
+    if params.debugging_level == 1
+        gen_lb = sum(g["pmin"] for (_, g) in G)
+        @warn cats_ratio, gen_lb / gen_ub
+        @assert iseq(cats_ratio, gen_lb / gen_ub)
+    end
+
+    return nothing
+end
+
 """
     scale_loads(params::Parameters, 
                 cats_mpc::Dict{String, Any}, 
@@ -79,15 +126,26 @@ function scale_loads(params::Parameters,
                      cats_mpc::Dict{String, Any}, 
                      pglib_mpc::Dict{String, Any}, 
                      G::Dict{String, Any})
+    sum_load = sum(l["pd"] for (i, l) in pglib_mpc["load"])
+    gen_cap = sum(g["pmax"] for (i, g) in pglib_mpc["gen"])
+    pglib_ratio = sum_load / gen_cap
+
     sum_load = sum(l["pd"] for (i, l) in cats_mpc["load"])
     gen_cap = sum(g["pmax"] for (i, g) in cats_mpc["gen"])
-    cat_ratio = sum_load / gen_cap
+    cats_ratio = sum_load / gen_cap
 
     sum_load = sum(l["pd"] for (i, l) in pglib_mpc["load"])
     gen_cap = sum(g["pmax"] for (i, g) in G)
-    pglib_ratio = sum_load / gen_cap
+    new_ratio = sum_load / gen_cap
 
-    m = cat_ratio / pglib_ratio
+    cats_m = cats_ratio / new_ratio
+    pglib_m = pglib_ratio / new_ratio
+    
+    # @warn "Cats m: $cats_m"
+    # @warn "Pglib m: $pglib_m"
+    # readline()
+
+    m = cats_m
     D = deepcopy(pglib_mpc["load"])
     for (k, l) in pglib_mpc["load"]
         D[k]["pd"] = m * l["pd"]
@@ -95,26 +153,31 @@ function scale_loads(params::Parameters,
 
     if params.debugging_level == 1
         sum_load = sum(d["pd"] for (k, d) in D)
-        @assert iseq(cat_ratio, sum_load / gen_cap)
+        @warn cats_ratio, sum_load / gen_cap
+        @assert iseq(cats_ratio, sum_load / gen_cap)
     end
 
     return D
 end
 
 """
-    comp_ren_cap(mpc::Dict{String, Any}, 
-                 gen_data::DataFrame, 
-                 ren_type::String)
+    comp_ren_cap_and_avg(mpc::Dict{String, Any}, 
+                         gen_data::DataFrame, 
+                         ren_type::String)
 
 Compute the renewable generation capacity.
 """
-function comp_ren_cap(mpc::Dict{String, Any}, 
-                      gen_data::DataFrames.DataFrame, 
-                      ren_type::String)
+function comp_ren_cap_and_avg(mpc::Dict{String, Any}, 
+                              gen_data::DataFrames.DataFrame, 
+                              ren_type::String)
     gen_indices = [g for g in 1:size(gen_data)[1] if occursin(ren_type, 
                                                lowercase(gen_data.FuelType[g]))]
+    
+    # Renewable generation capacity
+    rcap = sum(g["pmax"] for (i, g) in mpc["gen"] if g["index"] in gen_indices)
+    cap = sum(g["pmax"] for (i, g) in mpc["gen"])
 
-    return sum(g["pmax"] for (i, g) in mpc["gen"] if g["index"] in gen_indices)
+    return rcap, rcap / length(gen_indices)
 end
 
 """

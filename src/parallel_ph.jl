@@ -15,7 +15,7 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     JQM.mpi_barrier()
 
     if JQM.is_worker_process()
-        workers_loop(inst, params)
+        ph_workers_loop(inst, params)
         JQM.mpi_barrier()
         return nothing
     end
@@ -76,7 +76,7 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     return cache
 end
 
-function workers_loop(inst::Instance, params::Parameters)
+function ph_workers_loop(inst::Instance, params::Parameters)
     JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
