@@ -63,8 +63,9 @@ Base.@kwdef mutable struct Parameters
     log_level::Int64 = 1
     log_file::String = "log.txt"
     debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 50.0
+    solver_time_limit::Float64 = 3600.0
     solver_num_threads::Int64 = 8
+    stochastic_inst_round_digits::Int64 = 5
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()

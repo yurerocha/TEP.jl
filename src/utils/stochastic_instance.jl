@@ -46,18 +46,20 @@ function select_cand(pglib_mpc::Dict{String, Any},
 end
 
 """
-    scale_ren_gen!(scen::Int64, 
-                    G::Dict{String, Any}, 
-                    pglib_mpc::Dict{String, Any}, 
-                    pglib_ren_gen_indices::Set{String}, 
-                    cats_ren_gen::Dict{Int64, Float64}, 
-                    cats_ren_cap::Float64)
+    scale_ren_gen!(params::Parameters, 
+                   scen::Int64, 
+                   G::Dict{String, Any}, 
+                   pglib_mpc::Dict{String, Any}, 
+                   pglib_ren_gen_indices::Set{String}, 
+                   cats_ren_gen::Dict{Int64, Float64}, 
+                   cats_ren_cap::Float64)
 
 Scale the capacity of renewable generators in a PGLIB-OPF scenario according 
 to a constant involving renewable generation computed for the associated CATS
 scenario.
 """
-function scale_ren_gen!(scen::Int64, 
+function scale_ren_gen!(params::Parameters, 
+                        scen::Int64, 
                         G::Dict{String, Any}, 
                         pglib_mpc::Dict{String, Any}, 
                         pglib_ren_gen_indices::Set{String}, 
@@ -65,10 +67,11 @@ function scale_ren_gen!(scen::Int64,
                         cats_ren_cap::Float64)
     for k in pglib_ren_gen_indices
         G[k]["pmin"] = 0.0
-        G[k]["pmax"] = comp_gen(cats_ren_gen[scen], 
-                                pglib_mpc["baseMVA"], 
-                                pglib_mpc["gen"][k]["pmax"], 
-                                cats_ren_cap)
+        g = comp_gen(cats_ren_gen[scen], 
+                     pglib_mpc["baseMVA"], 
+                     pglib_mpc["gen"][k]["pmax"], 
+                     cats_ren_cap)
+        G[k]["pmax"] = round(g, digits = params.stochastic_inst_round_digits)
     end
     return nothing
 end
@@ -85,7 +88,7 @@ function comp_gen(ren_gen::Float64,
                   baseMVA::Float64, 
                   gen::Float64, 
                   cap::Float64)
-    return round(ren_gen/baseMVA * gen/cap, digits = 5)
+    return ren_gen/baseMVA * gen/cap
 end
 
 """
@@ -102,18 +105,23 @@ function scale_gen_lb!(params::Parameters,
                        cats_mpc::Dict{String, Any}, 
                        pglib_mpc::Dict{String, Any}, 
                        G::Dict{String, Any})
-    gen_lb = sum(g["pmin"] for (i, g) in cats_mpc["gen"] if g["gen_status"] > 0)
-    gen_ub = sum(g["pmax"] for (i, g) in cats_mpc["gen"] if g["gen_status"] > 0)
+    gen_lb = sum(g["pmin"] for (_, g) in cats_mpc["gen"] if g["gen_status"] > 0)
+    gen_ub = sum(g["pmax"] for (_, g) in cats_mpc["gen"] if g["gen_status"] > 0)
     cats_ratio = gen_lb / gen_ub
 
-    gen_lb = sum(g["pmin"] for (i, g) in G if g["gen_status"] > 0)
-    gen_ub = sum(g["pmax"] for (i, g) in G if g["gen_status"] > 0)
+    gen_lb = sum(g["pmin"] for (_, g) in G if g["gen_status"] > 0)
+    gen_ub = sum(g["pmax"] for (_, g) in G if g["gen_status"] > 0)
     new_ratio = gen_lb / gen_ub
+
+    if iseq(gen_ub, 0.0) || iseq(new_ratio, 0.0)
+        return nothing
+    end
 
     m = cats_ratio / new_ratio
     for (k, g) in G
         if g["gen_status"] > 0
-            G[k]["pmin"] = round(m * g["pmin"], digits = 5)
+            G[k]["pmin"] = round(m * g["pmin"], 
+                                 digits = params.stochastic_inst_round_digits)
         end
     end
 
@@ -139,19 +147,24 @@ function scale_loads(params::Parameters,
                      cats_mpc::Dict{String, Any}, 
                      pglib_mpc::Dict{String, Any}, 
                      G::Dict{String, Any})
-    sum_load = sum(l["pd"] for (i, l) in cats_mpc["load"])
-    gen_cap = sum(g["pmax"] for (i, g) in cats_mpc["gen"])
+    sum_load = sum(l["pd"] for (_, l) in cats_mpc["load"])
+    gen_cap = 
+            sum(g["pmax"] for (_, g) in cats_mpc["gen"] if g["gen_status"] > 0)
     cats_ratio = sum_load / gen_cap
 
-    sum_load = sum(l["pd"] for (i, l) in pglib_mpc["load"])
-    gen_cap = sum(g["pmax"] for (i, g) in G)
+    sum_load = sum(l["pd"] for (_, l) in pglib_mpc["load"])
+    gen_cap = sum(g["pmax"] for (_, g) in G if g["gen_status"] > 0)
     new_ratio = sum_load / gen_cap
 
-    m = cats_ratio / new_ratio
-
     D = deepcopy(pglib_mpc["load"])
+    if iseq(gen_cap, 0.0) || iseq(new_ratio, 0.0)
+        return D
+    end
+
+    m = cats_ratio / new_ratio
     for (k, l) in pglib_mpc["load"]
-        D[k]["pd"] = round(m * l["pd"], digits = 5)
+        D[k]["pd"] = round(m * l["pd"], 
+                           digits = params.stochastic_inst_round_digits)
     end
 
     if params.debugging_level == 1

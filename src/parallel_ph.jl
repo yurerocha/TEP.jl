@@ -80,7 +80,7 @@ function ph_workers_loop(inst::Instance, params::Parameters)
     JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
-        # Build the model for the first scenario
+        # Build model for the first scenario
         current_model_scen = 1
         mip = build_mip(inst, params, current_model_scen)
         set_state!(mip, mip.x, mip.g)

@@ -12,7 +12,7 @@ Build stochastic instance considering a set of days
 """
 function build_stochastic_instance(params::Parameters, 
                                    filename::String, 
-                                   days::Set{Int64} = Set([79]))
+                                   days::Set{Int64} = Set([79, 171, 265, 355]))
     log(params, "Build stochastic instance", true)
     # -------------- Set the scenarios based on the selected days --------------
     scenarios = Vector{Int64}()
@@ -57,13 +57,16 @@ function build_stochastic_instance(params::Parameters,
     # ------------------------ Build multiple scenarios ------------------------
     inst = build_instance(params, pglib_mpc)
     inst.scenarios = []
-    prob = 1.0 / length(scenarios)
+    inst.num_scenarios = length(scenarios)
+    prob = 1.0 / inst.num_scenarios
     for (i, scen) in enumerate(scenarios)
         G = deepcopy(pglib_mpc["gen"])
-        scale_ren_gen!(scen, G, pglib_mpc, 
+        scale_ren_gen!(params, scen, G, pglib_mpc, 
                        solar_gen_indices, 
                        solar_gen, solar_cap)
-        scale_ren_gen!(scen, G, pglib_mpc, wind_gen_indices, wind_gen, wind_cap)
+        scale_ren_gen!(params, scen, G, pglib_mpc, 
+                       wind_gen_indices, 
+                       wind_gen, wind_cap)
         scale_gen_lb!(params, mpc, pglib_mpc, G)
 
         # Update the loads in the CATS mpc according to the current scenario
@@ -76,14 +79,16 @@ function build_stochastic_instance(params::Parameters,
         G = build_gens(params, G)
 
         sumD = sum(d for d in values(D))
-        sum_lb = sum([g.lower_bound for g in values(G)] if g["gen_status"] > 0)
-        sum_ub = sum([g.upper_bound for g in values(G)] if g["gen_status"] > 0)
+        sum_lb = sum(g.lower_bound for g in values(G))
+        sum_ub = sum(g.upper_bound for g in values(G))
 
         # log(params, 
         #     "Scen#$i: $sumD, $sum_lb, $sum_ub, $(sumD / sum_ub)", 
         #     true)
         if params.debugging_level == 1
+            @warn sum_lb, sumD
             @assert isl(sum_lb, sumD)
+            @warn sumD, sum_ub
             @assert isl(sumD, sum_ub)
         end
 
