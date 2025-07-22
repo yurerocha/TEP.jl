@@ -430,6 +430,7 @@ function comp_g_obj(params::Parameters,
                     costs::Vector{Float64}) where 
                                         T <: Union{Float64, JuMP.VariableRef}
     l = length(costs)
+    costs = abs.(costs)
     if l == 0
         return 0.0
     elseif l == 1

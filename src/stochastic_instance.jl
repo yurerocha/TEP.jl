@@ -76,10 +76,12 @@ function build_stochastic_instance(params::Parameters,
         G = build_gens(params, G)
 
         sumD = sum(d for d in values(D))
-        sum_lb = sum([g.lower_bound for g in values(G)])
-        sum_ub = sum([g.upper_bound for g in values(G)])
+        sum_lb = sum([g.lower_bound for g in values(G)] if g["gen_status"] > 0)
+        sum_ub = sum([g.upper_bound for g in values(G)] if g["gen_status"] > 0)
 
-        # log(params, "$sumD, $sum_lb, $sum_ub, $(sumD / sum_ub)", true)
+        # log(params, 
+        #     "Scen#$i: $sumD, $sum_lb, $sum_ub, $(sumD / sum_ub)", 
+        #     true)
         if params.debugging_level == 1
             @assert isl(sum_lb, sumD)
             @assert isl(sumD, sum_ub)
