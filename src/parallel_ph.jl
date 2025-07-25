@@ -101,7 +101,7 @@ function ph_workers_loop(inst::Instance, params::Parameters)
                 update_model_obj!(params, msg.cache, msg.scen, mip)
             end
 
-            solve!(params, mip)
+            solve!(inst, params, mip)
             
             ret_msg = WorkerMessage(get_state_values(mip), msg.it, msg.scen)
 

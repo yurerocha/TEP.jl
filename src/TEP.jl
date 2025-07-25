@@ -37,7 +37,7 @@ include("data/data.jl")
 include("ext/test_eval_functions.jl")
 include("ext/test_eval.jl")
 
-include("utils/beam_search.jl")
+include("utils/bs.jl")
 include("utils/deterministic.jl")
 # include("utils/drawing.jl")
 include("utils/instance.jl")
