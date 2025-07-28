@@ -56,6 +56,7 @@ mutable struct BranchInfo
 end
 
 mutable struct Instance
+    name::String
     I::Set{Int64} # Buses
     J::Dict{Tuple3I, BranchInfo} # Existing lines
     K::Dict{Tuple{Tuple3I, Int64}, BranchInfo} # Candidates

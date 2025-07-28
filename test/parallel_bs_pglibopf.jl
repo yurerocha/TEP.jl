@@ -15,11 +15,10 @@ log_dir = ARGS[4]
 dir = ARGS[5]
 file = ARGS[6]
 
-inputfile = "$dir/$file"
+filepath = "$dir/$file"
 params.log_file = "$log_dir/$file"
 
-mp_data = PowerModels.parse_file(inputfile)
-inst = TEP.build_instance(params, mp_data)
+inst = TEP.build_instance(params, filepath)
 
 results = TEP.init_results()
 

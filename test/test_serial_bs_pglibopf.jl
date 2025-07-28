@@ -42,11 +42,10 @@ for (i, file) in enumerate(files[start_file:end_file])
     end
     TEP.log(params, "Test $file num $(start_file + i - 1)", true)
 
-    inputfile = "$dir/$file"
+    filepath = "$dir/$file"
     params.log_file = "$log_dir/$file"
     
-    mp_data = PowerModels.parse_file(inputfile)
-    inst = TEP.build_instance(params, mp_data)
+    inst = TEP.build_instance(params, filepath)
     
     results = TEP.init_results()
     

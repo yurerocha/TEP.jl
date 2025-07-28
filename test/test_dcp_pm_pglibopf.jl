@@ -24,11 +24,11 @@ eps = 1e-3
         
         # params.log_file = "log/" * TEP.get_inst_name(file) * ".txt"
 
-        mp_data = PowerModels.parse_file(path * file)
+        filepath = path * file
+
+        mp_data = PowerModels.parse_file(filepath)
         # pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
         # TEP.print_constrs(pm.model, "TEP.jl/model2.lp")
-
-        TEP.rm_g_nonlinear_coeffs!(mp_data)
 
         # Run DC-OPF
         dc_opf = PowerModels.solve_opf(mp_data, 
@@ -37,7 +37,7 @@ eps = 1e-3
                                        params.model.optimizer)
         
         # Run TEP
-        inst = TEP.build_instance(params, mp_data)
+        inst = TEP.build_instance(params, filepath)
         mip = TEP.build_mip(inst, params)
         # force_solution(inst, mip, dc_opf["solution"], mp_data)
         # TEP.print_constrs(mip.jump_model, "TEP.jl/model1.lp")

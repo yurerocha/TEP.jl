@@ -1,7 +1,7 @@
 
 """
     build_stochastic_instance(params::Parameters, 
-                              filename::String, 
+                              filepath::String, 
                               days::Set{Int64} = Set([79, 171, 265, 355]))
 
 Build stochastic instance considering a set of days
@@ -11,14 +11,14 @@ Build stochastic instance considering a set of days
 - Verão: 21 de dezembro (solstício de verão)
 """
 function build_stochastic_instance(params::Parameters, 
-                                   filename::String, 
-                                   days::Set{Int64} = Set([79, 171, 265, 355]))
+                                   filepath::String, 
+                                   days::Set{Int64} = Set([79]))
     log(params, "Build stochastic instance", true)
     # -------------- Set the scenarios based on the selected days --------------
     scenarios = Vector{Int64}()
     for d in days
-        s = (d - 1) * 24 + 1
-        e = d * 24
+        s = (d - 1) * 2 + 1
+        e = d * 2
         scenarios = vcat(scenarios, collect(range(s, e)))
     end
     # start_scen = 8649
@@ -47,7 +47,7 @@ function build_stochastic_instance(params::Parameters,
     wind_cap, wind_avg = comp_ren_and_avg_cap(mpc, gen_data, "wind")
     gen_cap = sum(g["pmax"] for (i, g) in mpc["gen"])
 
-    pglib_mpc = PowerModels.parse_file(filename)
+    pglib_mpc = PowerModels.parse_file(filepath)
     candidates = Set(keys(pglib_mpc["gen"]))
     solar_gen_indices = select_ren!(pglib_mpc, solar_cap / gen_cap, 
                                     solar_avg, candidates)
@@ -55,7 +55,7 @@ function build_stochastic_instance(params::Parameters,
                                    wind_avg, candidates)
 
     # ------------------------ Build multiple scenarios ------------------------
-    inst = build_instance(params, pglib_mpc)
+    inst = build_instance(params, filepath)
     inst.scenarios = []
     inst.num_scenarios = length(scenarios)
     prob = 1.0 / inst.num_scenarios

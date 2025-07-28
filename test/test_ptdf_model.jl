@@ -21,8 +21,7 @@ eps = 1e-1
 
         # params.log_file = "log/" * TEP.get_inst_name(file) * ".txt"
 
-        mp_data = PowerModels.parse_file(path * file)
-        inst = TEP.build_instance(params, mp_data)
+        inst = TEP.build_instance(params, path * file)
         
         ptdf = TEP.build_ptdf(inst, params, T = Float64)
         JuMP.optimize!(ptdf.jump_model)

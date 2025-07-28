@@ -24,7 +24,7 @@ function build_model(inst::Instance,
                      params::Parameters, 
                      scen::Int64, 
                      tep::TEPModel)
-    config!(params, tep)
+    config!(inst, params, scen, tep)
 
     add_vars!(inst, params, scen, tep)
     add_g_vars!(inst, params, scen, tep)
@@ -85,12 +85,12 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
         if has_solved_rt_relaxation
             runtime = Ref{Cdouble}()
             GRBcbget(cb_data, cb_where, GRB_CB_RUNTIME, runtime)
-            if isg(runtime[], params.beam_search.time_limit)
-                # Terminate as soon as pre-processing and the computation of the 
-                # root relaxation is finished and the beam search time limit is 
-                # reached
-                GRBterminate(backend(model).optimizer.model.inner)
-            end
+            # Terminate as soon as pre-processing and the computation of the 
+            # root relaxation is finished and the beam search time limit is 
+            # reached
+            # if isg(runtime[], params.beam_search.time_limit)
+            #     GRBterminate(backend(model).optimizer.model.inner)
+            # end
         end
 
         if cb_where == GRB_CB_MIPNODE
@@ -143,6 +143,7 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     if JuMP.has_values(model)
         lower_bound = JuMP.objective_value(model)
         obj = JuMP.objective_value(model)
+        @warn obj
         if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED
             gap = 0.0
         else # if status == MOI.TIME_LIMIT

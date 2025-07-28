@@ -10,10 +10,8 @@ include("utils.jl")
 
 params = TEP.Parameters()
 
-# start_file = 4
-# end_file = 4
-start_file = 30
-end_file = 33
+start_file = 4
+end_file = 62
 dir = "submodules/pglib-opf/"
 # num_tests = 10
 # files = TEP.select_files(path, num_tests)

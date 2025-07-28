@@ -2,7 +2,6 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     log(params, "Parallel beam search heuristic", true)
 
     # Config JobQueueMPI
-    JQM = JobQueueMPI
     JQM.mpi_init()
 
     start_time = time()

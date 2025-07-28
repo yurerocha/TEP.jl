@@ -55,12 +55,11 @@ TEP.log_header(log_file)
         tl = time_limit[i]
         TEP.log(params, "Processing $file $(start_file + i - 1) $tl", true)
     
-        inputfile = "$(dir)/$file"
+        filepath = "$(dir)/$file"
         params.log_file = "$log_dir/$file"
         params.solver_time_limit = tl
     
-        mp_data = PowerModels.parse_file(inputfile)
-        inst = TEP.build_instance(params, mp_data)
+        inst = TEP.build_instance(params, filepath)
     
         mip = nothing
         build_time = 0.0

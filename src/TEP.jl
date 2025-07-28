@@ -2,9 +2,12 @@ module TEP
 
 # using BenchmarkTools
 # using BFloat16s
+using CSV
+using DataFrames
 using Dates
 using Distributions
 using Gurobi
+using JSON
 using JuMP
 using LinearAlgebra
 using MPI
@@ -15,9 +18,9 @@ using PowerModels
 using Random
 using SparseArrays
 # External files in instance/ext
-using CSV, JSON
-using DataFrames
 using JobQueueMPI
+
+const JQM = JobQueueMPI
 
 # utils/drawing.jl
 # using Colors
@@ -45,6 +48,7 @@ include("utils/model.jl")
 include("utils/ptdf.jl")
 include("utils/ph.jl")
 include("utils/stochastic_instance.jl")
+include("utils/tests.jl")
 include("utils/utils.jl")
 
 include("main.jl")

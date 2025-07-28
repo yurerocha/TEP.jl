@@ -10,7 +10,6 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     log(params, "Parallel solution strategy", true)
 
     # Config JobQueueMPI
-    JQM = JobQueueMPI
     JQM.mpi_init()
     JQM.mpi_barrier()
 
@@ -63,6 +62,7 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
             log(params, "Convergence reached: $(cache.best_convergence_delta)")
             break
         end
+        readline()
     end
 
     for scen in 1:inst.num_scenarios
@@ -93,7 +93,7 @@ function ph_workers_loop(inst::Instance, params::Parameters)
 
             # Update the model according to the current scenario
             if msg.scen != current_model_scen
-                update_model!(inst, msg.scen, mip)
+                update_model!(inst, params, msg.scen, mip)
                 current_model_scen = msg.scen
             end
 

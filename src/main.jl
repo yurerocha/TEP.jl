@@ -57,13 +57,12 @@ function run(logname::String = "log.md")
         end
         log(params, "Processing $file num $counter", true)
 
-        inputfile = "$(dir)/$file"
+        filepath = "$(dir)/$file"
         logsolver = "$(dir)/log/$file"
 
         params.log_file = log_dir * file
 
-        mp_data = PowerModels.parse_file(inputfile)
-        inst = build_instance(params, mp_data)
+        inst = build_instance(params, filepath)
 
         mip = nothing
         build_time = 0.0
@@ -150,20 +149,19 @@ function tuning()
     # end
 end
 
-function solve(file::String, num_scenarios::Int64 = 1)
+function solve(filepath::String, num_scenarios::Int64 = 1)
     params = Parameters()
-    params.log_file *= "/" * get_inst_name(file) * ".txt"
+    params.log_file *= "/" * get_inst_name(filepath) * ".txt"
 
     params.solution_strategy = Deterministic()
 
     inst = nothing
-    if occursin("CATS-CaliforniaTestSystem", file)
+    if occursin("CATS-CaliforniaTestSystem", filepath)
         # Read the CATS instance, with multiple scenarios
         inst, _ = build_cats_instance(params, num_scenarios)
     else
         # Read the pglib-opf instances with single scenarios
-        mp_data = PowerModels.parse_file(file)
-        inst = build_instance(params, mp_data)
+        inst = build_instance(params, filepath)
         build_scenarios!(inst, num_scenarios - 1, 0.25)
     end
 
@@ -178,12 +176,11 @@ function solve(file::String, num_scenarios::Int64 = 1)
     return nothing
 end
 
-function run_ptdf(file::String)
+function run_ptdf(filepath::String)
     params = Parameters()
-    params.log_file *= "/" * get_inst_name(file) * ".txt"
+    params.log_file *= "/" * get_inst_name(filepath) * ".txt"
 
-    mp_data = PowerModels.parse_file(file)
-    inst = build_instance(params, mp_data)
+    inst = build_instance(params, filepath)
 
     # build_ptdf(inst, params, 1, T = Float64)
     build_ptdf_system(inst, params, 1, T = Float64)

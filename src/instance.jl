@@ -1,11 +1,15 @@
 """
-    build_instance(params::Parameters, 
-                   mpc::Dict{String, Any})
+    build_instance(params::Parameters, filepath::String)
 
-Parse a MATPOWER input file to an Instance data structure.
+Build Instance data structure.
 """
-function build_instance(params::Parameters, 
-                        mpc::Dict{String, Any})
+function build_instance(params::Parameters, filepath::String)
+    mpc = PowerModels.parse_file(filepath)
+
+    if params.model.is_dcp_power_model_en
+        rm_g_nonlinear_coeffs!(mp_data)
+    end
+    
     I = build_buses(mpc)
     D = build_loads(params, mpc["load"], mpc["shunt"])
     G = build_gens(params, mpc["gen"])
@@ -27,7 +31,7 @@ function build_instance(params::Parameters,
 
     scenarios = [Scenario(1.0, D, G)]
 
-    return Instance(I, J, K, keys(K), 
+    return Instance(get_inst_name(filepath), I, J, K, keys(K), 
                     length(I), length(J), length(K),
                     ref_bus, 
                     scenarios, length(scenarios))
