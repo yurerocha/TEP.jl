@@ -1,20 +1,26 @@
 """
     build_solution(inst::Instance, 
                    params::Parameters, 
-                   scen::Int64 = 1)
+                   scen::Int64, 
+                   lp::LPModel, 
+                   is_heur_en::Bool = true)
 
 Build solution with the full linear programming model.
 """
-function build_solution(inst::Instance, 
-                        params::Parameters, 
-                        is_heur_en::Bool = true, 
-                        scen::Int64 = 1)
+function build_solution!(inst::Instance, 
+                         params::Parameters, 
+                         scen::Int64, 
+                         lp::LPModel, 
+                         is_ph::Bool, 
+                         cache::Cache, 
+                         is_heur_en::Bool = true)
     log(params, "Start heuristic to build initial solution", true)
     # At the first it, there are no candidate lines
-    is_req = params.model.is_lp_model_s_var_set_req
-    params.model.is_lp_model_s_var_set_req = true
-    lp = build_lp(inst, params, scen)
-    params.model.is_lp_model_s_var_set_req = is_req
+    # is_req = params.model.is_lp_model_s_var_set_req
+    # params.model.is_lp_model_s_var_set_req = true
+    # lp = build_lp(inst, params, scen)
+    # params.model.is_lp_model_s_var_set_req = is_req
+    fix_s_vars!(inst, lp)
 
     lines = collect(keys(inst.K))
     inserted = Set{Any}(lines)
@@ -35,11 +41,18 @@ function build_solution(inst::Instance,
             @assert iseq(comp_s_viol(lp), 0.0)
         end
 
-        cost = comp_obj(inst, params, lp, inserted)
+        cost = 0.0
+        if is_ph
+            cost = comp_obj(inst, params, scen, lp, inserted, cache)
+        else
+            cost = comp_obj(inst, params, scen, lp, inserted)
+        end
+
         init_cost = cost
 
         best_cost, start= rm_and_fix(inst, params, scen, 
-                                     lp, inserted, removed, 
+                                     lp, is_ph, cache, 
+                                     inserted, removed, 
                                      init_cost, init_cost)
         report = NeighReport(time() - time_start, 
                              length(removed) / inst.num_K, 
@@ -50,6 +63,8 @@ function build_solution(inst::Instance,
         g = get_values(lp.g)
         start = Start(inserted, f, g)
     end
+
+    unfix_s_vars!(inst, lp)
 
     @warn "Runtime", report.runtime
     @warn "Rm ratio", report.removed_percent
@@ -63,6 +78,8 @@ function rm_and_fix(inst::Instance,
                     params::Parameters, 
                     scen::Int64, 
                     lp::LPModel, 
+                    is_ph::Bool, 
+                    cache::Cache, 
                     inserted::Set{Any}, 
                     removed::Set{Any}, 
                     init_cost::Float64, 
@@ -136,7 +153,14 @@ function rm_and_fix(inst::Instance,
             #                         time_start)
         end
 
-        cost = iseq(viol, 0.0) ? comp_obj(inst, params, lp, inserted) : 0.0
+        cost = 0.0
+        if iseq(viol, 0.0)
+            if is_ph
+                cost = comp_obj(inst, params, scen, lp, inserted, cache)
+            else
+                cost = comp_obj(inst, params, scen, lp, inserted)
+            end
+        end
 
         if iseq(viol, 0.0) && isl(cost, best_cost)
             if params.debugging_level == 1
@@ -441,9 +465,9 @@ function rm_lines!(inst::Instance,
     # log(params, "Rm $(length(candidates)) line(s)")
 
     for k in candidates
-        if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
-            fix(lp.s[k], 0.0; force = true)
-        end
+        # if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
+        #     fix(lp.s[k], 0.0; force = true)
+        # end
 
         # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
         #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
@@ -472,10 +496,10 @@ function add_lines!(inst::Instance,
     # log(params, "Add $(length(new_candidates)) line(s)")
 
     for k in new_candidates
-        if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
-            unfix(lp.s[k])
-            set_lower_bound(lp.s[k], 0.0)
-        end
+        # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
+        #     unfix(lp.s[k])
+        #     set_lower_bound(lp.s[k], 0.0)
+        # end
 
         if is_fixed(lp.f[k])
             unfix(lp.f[k])

@@ -1,10 +1,10 @@
 
 """
-    config!(params::Parameters, tep::TEPModel)
+    config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
 
 Configure the solver parameters.
 """
-function config!(params::Parameters, tep::TEPModel)
+function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
     set_attribute(tep.jump_model, 
                   MOI.RawOptimizerAttribute("Threads"), 
                   params.solver_num_threads)
@@ -13,7 +13,8 @@ function config!(params::Parameters, tep::TEPModel)
     #               0)
     if params.model.optimizer == Gurobi.Optimizer
         set_attribute(tep.jump_model, 
-                      MOI.RawOptimizerAttribute("LogFile"), params.log_file)
+                      MOI.RawOptimizerAttribute("LogFile"), 
+                      "$(params.log_dir)/$(inst.name)#$scen.log")
         if tep isa LPModel
             # set_attribute(tep.jump_model, 
             #               MOI.RawOptimizerAttribute("Method"), 2)
@@ -22,7 +23,7 @@ function config!(params::Parameters, tep::TEPModel)
         end
         if params.log_level == 0
             JuMP.set_silent(tep.jump_model)
-        elseif params.log_level == 1 && tep isa LPModel
+        elseif params.log_level == 1 # && tep isa LPModel
             set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("LogToConsole"), 0)
         end
@@ -53,19 +54,19 @@ end
 function add_vars!(inst::Instance, params::Parameters, scen::Int64, lp::LPModel)
     for j in keys(inst.J)
         lp.f[j] = @variable(lp.jump_model, base_name = "f[$j]")
-        if params.model.is_lp_model_s_var_set_req
+        # if params.model.is_lp_model_s_var_set_req
             lp.s[j] = @variable(lp.jump_model, 
                                 lower_bound = 0.0, 
                                 base_name = "s[$j]")
-        end
+        # end
     end
     for k in inst.restricted_K
         lp.f[k] = @variable(lp.jump_model, base_name = "f[$k]")
-        if params.model.is_lp_model_s_var_set_req
+        # if params.model.is_lp_model_s_var_set_req
             lp.s[k] = @variable(lp.jump_model, 
                                 lower_bound = 0.0, 
                                 base_name = "s[$k]")
-        end
+        # end
     end
 
     for i in inst.I
@@ -199,24 +200,24 @@ function add_thermal_limits_cons!(inst::Instance,
                                   lp::LPModel)
     # Existing lines
     for j in keys(inst.J)
-        if params.model.is_lp_model_s_var_set_req
+        # if params.model.is_lp_model_s_var_set_req
             @constraint(lp.jump_model, -lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
             @constraint(lp.jump_model,  lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
-        else
-            JuMP.set_lower_bound(lp.f[j], -inst.J[j].f_bar)
-            JuMP.set_upper_bound(lp.f[j],  inst.J[j].f_bar)
-        end
+        # else
+        #     JuMP.set_lower_bound(lp.f[j], -inst.J[j].f_bar)
+        #     JuMP.set_upper_bound(lp.f[j],  inst.J[j].f_bar)
+        # end
     end
     # Candidates
     for k in inst.restricted_K
-        if params.model.is_lp_model_s_var_set_req
+        # if params.model.is_lp_model_s_var_set_req
             s = lp.s[k]
             @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
             @constraint(lp.jump_model,  lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
-        else
-            JuMP.set_lower_bound(lp.f[k], -inst.K[k].f_bar)
-            JuMP.set_upper_bound(lp.f[k],  inst.K[k].f_bar)
-        end
+        # else
+        #     JuMP.set_lower_bound(lp.f[k], -inst.K[k].f_bar)
+        #     JuMP.set_upper_bound(lp.f[k],  inst.K[k].f_bar)
+        # end
     end
 
     return nothing
@@ -409,9 +410,9 @@ function set_obj!(inst::Instance,
         end
     end
     pen *= params.model.penalty
-    if params.model.is_lp_model_s_var_set_req
+    # if params.model.is_lp_model_s_var_set_req
         add_to_expression!(lp.obj, sum([pen * s for s in values(lp.s)]))
-    end
+    # end
 
     @objective(lp.jump_model, Min, lp.obj)
     
@@ -471,6 +472,7 @@ end
 
 """
     update_model!(inst::Instance, 
+                  params::Parameters, 
                   scen::Int64, 
                   tep::TEPModel)
 
@@ -478,10 +480,17 @@ Update the model g variables and the right-hand side coefficients of the first
 Kirchhoff law constraints, according to scenario.
 """
 function update_model!(inst::Instance, 
+                       params::Parameters, 
                        scen::Int64, 
                        tep::TEPModel)
     update_g_vars!(inst, scen, tep)
     update_fkl_cons_rhs!(inst, scen, tep)
+
+    if params.model.optimizer == Gurobi.Optimizer
+        set_attribute(tep.jump_model, 
+                      MOI.RawOptimizerAttribute("LogFile"), 
+                      "$(params.log_dir)/$(inst.name)#$scen.log")
+    end
 
     return nothing
 end
@@ -598,4 +607,36 @@ function check_sol(inst::Instance, tep::TEPModel, md)
     end
 
     return is_feas
+end
+
+"""
+    fix_s_vars!(inst::Instance, lp::LPModel)
+
+Fix the s variables.
+"""
+function fix_s_vars!(inst::Instance, lp::LPModel)
+    for j in keys(inst.J)
+        JuMP.fix(lp.s[j], 0.0; force = true)
+    end
+    for k in inst.restricted_K
+        JuMP.fix(lp.s[k], 0.0; force = true)
+    end
+    return nothing
+end
+
+"""
+    unfix_s_vars!(inst::Instance, lp::LPModel)
+
+Unfix and set the lower bounds of the s variables.
+"""
+function unfix_s_vars!(inst::Instance, lp::LPModel)
+    for j in keys(inst.J)
+        JuMP.unfix(lp.s[j])
+        JuMP.set_lower_bound(lp.s[j], 0.0)
+    end
+    for k in inst.restricted_K
+        JuMP.unfix(lp.s[k])
+        JuMP.set_lower_bound(lp.s[k], 0.0)
+    end
+    return nothing
 end

@@ -52,7 +52,7 @@ end
     update_model_obj!(params::Parameters, 
                       cache::Cache, 
                       scen::Int64, 
-                      mip::MIPModel)
+                      tep::TEPModel)
 
 Update the model objective function according to the progressive hedging 
 algorithm.
@@ -60,9 +60,9 @@ algorithm.
 function update_model_obj!(params::Parameters, 
                            cache::Cache, 
                            scen::Int64, 
-                           mip::MIPModel)
-    delta_obj = comp_delta_obj(params, cache, scen, mip)
-    @objective(mip.jump_model, Min, mip.obj + delta_obj)
+                           tep::TEPModel)
+    delta_obj = comp_delta_obj(params, cache, scen, tep)
+    @objective(tep.jump_model, Min, tep.obj + delta_obj)
     return nothing
 end
 
@@ -70,7 +70,7 @@ end
     comp_delta_obj(params::Parameters, 
                    cache::Cache, 
                    scen::Int64, 
-                   mip::MIPModel)
+                   tep::TEPModel)
 
 Compute the delta objective associated with the last progressive hedging 
 iteration to incorporate in the new objective function.
@@ -78,8 +78,8 @@ iteration to incorporate in the new objective function.
 function comp_delta_obj(params::Parameters, 
                         cache::Cache, 
                         scen::Int64, 
-                        mip::MIPModel)
-    x = mip.jump_model.ext[:state].x
+                        tep::TEPModel)
+    x = tep.jump_model.ext[:state].x
     x_hat = cache.x_hat 
     # Piece-wise linear function for the squared two-norm:
     #     (a - b)² = a² - 2ab + b² (binary first stage variables)

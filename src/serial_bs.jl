@@ -1,4 +1,9 @@
-function run_serial_bs!(inst::Instance, params::Parameters)
+function run_serial_bs!(inst::Instance, 
+                        params::Parameters, 
+                        scen::Int64, 
+                        lp::LPModel, 
+                        is_ph::Bool = false, 
+                        cache::Cache = Cache())
     log(params, "Serial beam search heuristic", true)
 
     start_time = time()
@@ -7,11 +12,12 @@ function run_serial_bs!(inst::Instance, params::Parameters)
     candidates = nothing
 
     # Build initial solution
-    _, report, inserted, candidates = build_solution(inst, params)
+    _, report, inserted, candidates = 
+                        build_solution!(inst, params, scen, lp, is_ph, cache)
     inst.restricted_K = Set(inserted)
 
     params.solver_num_threads = 8
-    lp = build_lp(inst, params)
+    # lp = build_lp(inst, params)
 
     remaining_time = params.beam_search.time_limit - report.runtime
 
@@ -20,6 +26,7 @@ function run_serial_bs!(inst::Instance, params::Parameters)
     inserted_beg = length(inserted)
     inserted_end = 0
     count_lp_updates = 0
+    obj = 0.0
     best_obj = 0.0
 
     # num_candidates_per_batch = params.beam_search.num_candidates_per_batch
@@ -27,7 +34,11 @@ function run_serial_bs!(inst::Instance, params::Parameters)
     it = 1
     for bs_it in 1:params.beam_search.num_max_it
         update_lp!(inst, params, lp, inserted)
-        obj = comp_obj(inst, params, lp, inserted)
+        if is_ph
+            obj = comp_obj(inst, params, scen, lp, inserted, cache)
+        else
+            obj = comp_obj(inst, params, scen, lp, inserted)
+        end
         # params.beam_search.num_candidates_per_batch = 
         #                                             num_candidates_per_batch
 
@@ -59,7 +70,13 @@ function run_serial_bs!(inst::Instance, params::Parameters)
                     # The flow values for the parent node
                     f = node.f
                     if JuMP.has_values(lp.jump_model)
-                        obj = comp_obj(inst, params, lp, ins_candidates)
+                        if is_ph
+                            obj = comp_obj(inst, params, scen, lp, 
+                                           ins_candidates, cache)
+                        else
+                            obj = comp_obj(inst, params, scen, lp, 
+                                           ins_candidates)
+                        end
                         f = get_values(lp.f)
                         is_feas = true
                         viol = comp_viol(lp)
@@ -115,9 +132,9 @@ function run_serial_bs!(inst::Instance, params::Parameters)
           inserted_end / inserted_beg, 
           elapsed_time
 
-    log(params, "Build full model", true)
-    params.solver_num_threads = 8
-    build_time = @elapsed (mip = build_mip(inst, params))
+    # log(params, "Build full model", true)
+    # params.solver_num_threads = 8
+    # build_time = @elapsed (mip = build_mip(inst, params))
 
     update_lp!(inst, params, lp, inserted)
     # g_bus, bus_inj, viol_update = get_data(inst, lp, ptdf)
@@ -126,26 +143,28 @@ function run_serial_bs!(inst::Instance, params::Parameters)
     g = get_values(lp.g)
     start = Start(Set(inserted), f, g)
 
-    log(params, "Fix the start of the model", true)
-    fix_start_time = @elapsed (fix_start!(inst, params, mip, start))
+    # log(params, "Fix the start of the model", true)
+    # fix_start_time = @elapsed (fix_start!(inst, params, mip, start))
 
-    params.beam_search.time_limit = max(remaining_time - elapsed_time, 0.0)
+    # params.beam_search.time_limit = max(remaining_time - elapsed_time, 0.0)
 
-    log(params, "Solve the model", true)
-    results = solve!(inst, params, mip)
+    # log(params, "Solve the model", true)
+    # results = solve!(inst, params, mip)
 
-    results["rnf_time"] = report.runtime
-    results["rnf_rm_percent"] = report.removed_percent
-    results["rnf_impr_percent"] = report.improvement_percent
-    results["fix_start_time"] = fix_start_time
-    results["bs_time"] = elapsed_time
+    # results["rnf_time"] = report.runtime
+    # results["rnf_rm_percent"] = report.removed_percent
+    # results["rnf_impr_percent"] = report.improvement_percent
+    # results["fix_start_time"] = fix_start_time
+    # results["bs_time"] = elapsed_time
 
-    results["build_time"] = build_time
-    results["build_obj_rat"] = comp_build_obj_rat(inst, 
-                                                  results["objective"], 
-                                                  start.inserted)
+    # results["build_time"] = build_time
+    # results["build_obj_rat"] = comp_build_obj_rat(inst, 
+    #                                               results["objective"], 
+    #                                               start.inserted)
 
-    @warn "Obj $(JuMP.objective_value(mip.jump_model))"
+    # @warn "Obj $(JuMP.objective_value(mip.jump_model))"
 
-    return results
+    # return results
+
+    return start
 end

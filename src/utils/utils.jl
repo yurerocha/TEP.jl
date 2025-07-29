@@ -170,6 +170,7 @@ function log(file::String, msg::String)
     open(file, "a") do f
         write(f, msg)
     end
+    return nothing
 end
 
 function log_header(outputfile::String)
@@ -179,6 +180,8 @@ function log_header(outputfile::String)
              "| RNF (s) | RNF rm (%) | RNF impr (%) | BS (s) | \n"
     outstr *= "|:---"^19 * "| \n"
     log(outputfile, outstr)
+
+    return nothing
 end
 
 function get_keys_results()
@@ -278,6 +281,7 @@ function log(params::Parameters, msg::String, is_info::Bool = false)
             println(msg)
         end
     end
+    return nothing
 end
 
 """
@@ -313,6 +317,7 @@ function log_neigh_run(inst::Instance,
                 " delta_perc:" * string(round(length(rm_ins) / 
                                             inst.num_K, digits = 2)) * 
                 " runtime:" * string(round(runtime, digits = 2)))
+    return nothing
 end
 
 """
@@ -493,11 +498,13 @@ function fix_for_symmetry_contrs!(inst::Instance,
             end
         end
     end
+    return nothing
 end
 
-function set_state!(mip::MIPModel, 
-                    x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}, 
-                    y::Dict{Int64, JuMP.VariableRef})
+function set_state!(tep::TEPModel, 
+                    x::Dict{Tuple{Tuple3I, Int64}, T}, 
+                    y::Dict{Int64, JuMP.VariableRef}) where 
+                                        T <: Union{JuMP.VariableRef, BranchInfo}
     # In case the x is a single variable instead of a vector
     # if x isa JuMP.VariableRef
     #     x = [x]
@@ -508,7 +515,18 @@ function set_state!(mip::MIPModel,
     # if !(:state in keys(md.ext))
     #     md.ext[:state] = []
     # end
-    mip.jump_model.ext[:state] = State([x for (_, x) in x], [g for (_, g) in y])
+    if tep isa MIPModel
+        tep.jump_model.ext[:state] = 
+                                State([v for (_, v) in x], [v for (_, v) in y])
+    elseif tep isa LPModel
+        key_to_idx = Dict{Tuple{Tuple3I, Int64}, Int64}()
+        i = 1
+        for (k, _) in x
+            key_to_idx[k] = i
+            i += 1
+        end
+        tep.jump_model.ext[:key_to_idx] = key_to_idx
+    end
     return nothing
 end
 
@@ -528,6 +546,7 @@ function config_dcp_pm_tests!(params::Parameters)
     params.instance.load_gen_mult = 1.0
     params.model.is_dcp_power_model_en = true
     params.log_level = 0
+    return nothing
 end    
 
 """

@@ -23,7 +23,7 @@ end
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
     penalty::Float64 = 1.0
-    is_lp_model_s_var_set_req = false
+    # is_lp_model_s_var_set_req = false
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
     optimizer = Gurobi.Optimizer

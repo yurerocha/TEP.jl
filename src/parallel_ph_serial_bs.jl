@@ -1,12 +1,12 @@
 """
-    run_parallel_ph!(inst::Instance, params::Parameters)
+    run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
 Implementation of the sequential progressive hedging algorithm. 
 
 Associated paper: https://link.springer.com/article/10.1007/s10107-016-1000-z
 """
 # TODO: Consider non-binary first stage decision variables
-function run_parallel_ph!(inst::Instance, params::Parameters)
+function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     log(params, "Parallel solution strategy", true)
 
     # Config JobQueueMPI
@@ -14,7 +14,7 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     JQM.mpi_barrier()
 
     if JQM.is_worker_process()
-        ph_workers_loop(inst, params)
+        ph_serial_bs_workers_loop(inst, params)
         JQM.mpi_barrier()
         return nothing
     end
@@ -76,14 +76,19 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     return cache
 end
 
-function ph_workers_loop(inst::Instance, params::Parameters)
+function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
     JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
-        # Build model for the first scenario
+        # Build models for the first scenario
         current_model_scen = 1
+
         mip = build_mip(inst, params, current_model_scen)
+        lp = build_lp(inst, params, current_model_scen)
+
         set_state!(mip, mip.x, mip.g)
+        set_state!(lp, inst.K, lp.g)
+
         while true
             job = JQM.receive_job(worker)
             msg = JQM.get_message(job)
@@ -94,13 +99,21 @@ function ph_workers_loop(inst::Instance, params::Parameters)
             # Update the model according to the current scenario
             if msg.scen != current_model_scen
                 update_model!(inst, params, msg.scen, mip)
+                update_model!(inst, params, msg.scen, lp)
                 current_model_scen = msg.scen
             end
 
             if msg.it > 1
                 update_model_obj!(params, msg.cache, msg.scen, mip)
+                # update_model_obj!(params, msg.cache, msg.scen, lp)
             end
 
+            # solve!(inst, params, mip)
+            # The cache data structure is incomplete in the first it
+            is_ph = msg.it > 1
+            start = run_serial_bs!(inst, params, msg.scen, lp, is_ph, msg.cache)
+
+            fix_start!(inst, params, mip, start)
             solve!(inst, params, mip)
             
             ret_msg = WorkerMessage(get_state_values(mip), msg.it, msg.scen)

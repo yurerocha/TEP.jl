@@ -28,7 +28,7 @@ end
 function get_g_bus_values(inst::Instance, 
                           ptdf::PTDFSystem, 
                           tep::TEPModel, 
-                          scen::Int64 = 1)
+                          scen::Int64)
     g_bus = zeros(length(inst.I))
 
     for k in keys(inst.scenarios[scen].G)
@@ -200,22 +200,72 @@ function get_data(inst::Instance,
     return g_bus, bus_inj, viol
 end
 
+"""
+    comp_obj(inst::Instance, 
+             params::Parameters, 
+             scen::Int64, 
+             tep::TEPModel, 
+             inserted)
+
+Compute the objective function considering the inserted candidate lines.
+"""
 function comp_obj(inst::Instance, 
                   params::Parameters, 
+                  scen::Int64, 
                   tep::TEPModel, 
-                  inserted, 
-                  scen::Int64 = 1)
-    g = get_values(tep.g)
+                  inserted)
     obj = 0.0
+    g = get_values(tep.g)
+
     for k in keys(tep.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
         obj += comp_g_obj(params, g[k], c)
     end
+
     for k in inserted
         obj += inst.K[k].cost
     end
 
     return obj
+end
+
+"""
+    comp_obj(inst::Instance, 
+             params::Parameters, 
+             scen::Int64, 
+             tep::TEPModel, 
+             inserted, 
+             cache::Cache)
+Compute the objective function considering the inserted candidate lines and the 
+cache of the progressive hedging algorithm.
+"""
+function comp_obj(inst::Instance, 
+                  params::Parameters, 
+                  scen::Int64, 
+                  tep::TEPModel, 
+                  inserted, 
+                  cache::Cache)
+    obj = 0.0
+    g = get_values(tep.g)
+    
+    for k in keys(tep.g)
+        c = reverse(inst.scenarios[scen].G[k].costs)
+        obj += comp_g_obj(params, g[k], c)
+    end
+    
+    squared_twonorm = 0.0
+    x_hat = cache.x_hat
+    omega = cache.scenarios[scen].omega'
+    for k in inserted
+        obj += inst.K[k].cost
+        # Progressive hedging data
+        i = tep.jump_model.ext[:key_to_idx][k]
+        squared_twonorm += 1.0 - 2.0 * x_hat[i] + x_hat[i] ^ 2
+        obj += omega[i]
+    end
+    
+    penalty::Float64 = params.progressive_hedging.rho / 2.0
+    return obj + penalty * squared_twonorm
 end
 
 function comp_build_obj(inst::Instance, inserted)
