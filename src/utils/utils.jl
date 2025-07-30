@@ -177,7 +177,7 @@ function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
              "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
              "| Rt solve (s) | Lower bound | Obj | Gap (%) | Start (s) " *
-             "| RNF (s) | RNF rm (%) | RNF impr (%) | BS (s) | \n"
+             "| RNF (s) | RNF rm | RNF impr | BS (s) | \n"
     outstr *= "|:---"^19 * "| \n"
     log(outputfile, outstr)
 
@@ -187,8 +187,8 @@ end
 function get_keys_results()
     return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
             "status", "root_best_bound", "root_time", "lower_bound", 
-            "objective", "gap", "fix_start_time", "rnf_time", "rnf_rm_percent", 
-            "rnf_impr_percent", "bs_time"]
+            "objective", "gap", "fix_start_time", "rnf_time", "rnf_rm_rat", 
+            "rnf_impr_rat", "bs_time"]
 end
 
 """
@@ -280,7 +280,17 @@ function log(params::Parameters, msg::String, is_info::Bool = false)
         else
             println(msg)
         end
+        # @info msg
     end
+    return nothing
+end
+
+function log_status(params::Parameters, st::Status)
+    d = (st.rm_ratio, st.impr_ratio, st.time)
+    d = round.(d, digits = 5)
+
+    log(params, "$(st.name) rm:$(d[1]) impr:$(d[2]) t:$(d[3])", true)
+
     return nothing
 end
 
@@ -579,4 +589,14 @@ function comp_build_obj_rat(inst::Instance,
                             obj::Float64, 
                             inserted)
     return 100.0 * comp_build_obj(inst, inserted) / obj
+end
+
+
+"""
+    get_log_filename(inst::Instance, params::Parameters, scen::Int64)
+
+Get the name of the log file.
+"""
+function get_log_filename(inst::Instance, params::Parameters, scen::Int64)
+    return "$(params.log_dir)/$(inst.name)#$scen.log"
 end

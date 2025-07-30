@@ -76,14 +76,14 @@ function run(logname::String = "log.md")
             # TODO: Add parameter to indicate if an initial solution will be 
             # used
             log(params, "Build heuristic solution", true)
-            (start, report) = build_solution(inst, params, is_heur_en)
+            (start, status) = build_solution(inst, params, is_heur_en)
 
             log(params, "Fix the start of the model", true)
             start_time = 
                     @elapsed (obj = fix_start!(inst, params, mip, start))
             results["objective"] = obj
 
-            params.solver_time_limit -= (start_time + report.runtime)
+            params.solver_time_limit -= (start_time + status.time)
 
             # TODO: Add tuning flag
             log(params, "Solve the model", true)
@@ -97,8 +97,8 @@ function run(logname::String = "log.md")
             end
 
             if is_heur_en
-                results["rnf_impr_percent"] = report.improvement_percent
-                results["rnf_time"] = report.runtime
+                results["rnf_impr_rat"] = status.impr_ratio
+                results["rnf_time"] = status.time
                 results["fix_start_time"] = start_time
             end
             

@@ -4,30 +4,30 @@ function run_serial_bs!(inst::Instance,
                         lp::LPModel, 
                         is_ph::Bool = false, 
                         cache::Cache = Cache())
-    log(params, "Serial beam search heuristic", true)
+    @info "Serial beam search heuristic"
 
     start_time = time()
-    report = nothing
+    status = nothing
     inserted = nothing
     candidates = nothing
 
     # Build initial solution
-    _, report, inserted, candidates = 
+    _, status, inserted, candidates = 
                         build_solution!(inst, params, scen, lp, is_ph, cache)
     inst.restricted_K = Set(inserted)
 
     params.solver_num_threads = 8
     # lp = build_lp(inst, params)
 
-    remaining_time = params.beam_search.time_limit - report.runtime
+    remaining_time = params.beam_search.time_limit - status.time
 
     K = collect(candidates)
 
-    inserted_beg = length(inserted)
-    inserted_end = 0
-    count_lp_updates = 0
+    num_ins_start = length(inserted)
+    num_ins = length(inserted)
     obj = 0.0
     best_obj = 0.0
+    obj_start = 0.0
 
     # num_candidates_per_batch = params.beam_search.num_candidates_per_batch
 
@@ -45,13 +45,14 @@ function run_serial_bs!(inst::Instance,
         num_it_wo_impr = 0
         if bs_it == 1
             best_obj = obj
+            obj_start = obj
         end
 
         root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K, [])
         Q = [root]
         while true
             if isg(time() - start_time, remaining_time)
-                log(params, "BS Time limit reached", true)
+                @info "BS Time limit reached"
                 break
             end
             LB = []
@@ -87,12 +88,16 @@ function run_serial_bs!(inst::Instance,
                     add_node!(params, LB, best_obj, msg, node)
 
                     if is_feas && isl(obj, best_obj)
-                        log(params, "Inserted update", true)
+                        # log(params, "Inserted update", true)
                         has_impr = true
                         best_obj = obj
                         inserted = node.inserted
-                        inserted_end = length(LB[end].inserted)
-                        @warn it, obj, inserted_end, time() - start_time
+                        num_ins = length(LB[end].inserted)
+
+                        # Log info
+                        st = Status("bs", num_ins_start - num_ins, inst.num_K, 
+                                    obj, obj_start, start_time)
+                        log_status(params, st)
                     end
                 end
             end
@@ -103,13 +108,13 @@ function run_serial_bs!(inst::Instance,
                 num_it_wo_impr += 1
 
                 if num_it_wo_impr >= params.beam_search.num_max_it_wo_impr
-                    @warn "Max it wo impr reached"
+                    @info "Max it wo impr reached"
                     break
                 end
             end
 
             if length(LB) == 0
-                log(params, "No new nodes to investigate")
+                @info "No new nodes to investigate"
                 break
             end
             Q = select!(params, LB, K)
@@ -121,16 +126,17 @@ function run_serial_bs!(inst::Instance,
            isg(time() - start_time, remaining_time)
             break
         else
-            log(params, "Change shuffle strategy", true)
+            @info "Change shuffle strategy"
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
-    elapsed_time = time() - start_time
+    # elapsed_time = time() - start_time
 
-    @warn it, 
-          inserted_beg, inserted_end, 
-          inserted_end / inserted_beg, 
-          elapsed_time
+    # log(params, 
+    #     "it:$it ins_start:$num_ins_start ins_end:$num_ins " * 
+    #     "rm: $(round(1.0 - num_ins / num_ins_start, digits = 2)) " * 
+    #     "el:$(round(elapsed_time, digits = 2))", 
+    #     true)
 
     # log(params, "Build full model", true)
     # params.solver_num_threads = 8
@@ -151,9 +157,9 @@ function run_serial_bs!(inst::Instance,
     # log(params, "Solve the model", true)
     # results = solve!(inst, params, mip)
 
-    # results["rnf_time"] = report.runtime
-    # results["rnf_rm_percent"] = report.removed_percent
-    # results["rnf_impr_percent"] = report.improvement_percent
+    # results["rnf_time"] = status.time
+    # results["rnf_rm_percent"] = status.removed_percent
+    # results["rnf_impr_percent"] = status.improvement_percent
     # results["fix_start_time"] = fix_start_time
     # results["bs_time"] = elapsed_time
 

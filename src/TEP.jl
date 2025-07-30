@@ -10,6 +10,7 @@ using Gurobi
 using JSON
 using JuMP
 using LinearAlgebra
+using Logging
 using MPI
 using OrderedCollections # OrderedDict
 using PowerModels

@@ -5,12 +5,12 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     JQM.mpi_init()
 
     start_time = time()
-    report = nothing
+    status = nothing
     inserted = nothing
     candidates = nothing
     if JQM.is_controller_process()
         # Build initial solution
-        _, report, inserted, candidates = build_solution(inst, params)
+        _, status, inserted, candidates = build_solution(inst, params)
         inst.restricted_K = Set(inserted)
     end
 
@@ -29,7 +29,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     params.solver_num_threads = 8
     lp = build_lp(inst, params)
 
-    remaining_time = params.beam_search.time_limit - report.runtime
+    remaining_time = params.beam_search.time_limit - status.time
 
     K = collect(candidates)
 
@@ -172,9 +172,9 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     log(params, "Solve the model", true)
     results = solve!(inst, params, mip)
 
-    results["rnf_time"] = report.runtime
-    results["rnf_rm_percent"] = report.removed_percent
-    results["rnf_impr_percent"] = report.improvement_percent
+    results["rnf_time"] = status.time
+    results["rnf_rm_percent"] = status.removed_percent
+    results["rnf_impr_percent"] = status.improvement_percent
     results["fix_start_time"] = fix_start_time
     results["bs_time"] = elapsed_time
 
@@ -189,7 +189,6 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
 end
     
 function bs_workers_loop(inst::Instance, params::Parameters)
-    JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
         # Build the model for the first scenario

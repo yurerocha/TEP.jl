@@ -12,17 +12,27 @@ struct Start
     # theta::Vector{Float64}
 end
 
-struct NeighReport
-    runtime::Float64
-    removed_percent::Float64
-    improvement_percent::Float64
+struct Status
+    name::String
+    rm_ratio::Float64
+    impr_ratio::Float64
+    time::Float64
 
-    NeighReport() = new(0.0, 0.0, 0.0)
-    NeighReport(runtime::Float64, 
-                removed_ratio::Float64, 
-                improvement_ratio::Float64) = new(runtime, 
-                                                  100.0 * removed_ratio, 
-                                                  100.0 * improvement_ratio)
+    Status(name::String) = new(name, 0.0, 0.0, 0.0)
+    Status(name::String, 
+           rm_ratio::Float64, 
+           impr_ratio::Float64, 
+           time::Float64) = new(name, rm_ratio, impr_ratio, time)
+
+    function Status(name::String, 
+                    num_inserted::Int64, num_start::Int64, 
+                    obj::Float64, obj_start::Float64, 
+                    start_time::Float64)
+        rm_rat = num_inserted / num_start
+        impr_rat = 1.0 - obj / obj_start
+
+        return Status(name, rm_rat, impr_rat, time() - start_time)
+    end
 end
 
 # -------------------------- Instance data structures --------------------------

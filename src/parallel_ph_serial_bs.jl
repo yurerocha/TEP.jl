@@ -77,7 +77,6 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 end
 
 function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
-    JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
         # Build models for the first scenario
@@ -89,6 +88,14 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         set_state!(mip, mip.x, mip.g)
         set_state!(lp, inst.K, lp.g)
 
+        # Open log files
+        io = []
+        if params.log_level == 1
+            for scen in 1:inst.num_scenarios
+                push!(io, open(get_log_filename(inst, params, scen), "w+"))
+            end
+        end
+
         while true
             job = JQM.receive_job(worker)
             msg = JQM.get_message(job)
@@ -98,11 +105,17 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
 
             # Update the model according to the current scenario
             if msg.scen != current_model_scen
+                
                 update_model!(inst, params, msg.scen, mip)
                 update_model!(inst, params, msg.scen, lp)
+                
                 current_model_scen = msg.scen
             end
 
+            params.log_level == 1 && 
+                            Logging.global_logger(ConsoleLogger(io[msg.scen]))
+                    # Logging.global_logger(Logging.SimpleLogger(io[msg.scen]))
+            
             if msg.it > 1
                 update_model_obj!(params, msg.cache, msg.scen, mip)
                 # update_model_obj!(params, msg.cache, msg.scen, lp)
@@ -113,6 +126,8 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             is_ph = msg.it > 1
             start = run_serial_bs!(inst, params, msg.scen, lp, is_ph, msg.cache)
 
+            params.log_level == 1 && flush(io[msg.scen])
+
             fix_start!(inst, params, mip, start)
             solve!(inst, params, mip)
             
@@ -120,6 +135,8 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end
+        # Close log files
+        params.log_level == 1 && close.(io)
         exit(0)
     end
 

@@ -14,7 +14,7 @@ function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
     if params.model.optimizer == Gurobi.Optimizer
         set_attribute(tep.jump_model, 
                       MOI.RawOptimizerAttribute("LogFile"), 
-                      "$(params.log_dir)/$(inst.name)#$scen.log")
+                      get_log_filename(inst, params, scen))
         if tep isa LPModel
             # set_attribute(tep.jump_model, 
             #               MOI.RawOptimizerAttribute("Method"), 2)
@@ -486,10 +486,11 @@ function update_model!(inst::Instance,
     update_g_vars!(inst, scen, tep)
     update_fkl_cons_rhs!(inst, scen, tep)
 
+    # TODO: Use config! here (pay attention to the params, especially "Threads")
     if params.model.optimizer == Gurobi.Optimizer
         set_attribute(tep.jump_model, 
                       MOI.RawOptimizerAttribute("LogFile"), 
-                      "$(params.log_dir)/$(inst.name)#$scen.log")
+                      get_log_filename(inst, params, scen))
     end
 
     return nothing

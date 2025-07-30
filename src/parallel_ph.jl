@@ -77,7 +77,6 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
 end
 
 function ph_workers_loop(inst::Instance, params::Parameters)
-    JQM = JobQueueMPI
     if JQM.is_worker_process()
         worker = JQM.Worker()
         # Build model for the first scenario

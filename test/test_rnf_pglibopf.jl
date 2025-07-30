@@ -11,16 +11,16 @@ include("utils.jl")
 
 params = TEP.Parameters()
 
-start_file = 52 # 40
-end_file = 62 # 62
+start_file = 40 # 40
+end_file = 40 # 62
 is_rnf_heur_en = false
 
 suffix = ""
 if is_rnf_heur_en
     suffix = "_rnf"
 end
-log_dir = "test/log$(suffix)_pglibopf_30"
-log_file = "$log_dir/tep$(suffix)_pglibopf_30.md"
+log_dir = "test/logs/tmp2"
+log_file = "$log_dir/log.md"
 
 
 try
@@ -41,14 +41,15 @@ sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
 skip = []
 
-md_file = "test/log_bs_pglibopf_30/tep_bs_pglibopf_30.md"
-df = read_markdown_table(md_file)
-# Solve (s): 8
-# RNF (s): 15
-# BS (s): 19
-time_limit = parse.(Float64, df[!, 8]) + 
-             parse.(Float64, df[!, 15]) + 
-             parse.(Float64, df[!, 19])
+# md_file = "test/log_bs_pglibopf_30/tep_bs_pglibopf_30.md"
+# df = read_markdown_table(md_file)
+# # Solve (s): 8
+# # RNF (s): 15
+# # BS (s): 19
+# time_limit = parse.(Float64, df[!, 8]) + 
+#              parse.(Float64, df[!, 15]) + 
+#              parse.(Float64, df[!, 19])
+time_limit = []
 
 TEP.log_header(log_file)
 
@@ -59,17 +60,16 @@ TEP.log_header(log_file)
             continue
         end
         # tl = time_limit[start_file + i - 1]
-        tl = time_limit[i]
+        tl = 150
         TEP.log(params, "Processing $file $(start_file + i - 1) $tl", true)
 
-        inputfile = "$(dir)/$file"
+        filepath = "$(dir)/$file"
         logsolver = "$(dir)/log/$file"
 
         params.log_file = "$log_dir/$file"
         params.solver_time_limit = tl
 
-        mp_data = PowerModels.parse_file(inputfile)
-        inst = TEP.build_instance(params, mp_data)
+        inst = TEP.build_instance(params, filepath)
 
         mip = nothing
         build_time = 0.0
@@ -88,7 +88,7 @@ TEP.log_header(log_file)
                     @elapsed (obj = TEP.fix_start!(inst, params, mip, start))
             results["objective"] = obj
 
-            params.solver_time_limit -= (fix_start_time + report.runtime)
+            params.solver_time_limit -= (fix_start_time + report.time)
 
             # TODO: Add tuning flag
             TEP.log(params, "Solve the model", true)
@@ -101,7 +101,7 @@ TEP.log_header(log_file)
                                                             start.inserted)
             end
 
-            results["rnf_time"] = report.runtime
+            results["rnf_time"] = report.time
             results["rnf_rm_percent"] = report.removed_percent
             results["rnf_impr_percent"] = report.improvement_percent
             results["fix_start_time"] = fix_start_time

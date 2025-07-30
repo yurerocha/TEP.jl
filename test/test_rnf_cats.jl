@@ -78,7 +78,7 @@ TEP.log_header(log_file)
                     @elapsed (obj = TEP.fix_start!(inst, params, mip, start))
             results["objective"] = obj
     
-            params.solver_time_limit -= (fix_start_time + report.runtime)
+            params.solver_time_limit -= (fix_start_time + report.time)
     
             # TODO: Add tuning flag
             TEP.log(params, "Solve the model", true)
@@ -91,7 +91,7 @@ TEP.log_header(log_file)
                                                             start.inserted)
             end
     
-            results["rnf_time"] = report.runtime
+            results["rnf_time"] = report.time
             results["rnf_rm_percent"] = report.removed_percent
             results["rnf_impr_percent"] = report.improvement_percent
             results["fix_start_time"] = fix_start_time

@@ -143,7 +143,6 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     if JuMP.has_values(model)
         lower_bound = JuMP.objective_value(model)
         obj = JuMP.objective_value(model)
-        @warn obj
         if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED
             gap = 0.0
         else # if status == MOI.TIME_LIMIT
