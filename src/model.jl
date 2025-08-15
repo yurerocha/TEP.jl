@@ -65,6 +65,9 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
         set_attribute(model, 
                       MOI.RawOptimizerAttribute("TimeLimit"), 
                       params.solver_time_limit)
+        # terminates the optimization process as soon as pre-processing and the 
+        # computation of the root relaxation is finished
+        # set_attribute(model, MOI.RawOptimizerAttribute("NodeLimit"), 0)
         # set_attribute(model, MOI.RawOptimizerAttribute("IntFeasTol"), 1e-9)
         # set_attribute(model, MOI.RawOptimizerAttribute("FeasibilityTol"), 1e-9)
         # set_attribute(model, MOI.RawOptimizerAttribute("OptimalityTol"), 1e-9)
@@ -82,16 +85,16 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
         #     buff = [Char(abs(ch)) for ch in buff]
         #     @warn String(buff)
         #     readline()
-        if has_solved_rt_relaxation
-            runtime = Ref{Cdouble}()
-            GRBcbget(cb_data, cb_where, GRB_CB_RUNTIME, runtime)
-            # Terminate as soon as pre-processing and the computation of the 
-            # root relaxation is finished and the beam search time limit is 
-            # reached
-            # if isg(runtime[], params.beam_search.time_limit)
-            #     GRBterminate(backend(model).optimizer.model.inner)
-            # end
-        end
+        # if has_solved_rt_relaxation
+        #     runtime = Ref{Cdouble}()
+        #     GRBcbget(cb_data, cb_where, GRB_CB_RUNTIME, runtime)
+        #     # Terminate as soon as pre-processing and the computation of the 
+        #     # root relaxation is finished and the beam search time limit is 
+        #     # reached
+        #     if isg(runtime[], params.beam_search.time_limit)
+        #         GRBterminate(backend(model).optimizer.model.inner)
+        #     end
+        # end
 
         if cb_where == GRB_CB_MIPNODE
             node_count = Ref{Cdouble}()
@@ -134,10 +137,10 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
 
     status = JuMP.termination_status(model)
     
-    lower_bound = "-"
-    obj = "-"
-    gap = "-"
-    build_obj_rat = "-"
+    lower_bound = const_infinite
+    obj = const_infinite
+    gap = const_infinite
+    build_obj_rat = const_infinite
 
     # If the solver found a solution
     if JuMP.has_values(model)

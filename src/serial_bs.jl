@@ -16,6 +16,8 @@ function run_serial_bs!(inst::Instance,
                         build_solution!(inst, params, scen, lp, is_ph, cache)
     inst.restricted_K = Set(inserted)
 
+    fix_s_vars!(inst, lp)
+
     params.solver_num_threads = 8
     # lp = build_lp(inst, params)
 
@@ -50,7 +52,7 @@ function run_serial_bs!(inst::Instance,
 
         root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K, [])
         Q = [root]
-        while true
+        while true # Evaluate levels in the tree
             if isg(time() - start_time, remaining_time)
                 @info "BS Time limit reached"
                 break
@@ -58,9 +60,8 @@ function run_serial_bs!(inst::Instance,
             LB = []
 
             has_impr = false
-            for (i, node) in enumerate(Q)
-                lines = select_lines(inst, params, lp, 
-                                    node, node.inserted)
+            for (i, node) in enumerate(Q) # Evaluate nodes in the tree
+                lines = select_lines(inst, params, lp, node, node.inserted)
                 for k in lines
                     ins_candidates = setdiff(node.inserted, k)
                     update_lp!(inst, params, lp, ins_candidates)
@@ -130,7 +131,7 @@ function run_serial_bs!(inst::Instance,
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
-    # elapsed_time = time() - start_time
+    elapsed_time = time() - start_time
 
     # log(params, 
     #     "it:$it ins_start:$num_ins_start ins_end:$num_ins " * 
@@ -138,9 +139,9 @@ function run_serial_bs!(inst::Instance,
     #     "el:$(round(elapsed_time, digits = 2))", 
     #     true)
 
-    # log(params, "Build full model", true)
-    # params.solver_num_threads = 8
-    # build_time = @elapsed (mip = build_mip(inst, params))
+    log(params, "Build full model", true)
+    params.solver_num_threads = 8
+    build_time = @elapsed (mip = build_mip(inst, params))
 
     update_lp!(inst, params, lp, inserted)
     # g_bus, bus_inj, viol_update = get_data(inst, lp, ptdf)
@@ -149,28 +150,28 @@ function run_serial_bs!(inst::Instance,
     g = get_values(lp.g)
     start = Start(Set(inserted), f, g)
 
-    # log(params, "Fix the start of the model", true)
-    # fix_start_time = @elapsed (fix_start!(inst, params, mip, start))
+    log(params, "Fix the start of the model", true)
+    fix_start_time = @elapsed (fix_start!(inst, params, mip, start))
 
-    # params.beam_search.time_limit = max(remaining_time - elapsed_time, 0.0)
+    params.beam_search.time_limit = max(remaining_time - elapsed_time, 0.0)
 
-    # log(params, "Solve the model", true)
-    # results = solve!(inst, params, mip)
+    log(params, "Solve the model", true)
+    results = solve!(inst, params, mip)
 
-    # results["rnf_time"] = status.time
-    # results["rnf_rm_percent"] = status.removed_percent
-    # results["rnf_impr_percent"] = status.improvement_percent
-    # results["fix_start_time"] = fix_start_time
-    # results["bs_time"] = elapsed_time
+    results["rnf_time"] = status.time
+    results["rnf_rm_rat"] = status.rm_ratio
+    results["rnf_impr_rat"] = status.impr_ratio
+    results["fix_start_time"] = fix_start_time
+    results["bs_time"] = elapsed_time
 
-    # results["build_time"] = build_time
-    # results["build_obj_rat"] = comp_build_obj_rat(inst, 
-    #                                               results["objective"], 
-    #                                               start.inserted)
+    results["build_time"] = build_time
+    results["build_obj_rat"] = comp_build_obj_rat(inst, 
+                                                  results["objective"], 
+                                                  start.inserted)
 
-    # @warn "Obj $(JuMP.objective_value(mip.jump_model))"
+    @warn "Obj $(JuMP.objective_value(mip.jump_model))"
 
-    # return results
+    return results
 
-    return start
+    # return start
 end

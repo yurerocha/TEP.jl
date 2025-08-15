@@ -1,5 +1,10 @@
-function run_parallel_bs!(inst::Instance, params::Parameters)
-    log(params, "Parallel beam search heuristic", true)
+function run_parallel_bs!(inst::Instance, 
+                          params::Parameters, 
+                          scen::Int64, 
+                          lp::LPModel, 
+                          is_ph::Bool = false, 
+                          cache::Cache = Cache())
+    @info "Parallel beam search heuristic"
 
     # Config JobQueueMPI
     JQM.mpi_init()
@@ -10,8 +15,10 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     candidates = nothing
     if JQM.is_controller_process()
         # Build initial solution
-        _, status, inserted, candidates = build_solution(inst, params)
+        _, status, inserted, candidates = 
+                        build_solution!(inst, params, scen, lp, is_ph, cache)
         inst.restricted_K = Set(inserted)
+        fix_s_vars!(inst, lp)
     end
 
     JQM.mpi_barrier()
@@ -27,38 +34,38 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     controller = JQM.Controller(JQM.num_workers())
 
     params.solver_num_threads = 8
-    lp = build_lp(inst, params)
 
     remaining_time = params.beam_search.time_limit - status.time
 
     K = collect(candidates)
 
-    inserted_beg = length(inserted)
-    inserted_end = 0
-    count_lp_updates = 0
-    prev_best_obj = 0.0
+    num_ins_start = length(inserted)
+    num_ins = 0
+    obj = 0.0
     best_obj = 0.0
+    obj_start = 0.0
 
     # num_candidates_per_batch = params.beam_search.num_candidates_per_batch
 
     it = 1
+    scen = 1
     for bs_it in 1:params.beam_search.num_max_it
         update_lp!(inst, params, lp, inserted)
-        obj = comp_obj(inst, params, lp, inserted)
+        obj = comp_obj(inst, params, scen, lp, inserted)
         # params.beam_search.num_candidates_per_batch = 
         #                                             num_candidates_per_batch
 
         num_it_wo_impr = 0
         if bs_it == 1
             best_obj = obj
-            prev_best_obj = obj
+            obj_start = obj
         end
 
         root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K, [])
         Q = [root]
         while true
             if isg(time() - start_time, remaining_time)
-                log(params, "BS Time limit reached", true)
+                @info "BS Time limit reached"
                 break
             end
             LB = []
@@ -66,9 +73,15 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
             # Send jobs
             for (i, node) in enumerate(Q)
                 lines = select_lines(inst, params, lp, 
-                                    node, node.inserted)
+                                     node, node.inserted)
                 for k in lines
-                    msg = BSControllerMessage(it, i, node, best_obj, k)
+                    # Estimates the number of nodes required per level so that 
+                    # the number of threads per node is set accordingly
+                    num_threads = div(JQM.num_workers(), 
+                                (params.beam_search.num_children_per_parent * 
+                                 length(Q)))
+                    msg = BSControllerMessage(it, i, node, 
+                                              best_obj, k, num_threads)
                     JQM.add_job_to_queue!(controller, msg)
                 end
             end
@@ -88,32 +101,20 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
                         add_node!(params, LB, best_obj, msg, node)
 
                         if msg.is_feas && isl(msg.obj, best_obj)
-                            log(params, "Inserted update", true)
                             has_impr = true
                             best_obj = msg.obj
                             inserted = node.inserted
-                            inserted_end = length(LB[end].inserted)
-                            @warn it, msg.obj, 
-                                inserted_end, 
-                                time() - start_time
+                            num_ins = length(LB[end].inserted)
+
+                            # Log info
+                            st = Status("bs", num_ins_start - num_ins, 
+                                        inst.num_K, obj, obj_start, start_time)
+                            log_status(params, st)
                         end
                     end
                 end
             end
-
-            # if isl(best_obj, prev_best_obj)
-            #     params.beam_search.num_candidates_per_batch += 1
-            #     log(params, 
-            #         "Increase $(params.beam_search.num_candidates_per_batch)", 
-            #         true)
-            # else
-            #     params.beam_search.num_candidates_per_batch = 
-            #         ceil(Int64, params.beam_search.num_candidates_per_batch / 2.0)
-            #     log(params, 
-            #         "Decrease $(params.beam_search.num_candidates_per_batch)", 
-            #         true)
-            # end
-            prev_best_obj = best_obj
+            params.log_level == 4 && flush(io)
 
             if has_impr
                 num_it_wo_impr = 0
@@ -121,13 +122,13 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
                 num_it_wo_impr += 1
 
                 if num_it_wo_impr >= params.beam_search.num_max_it_wo_impr
-                    @warn "Max it wo impr reached"
+                    @info "Max it wo impr reached"
                     break
                 end
             end
 
             if length(LB) == 0
-                log(params, "No new nodes to investigate")
+                @info "No new nodes to investigate"
                 break
             end
             Q = select!(params, LB, K)
@@ -139,7 +140,7 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
            isg(time() - start_time, remaining_time)
             break
         else
-            log(params, "Change shuffle strategy", true)
+            @info "Change shuffle strategy"
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
@@ -148,13 +149,12 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     JQM.send_termination_message()
     JQM.mpi_finalize()
 
-    @warn it, 
-          inserted_beg, inserted_end, 
-          inserted_end / inserted_beg, 
+    @info it, 
+          num_ins_start, num_ins, 
+          num_ins / num_ins_start, 
           elapsed_time
 
-    log(params, "Build full model", true)
-    params.solver_num_threads = 8
+    @info "Build full model"
     build_time = @elapsed (mip = build_mip(inst, params))
 
     update_lp!(inst, params, lp, inserted)
@@ -164,26 +164,33 @@ function run_parallel_bs!(inst::Instance, params::Parameters)
     g = get_values(lp.g)
     start = Start(Set(inserted), f, g)
 
-    log(params, "Fix the start of the model", true)
-    fix_start_time = @elapsed (fix_start!(inst, params, mip, start))
+    results = init_results()
 
+    @info "Fix the start of the model"
+    fix_start_time = @elapsed (start_ub = fix_start!(inst, params, mip, start))
+    
     params.beam_search.time_limit = max(remaining_time - elapsed_time, 0.0)
-
-    log(params, "Solve the model", true)
-    results = solve!(inst, params, mip)
-
+    
+    # @info "Solve the model"
+    # results = solve!(inst, params, mip)
+    
     results["rnf_time"] = status.time
-    results["rnf_rm_percent"] = status.removed_percent
-    results["rnf_impr_percent"] = status.improvement_percent
+    results["rnf_rm_rat"] = status.rm_ratio
+    results["rnf_impr_rat"] = status.impr_ratio
     results["fix_start_time"] = fix_start_time
     results["bs_time"] = elapsed_time
+    results["start_ub"] = start_ub
 
     results["build_time"] = build_time
-    results["build_obj_rat"] = comp_build_obj_rat(inst, 
-                                                  results["objective"], 
-                                                  start.inserted)
+    # results["build_obj_rat"] = comp_build_obj_rat(inst, 
+    #                                               results["objective"], 
+    #                                               start.inserted)
 
-    @warn "Obj $(JuMP.objective_value(mip.jump_model))"
+    @info "Obj $(JuMP.objective_value(mip.jump_model))"
+
+    params.log_level == 4 && flush(io)
+    params.log_level == 4 && close(io)
+    # params.log_level == 4 && redirect_stdout(stdout)
 
     return results
 end
@@ -192,8 +199,14 @@ function bs_workers_loop(inst::Instance, params::Parameters)
     if JQM.is_worker_process()
         worker = JQM.Worker()
         # Build the model for the first scenario
-        # lp = LPModel(params)
-        lp = build_lp(inst, params)
+        # Solve subscenarios with a single thread
+        num_threads = params.solver_num_threads
+        params.solver_num_threads = 1
+        lp = build_lp(inst, params, scen)
+        params.solver_num_threads = num_threads
+
+        fix_s_vars!(inst, lp)
+        scen = 1
         while true
             job = JQM.receive_job(worker)
             msg = JQM.get_message(job)
@@ -201,29 +214,12 @@ function bs_workers_loop(inst::Instance, params::Parameters)
                 break
             end
 
+            set_attribute(lp.jump_model, 
+                          MOI.RawOptimizerAttribute("Threads"), 
+                          msg.num_threads)
+
             # TODO: Reduzir os dados em msg para o mínimo necessário
             ins_candidates = setdiff(msg.node.inserted, msg.k)
-            # build_obj = comp_build_obj(inst, ins_candidates)
-            # function barrier_callback(cb_data, cb_where::Cint)
-            #     if cb_where == GRB_CB_BARRIER
-            #         dual_obj = Ref{Cdouble}()
-            #         GRBcbget(cb_data, cb_where, 
-            #                  GRB_CB_BARRIER_DUALOBJ, dual_obj)
-            #         if isg(build_obj + dual_obj[], msg.best_obj)
-            #             # @warn build_obj + dual_obj[], 
-            #             #       msg.best_obj, "Terminate Gurobi"
-            #             # readline()
-            #             GRBterminate(
-            #                     backend(lp.jump_model).optimizer.model.inner)
-            #         end
-            #     end
-            # end
-            # set_attribute(lp.jump_model, 
-            #               Gurobi.CallbackFunction(), 
-            #               barrier_callback)
-
-            # Update the model according to the current data
-            # rm_lines!(inst, params, lp, Set(keys(inst.K)), false)
             update_lp!(inst, params, lp, ins_candidates)
 
             obj = const_infinite
@@ -231,11 +227,12 @@ function bs_workers_loop(inst::Instance, params::Parameters)
             viol = 0.0
             # The flow values for the parent node
             f = msg.node.f
-            if JuMP.has_values(lp.jump_model)
-                obj = comp_obj(inst, params, lp, ins_candidates)
+            # if JuMP.has_values(lp.jump_model)
+            if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
+                obj = comp_obj(inst, params, scen, lp, ins_candidates)
                 f = get_values(lp.f)
                 is_feas = true
-                viol = comp_viol(lp)
+                # viol = comp_viol(lp)
             end
             
             ret_msg = BSWorkerMessage(msg.node_idx, msg.k, is_feas, 

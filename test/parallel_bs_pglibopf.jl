@@ -14,16 +14,23 @@ end_file = parse(Int64, ARGS[3])
 log_dir = ARGS[4]
 dir = ARGS[5]
 file = ARGS[6]
+scen = 1
 
 filepath = "$dir/$file"
+
+params.log_dir = log_dir
 params.log_file = "$log_dir/$file"
 
-inst = TEP.build_instance(params, filepath)
-
-results = TEP.init_results()
-
 try
-    results = TEP.run_parallel_bs!(inst, params)
+    results = TEP.init_results()
+
+    inst = TEP.build_instance(params, filepath)
+
+    lp = TEP.build_lp(inst, params, scen)
+    c = TEP.Cache(0, 0)
+
+    results = TEP.run_parallel_bs!(inst, params, scen, lp, false, c)
+
     TEP.log_instance(log_file, file, inst, results)
 catch e
     @warn e

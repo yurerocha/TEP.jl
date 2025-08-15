@@ -40,7 +40,12 @@ function get_g_bus_values(inst::Instance,
 end
 
 """
-    select_lines()
+    select_lines(inst::Instance, 
+                 params::Parameters, 
+                 # ptdf::PTDFSystem, 
+                 lp, 
+                 node::Node,
+                 K)
 
 Compute the residuals of the line flows.
 """
@@ -51,54 +56,57 @@ function select_lines(inst::Instance,
                       node::Node,
                       K)
     # Disregard nodes that lead to an infeasible solution
-    candidates = setdiff(K, node.ignore)
-    # lines = Vector{Tuple{Any, Float64}}()
-    # for k in candidates
-    #     # Map to the existing lines
-    #     j = k[1]
-    #     r = inst.K[k].cost * node.f[j]
-    #     push!(lines, (k, r))
-    # end
-    lines = [(k, inst.K[k].cost) for k in candidates]
-    # TODO: Normalizar os custos?
+    setdiff!(K, node.ignore)
+
+    # Disregard lines with the largest reactances
+    sort!(K, by = k -> inst.K[k].x, rev = true)
+    K = K[1:round(Int64, params.beam_search.restricted_list_ratio * end)]
 
     w = params.beam_search.num_children_per_parent
-    b = params.beam_search.candidates_per_batch_mult * length(candidates)
-    b = max(ceil(Int64, b), 1)
-    batch_size = round(Int64, 
-                       params.beam_search.restricted_batch_mult * (w * b))
-    max_idx = min(batch_size, length(lines))
-    # partialsort!(lines, 1:max_idx, by = x -> x[2], rev = true)
-    sort!(lines, by = x -> x[2], rev = true)
-    lines = [lines[i][1] for i in eachindex(lines)]
+    b = params.beam_search.candidates_per_batch_mult * length(K)
+    b = max(floor(Int64, b), 1)
 
-    return disjoint_samples(params::Parameters, lines, w, b)
+    samples = disjoint_samples(params, K, b)
+
+    return select_best_child_nodes!(inst, samples, w)
 end
 
 
 """
-Select m disjoint samples of size n from a vector.
+    disjoint_samples(params::Parameters, lines::Vector, b::Int)
+
+Divide the lines into b disjoint samples.
 """
-function disjoint_samples(params::Parameters, 
-                          lines::Vector, 
-                          m::Int, n::Int)
-    # Shuffle the indices, if needed
+function disjoint_samples(params::Parameters, lines::Vector, b::Int)
+    # Shuffle the indices, if required
     is_en = params.beam_search.is_shuffle_en
-    lines = lines[1:round(Int64, 0.5 * length(lines))]
     indices = is_en ? randperm(length(lines)) : 1:length(lines)
-    selected = lines[indices[1:min(m * n, length(indices))]]
+    selected = lines[indices]
 
     # Divide the elements into batches
-    batches = Vector{Vector{Any}}()
-    for i in 1:m
-        j = (i - 1)*n + 1
-        if j > length(selected)
-            break
-        end
-        push!(batches, selected[j:min(i * n, length(selected))])
+    samples = Vector{Vector{Any}}()
+    n = trunc(Int64, length(selected) / b)
+    for i in 1:b:length(selected)
+        j = i + b - 1
+        push!(samples, selected[i:min(j, end)])
     end
 
-    return batches
+    return samples
+end
+
+"""
+    select_best_child_nodes!(inst::Instance, 
+                             samples::Vector{Vector{Any}}, 
+                             w::Int64)
+
+Select the w samples whose elements sum the largest costs.
+"""
+function select_best_child_nodes!(inst::Instance, 
+                                  samples::Vector{Vector{Any}}, 
+                                  w::Int64)
+    sort!(samples, by = x -> sum([inst.K[k].cost for k in x]), rev = true)
+
+    return samples[1:min(w, end)]
 end
 
 function comp_viol(inst::Instance, 
@@ -124,22 +132,24 @@ function comp_viol(inst::Instance,
 end
 
 
-function select!(params::Parameters, LB, K)
-    sort!(LB, by = x -> x.obj)
-    # @info [lb.obj for lb in LB]
-    # readline()
-    # l = floor(Int64, 1.5 * N)
+function select!(params::Parameters, UB, K)
+    sort!(UB, by = x -> x.obj)
+    # Select N the l best upper bound solutions 
     N = params.beam_search.num_children_per_level
-    N = min(N, length(LB))
-    # Select the best l LBs
-    # for node in LB
+    l = floor(Int64, params.beam_search.num_children_per_level_mult * N)
+    l = min(l, length(UB))
+    N = min(N, length(UB))
+    if l > N
+        UB = Random.shuffle(UB[1:l])
+    end
+    # Select the best l UBs
+    # for node in UB
     #     for k in node.latest_candidate
     #         delete_value!(K, k)
     #     end
     # end
-    LB = LB[1:N]
-    # Return, randomly, N samples among the best l LBs
-    return LB
+    # Return, randomly, N samples among the best l UBs
+    return UB[1:N]
 end
 
 function delete_value!(vec::Vector, val)
@@ -152,12 +162,12 @@ function delete_value!(vec::Vector, val)
     return false
 end
 
-function add_node!(params::Parameters, LB, best_obj, msg, node)
+function add_node!(params::Parameters, UB, best_obj, msg, node)
     # inserted = vcat(node.inserted, latest)
     # candidates = setdiff(node.candidates, latest)
-    inserted = node.inserted
-    candidates = node.candidates
-    ignore = node.ignore
+    inserted = deepcopy(node.inserted)
+    candidates = deepcopy(node.candidates)
+    ignore = deepcopy(node.ignore)
     # TODO: Se o obj for menor do que o obj anterior para o mesmo nó, remover.
     # Só remover quando melhorar o best obj, pode fazer com que um mesmo batch
     # seja reavaliado multiplas vezes
@@ -169,11 +179,14 @@ function add_node!(params::Parameters, LB, best_obj, msg, node)
         inserted = setdiff(node.inserted, msg.k)
         candidates = vcat(node.candidates, msg.k)
     # elseif !msg.is_feas
-    elseif !params.beam_search.is_shuffle_en
-        # If infeasible, place the lines in the ignore list
-        ignore = vcat(node.ignore, msg.k)
+    else
+        # msg.obj = node.obj # Parent's obj
+        if !params.beam_search.is_shuffle_en
+            # If infeasible, place the lines in the ignore list
+            ignore = vcat(node.ignore, msg.k)
+        end
     end
-    push!(LB, Node(msg.obj, msg.f, msg.viol, inserted, candidates, ignore))
+    push!(UB, Node(msg.obj, msg.f, msg.viol, inserted, candidates, ignore))
 
     return nothing
 end

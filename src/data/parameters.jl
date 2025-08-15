@@ -23,7 +23,7 @@ end
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
     penalty::Float64 = 1.0
-    # is_lp_model_s_var_set_req = false
+    # is_lp_model_s_var_set_req = true
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
     optimizer = Gurobi.Optimizer
@@ -31,8 +31,8 @@ end
 
 Base.@kwdef mutable struct HeuristicParameters
     rnf_time_limit::Float64 = 3600.0
-    rnf_percent::Float64 = 0.4 # 0.9
-    rnf_delta::Float64 = 0.1
+    rnf_percent::Float64 = 0.7 # 0.9
+    rnf_delta::Float64 = 0.2
     # Initial percentage of violated candidates to insert
     vf_lambda_start::Float64 = 1.0
     # Percentage of candidates connected to g to evaluate per it
@@ -44,12 +44,13 @@ end
 Base.@kwdef mutable struct BeamSearchParameters
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
+    num_children_per_level_mult::Int64 = 2 # calibrá-lo: 2, 4, 8
     candidates_per_batch_mult::Float64 = 1e-3
-    num_max_it::Int64 = 2
-    num_max_it_wo_impr::Int64 = 20
-    is_shuffle_en::Bool = true
-    time_limit::Float64 = 100.0
-    restricted_batch_mult::Float64 = 2.0
+    num_max_it::Int64 = 1
+    num_max_it_wo_impr::Int64 = 10
+    is_shuffle_en::Bool = false
+    time_limit::Float64 = 300.0
+    restricted_list_ratio::Float64 = 0.5 # TODO: calibrar: 0.6, 0.7, 0.8
 end
 
 # TODO: ProgressiveHedging -> PH
@@ -60,11 +61,11 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
 end
 
 Base.@kwdef mutable struct Parameters
-    log_level::Int64 = 1
+    log_level::Int64 = 4
     log_dir::String = "logs"
     log_file::String = "log.txt"
     debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 50.0
+    solver_time_limit::Float64 = 1800.0
     solver_num_threads::Int64 = 8
     stochastic_inst_round_digits::Int64 = 5
     instance::InstanceParameters = InstanceParameters()

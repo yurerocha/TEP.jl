@@ -4,18 +4,16 @@ using TEP
 using MPI
 using Random
 
-include("utils.jl")
-
 params = TEP.Parameters()
 
-start_file = 52 # 40
-end_file = 62 # 62
-log_dir = "test/log_bs_pglibopf_30"
-log_file = "$log_dir/tep_bs_pglibopf_30.md"
+start_file = 40 # 40
+end_file = 61 # 61
+log_dir = "test/quali_ub_5min/rnf_bs"
+log_file = "$log_dir/log.md"
 dir = "submodules/pglib-opf"
 
 try
-    rm_dir(log_dir)
+    TEP.rm_dir(log_dir)
 catch e
     @warn e
 end
@@ -24,11 +22,11 @@ rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 
-files = select_files(dir, end_file)
+files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
-skip = []
+skip = ["pglib_opf_case8387_pegase.m"]
 # "pglib_opf_case30_ieee.m" Infeasible
 
 project_dir = dirname(Base.active_project())

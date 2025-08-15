@@ -22,7 +22,6 @@ function build_solution!(inst::Instance,
     # params.model.is_lp_model_s_var_set_req = true
     # lp = build_lp(inst, params, scen)
     # params.model.is_lp_model_s_var_set_req = is_req
-    fix_s_vars!(inst, lp)
 
     lines = collect(keys(inst.K))
     inserted = Set{Any}(lines)
@@ -35,7 +34,7 @@ function build_solution!(inst::Instance,
     if is_heur_en
         time_start = time()
         num_rm_start = length(removed)
-        
+
         optimize!(lp.jump_model)
 
         st = termination_status(lp.jump_model)
@@ -64,8 +63,6 @@ function build_solution!(inst::Instance,
         g = get_values(lp.g)
         start = Start(inserted, f, g)
     end
-
-    unfix_s_vars!(inst, lp)
 
     log_status(params, status)
 
@@ -288,12 +285,12 @@ function violated_flows_neigh!(inst::Instance,
                 @assert iseq(viol, objective_value(lp_debug.jump_model))
             end
         else
-            @info "Decrease lambda and restart $lambda"
-            lambda /= 2.0
+            # @info "Decrease lambda and restart $lambda"
+            # lambda /= 2.0
             # lambda = max(0.0, lambda - params.heuristic.vf_delta)
             # The inserted candidates make the solution worse
             rm_lines!(inst, params, lp, insert)
-            # break
+            break
         end
         it += 1
     end
@@ -320,14 +317,15 @@ function rm_lines!(inst::Instance,
 
     for k in candidates
         # if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
-        #     fix(lp.s[k], 0.0; force = true)
-        # end
+        if !is_fixed(lp.s[k])
+            fix(lp.s[k], 0.0; force = true)
+        end
 
         # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
         #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
         #                            [0, 0])
         set_normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]], 0)
-        # fix(lp.f[k], 0.0; force = true)
+        fix(lp.f[k], 0.0; force = true)
     end
 
     if is_opt
@@ -354,9 +352,10 @@ function add_lines!(inst::Instance,
 
     for k in new_candidates
         # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
-        #     unfix(lp.s[k])
-        #     set_lower_bound(lp.s[k], 0.0)
-        # end
+        if is_fixed(lp.s[k])
+            unfix(lp.s[k])
+            set_lower_bound(lp.s[k], 0.0)
+        end
 
         if is_fixed(lp.f[k])
             unfix(lp.f[k])

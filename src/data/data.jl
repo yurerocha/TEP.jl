@@ -253,6 +253,7 @@ mutable struct BSControllerMessage
     node::Node
     best_obj::Float64 # Build + generation
     k::Vector{Any}
+    num_threads::Int64
 end
 
 mutable struct BSWorkerMessage

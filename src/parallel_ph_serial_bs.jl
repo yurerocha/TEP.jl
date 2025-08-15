@@ -7,7 +7,7 @@ Associated paper: https://link.springer.com/article/10.1007/s10107-016-1000-z
 """
 # TODO: Consider non-binary first stage decision variables
 function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
-    log(params, "Parallel solution strategy", true)
+    @info "Parallel solution strategy"
 
     # Config JobQueueMPI
     JQM.mpi_init()
@@ -34,6 +34,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             msg = ControllerMessage(cache, it, scen)
             JQM.add_job_to_queue!(controller, msg)
         end
+        @info "New PH run"
         while !has_finished_all_jobs(controller)
             if !JQM.is_job_queue_empty(controller)
                 JQM.send_jobs_to_any_available_workers(controller)
@@ -46,6 +47,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
                 end
             end
         end
+        @info "End PH run"
         # Aggregation
         update_cache_x_hat!(inst, cache)
 

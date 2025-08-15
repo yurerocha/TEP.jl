@@ -9,8 +9,8 @@ using Test
 
 params = TEP.Parameters()
 
-start_file = 40
-end_file = 40
+start_file = 1
+end_file = 1
 dir = "input_bin/"
 # num_tests = 10
 # files = TEP.select_files(path, num_tests)
@@ -38,11 +38,11 @@ skip = []
             TEP.log(params, "Skipping instance $file")
             continue
         end
-        TEP.log(params, "Test $file num $(start_file + i - 1)", true)
+        @info "Test $file num $(start_file + i - 1)"
 
-        # inst = TEP.build_stochastic_instance(params, dir * file)
-        
         filepath = "$dir/$file"
+    
+        params.log_dir = log_dir
         params.log_file = "$log_dir/$file"
 
         inst = open(filepath, "r") do io

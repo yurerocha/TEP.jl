@@ -5,15 +5,14 @@ using MPI
 using Random
 using PowerModels
 
-include("utils.jl")
-
 params = TEP.Parameters()
 
-start_file = 40 # 40
-end_file = 40 # 62
+start_file = 2 # 40
+end_file = start_file # 62
 log_dir = "test/logs/tmp"
 log_file = "$log_dir/log.md"
 dir = "submodules/pglib-opf"
+scen = 1
 
 try
     rm_dir(log_dir)
@@ -25,7 +24,7 @@ rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 
-files = select_files(dir, end_file)
+files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
@@ -43,19 +42,24 @@ for (i, file) in enumerate(files[start_file:end_file])
     TEP.log(params, "Test $file num $(start_file + i - 1)", true)
 
     filepath = "$dir/$file"
+    
+    params.log_dir = log_dir
     params.log_file = "$log_dir/$file"
     
     inst = TEP.build_instance(params, filepath)
     
     results = TEP.init_results()
     
-    # try
-        results = TEP.run_serial_bs!(inst, params)
+    try
+        lp = TEP.build_lp(inst, params, scen)
+        c = TEP.Cache(0, 0)
+
+        results = TEP.run_serial_bs!(inst, params, scen, lp, false, c)
         TEP.log_instance(log_file, file, inst, results)
-    # catch e
-    #     @warn e
-    #     TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
-    # end
+    catch e
+        @warn e
+        TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
+    end
 end
 
 end # module

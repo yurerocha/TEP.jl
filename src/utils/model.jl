@@ -21,11 +21,20 @@ function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
             # set_attribute(tep.jump_model, 
             #               MOI.RawOptimizerAttribute("Crossover"), 0)
         end
-        if params.log_level == 0
+        if params.log_level == 0 || params.log_level == 4
             JuMP.set_silent(tep.jump_model)
-        elseif params.log_level == 1 # && tep isa LPModel
+            # set_attribute(tep.jump_model, 
+            #               MOI.RawOptimizerAttribute("OutputFlag"), 
+            #               0)
+        end
+        if params.log_level == 1 || params.log_level == 3
             set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("LogToConsole"), 0)
+                          MOI.RawOptimizerAttribute("LogFile"), 
+                          get_log_filename(inst, params, scen))
+        end
+        if params.log_level == 2 || params.log_level == 3
+            set_attribute(tep.jump_model, 
+                          MOI.RawOptimizerAttribute("LogToConsole"), 1)
         end
     end
 
@@ -398,6 +407,7 @@ function set_obj!(inst::Instance,
                   scen::Int64, 
                   lp::LPModel)
     # Generation costs
+    # TODO: remover os custos de operação quadráticos do cálculo da penalidade
     pen = 0.0
     for k in keys(lp.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
@@ -533,14 +543,13 @@ function enforce_sol(inst::Instance,
     return nothing
 end
 
+"""
+    comp_viol(lp::LPModel)
+
+Compute violation as the sum of the slack variables.
+"""
 function comp_viol(lp::LPModel)
-    viol = 0.0
-
-    for s in values(lp.s)
-        viol += JuMP.value(s)
-    end
-
-    return viol
+    return sum(JuMP.value(s) for s in values(lp.s))
 end
 
 function check_sol(inst::Instance, tep::TEPModel, md)

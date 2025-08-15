@@ -177,8 +177,8 @@ function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
              "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
              "| Rt solve (s) | Lower bound | Obj | Gap (%) | Start (s) " *
-             "| RNF (s) | RNF rm | RNF impr | BS (s) | \n"
-    outstr *= "|:---"^19 * "| \n"
+             "| RNF (s) | RNF rm | RNF impr | BS (s) | Start UB | \n"
+    outstr *= "|:---"^20 * "| \n"
     log(outputfile, outstr)
 
     return nothing
@@ -188,7 +188,7 @@ function get_keys_results()
     return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
             "status", "root_best_bound", "root_time", "lower_bound", 
             "objective", "gap", "fix_start_time", "rnf_time", "rnf_rm_rat", 
-            "rnf_impr_rat", "bs_time"]
+            "rnf_impr_rat", "bs_time", "start_ub"]
 end
 
 """
@@ -225,7 +225,7 @@ end
 function init_results()
     d = Dict{String, Any}()
     for k in get_keys_results()
-        d[k] = "-"
+        d[k] = const_infinite
     end
     return d
 end
