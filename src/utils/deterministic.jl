@@ -1,10 +1,16 @@
 
 """
-    add_subproblem!(model::JuMP.Model, subproblem::JuMP.Model, scen::Int64)
+    add_subproblem!(inst::Instance, 
+                    model::JuMP.Model, 
+                    scen::Int64, 
+                    subproblem::JuMP.Model)
 
 Add a subproblem as a block to the deterministic problem.
 """
-function add_subproblem!(model::JuMP.Model, subproblem::JuMP.Model, scen::Int64)
+function add_subproblem!(inst::Instance, 
+                         model::JuMP.Model, 
+                         scen::Int64, 
+                         subproblem::JuMP.Model)
     # Associate every variable in the subproblem with a variable in the model
     sp_vars = vcat(JuMP.all_variables(subproblem))
     md_vars = @variable(model, [v = 1:length(sp_vars)])
@@ -28,15 +34,13 @@ function add_subproblem!(model::JuMP.Model, subproblem::JuMP.Model, scen::Int64)
     incumbent = JuMP.objective_function(model)
     delta_obj =  build_expr(JuMP.objective_function(subproblem), var_in_md)
 
-    # TODO: allow for different senses
-    @objective(model, Min, incumbent + delta_obj)
+    @objective(model, Min, incumbent + inst.scenarios[scen].p * delta_obj)
 
     # Se ligar nisso na hora de recuperar a função objetivo do det. equivalente
     # Atualizar as variáveis de estado dos subproblemas para que sejam as novas
     # variáveis x associadas ao problema principal
     update_state_vars!(model, subproblem, var_in_md)
-    # Adicionar restrição que force que os valores das variáveis x de qualquer
-    # subproblema assumam os mesmos valores (restrições de não antecipatividade)
+
     return nothing
 end
 
@@ -118,5 +122,27 @@ function add_non_anticipativity_cons!(inst::Instance,
         @constraint(model, subproblems[1].jump_model.ext[:state].x .== 
                            subproblems[scen].jump_model.ext[:state].x)
     end
+    return nothing
+end
+
+"""
+    add_obj_build_costs!(inst::Instance, 
+                         model::JuMP.Model, 
+                         subproblems::Vector{MIPModel})
+
+Update the objective function with the costs ob building candidates.
+"""
+function add_obj_build_costs!(inst::Instance, 
+                              model::JuMP.Model, 
+                              subproblems::Vector{MIPModel})
+    incumbent = JuMP.objective_function(model)
+
+    x = subproblems[1].jump_model.ext[:state].x
+    build = sum(inst.K[k].cost * x[i] for (i, k) in enumerate(keys(inst.K)))
+
+    @objective(model, Min, build + incumbent)
+    @show JuMP.objective_function(model)
+    readline()
+
     return nothing
 end

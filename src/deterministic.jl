@@ -14,12 +14,14 @@ function solve_deterministic!(inst::Instance, params::Parameters)
     for scen in 1:inst.num_scenarios
         # TODO: Change LP objective as well
         # TODO: Run heuristic in every it
-        subproblem = build_mip(inst, params, scen)
+        subproblem = build_mip(inst, params, scen, true)
         set_state!(subproblem, subproblem.x, subproblem.g)
-        add_subproblem!(mip.jump_model, subproblem.jump_model, scen)
+        add_subproblem!(inst, mip.jump_model, scen, subproblem.jump_model)
         subproblems[scen] = subproblem
     end
     add_non_anticipativity_cons!(inst, mip.jump_model, subproblems)
+    add_obj_build_costs!(inst, mip.jump_model, subproblems)
+    
     results = solve!(inst, params, mip)
 
     if has_values(mip.jump_model)

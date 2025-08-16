@@ -6,8 +6,6 @@ using Random
 using TEP
 using Test
 
-include("utils.jl")
-
 params = TEP.Parameters()
 
 start_file = 4
@@ -28,7 +26,7 @@ rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 
-files = select_files(dir, end_file)
+files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 skip = []
@@ -44,6 +42,9 @@ skip = []
 
         inst = TEP.build_stochastic_instance(params, dir * file)
         
+        filepath = "$dir/$file"
+    
+        params.log_dir = log_dir
         params.log_file = "$log_dir/$file"
 
         # try
