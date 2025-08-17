@@ -31,8 +31,8 @@ function build_instance(params::Parameters, filepath::String)
 
     scenarios = [Scenario(1.0, D, G)]
 
-    return Instance(get_inst_name(filepath), I, J, K, keys(K), 
-                    length(I), length(J), length(K),
+    return Instance(get_inst_name(filepath), I, J, K, 
+                    length(I), length(J), length(K), 
                     ref_bus, 
                     scenarios, length(scenarios))
 end

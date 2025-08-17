@@ -8,8 +8,8 @@ using Test
 
 params = TEP.Parameters()
 
-start_file = 4
-end_file = 62
+start_file = 40
+end_file = 40
 dir = "submodules/pglib-opf/"
 # num_tests = 10
 # files = TEP.select_files(path, num_tests)

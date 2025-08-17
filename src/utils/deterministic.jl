@@ -141,8 +141,6 @@ function add_obj_build_costs!(inst::Instance,
     build = sum(inst.K[k].cost * x[i] for (i, k) in enumerate(keys(inst.K)))
 
     @objective(model, Min, build + incumbent)
-    @show JuMP.objective_function(model)
-    readline()
 
     return nothing
 end

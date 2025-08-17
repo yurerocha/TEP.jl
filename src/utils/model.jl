@@ -69,7 +69,7 @@ function add_vars!(inst::Instance, params::Parameters, scen::Int64, lp::LPModel)
                                 base_name = "s[$j]")
         # end
     end
-    for k in inst.restricted_K
+    for k in keys(inst.K)
         lp.f[k] = @variable(lp.jump_model, base_name = "f[$k]")
         # if params.model.is_lp_model_s_var_set_req
             lp.s[k] = @variable(lp.jump_model, 
@@ -218,7 +218,7 @@ function add_thermal_limits_cons!(inst::Instance,
         # end
     end
     # Candidates
-    for k in inst.restricted_K
+    for k in keys(inst.K)
         # if params.model.is_lp_model_s_var_set_req
             s = lp.s[k]
             @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
@@ -270,7 +270,7 @@ function add_ohms_law_cons!(inst::Instance, lp::LPModel)
                                 base_name = "ol.j[$j]")
     end
     # Ohm's law for candidate circuits
-    for k in inst.restricted_K
+    for k in keys(inst.K)
         # Dtheta = lp.theta[k[1][2]] - lp.theta[k[1][3]]
         lp.f_cons[k] = @constraint(lp.jump_model, 
                         lp.f[k] == inst.K[k].gamma * lp.Dtheta[k[1][2:3]],
@@ -371,6 +371,7 @@ end
     set_obj!(inst::Instance, 
              params::Parameters, 
              scen::Int64, 
+             is_subproblem::Bool, 
              tep::TEPModel)
 
 Set the objective to minimize the costs of expanding the network.
@@ -378,15 +379,18 @@ Set the objective to minimize the costs of expanding the network.
 function set_obj!(inst::Instance, 
                   params::Parameters, 
                   scen::Int64, 
+                  is_subproblem::Bool, 
                   tep::TEPModel)
+    # Cost of building new candidate lines
+    if (!is_subproblem)
+        for k in keys(inst.K)
+            add_to_expression!(tep.obj, inst.K[k].cost, tep.x[k])
+        end
+    end
     # Generation costs
     for k in keys(tep.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
-        add_to_expression!(tep.obj, comp_g_obj(params, tep.g[k], c))
-    end
-    # Cost of building new candidate lines
-    for k in keys(inst.K)
-        add_to_expression!(tep.obj, inst.K[k].cost, tep.x[k])
+        add_to_expression!(tep.obj, comp_g_obj_term(params, tep.g[k], c))
     end
 
     @objective(tep.jump_model, Min, tep.obj)
@@ -405,6 +409,7 @@ Set the objective to minimize the slacks.
 function set_obj!(inst::Instance, 
                   params::Parameters, 
                   scen::Int64, 
+                  is_subproblem::Bool, 
                   lp::LPModel)
     # Generation costs
     # TODO: remover os custos de operação quadráticos do cálculo da penalidade
@@ -412,7 +417,7 @@ function set_obj!(inst::Instance,
     for k in keys(lp.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
         # TODO: Add generation costs?
-        add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
+        add_to_expression!(lp.obj, comp_g_obj_term(params, lp.g[k], c))
         # pen = max(pen, comp_largest_g(params, c, 
         #                               inst.scenarios[scen].G[k].upper_bound))
         if length(c) > 0
@@ -430,15 +435,15 @@ function set_obj!(inst::Instance,
 end
 
 """
-   comp_g_obj(params::Parameters, 
-              g::JuMP.VariableRef, 
-              costs::Vector{Float64})
+   comp_g_obj_term(params::Parameters, 
+                   g::JuMP.VariableRef, 
+                   costs::Vector{Float64})
 
 Compute g in the objective function.
 """
-function comp_g_obj(params::Parameters, 
-                    g::T, 
-                    costs::Vector{Float64}) where 
+function comp_g_obj_term(params::Parameters, 
+                         g::T, 
+                         costs::Vector{Float64}) where 
                                         T <: Union{Float64, JuMP.VariableRef}
     l = length(costs)
     costs = abs.(costs)
@@ -628,7 +633,7 @@ function fix_s_vars!(inst::Instance, lp::LPModel)
     for j in keys(inst.J)
         JuMP.fix(lp.s[j], 0.0; force = true)
     end
-    for k in inst.restricted_K
+    for k in keys(inst.K)
         JuMP.fix(lp.s[k], 0.0; force = true)
     end
     return nothing
@@ -641,11 +646,11 @@ Unfix and set the lower bounds of the s variables.
 """
 function unfix_s_vars!(inst::Instance, lp::LPModel)
     for j in keys(inst.J)
-        JuMP.unfix(lp.s[j])
+        JuMP.is_fixed(lp.s[j]) && JuMP.unfix(lp.s[j])
         JuMP.set_lower_bound(lp.s[j], 0.0)
     end
-    for k in inst.restricted_K
-        JuMP.unfix(lp.s[k])
+    for k in keys(inst.K)
+        JuMP.is_fixed(lp.s[k]) && JuMP.unfix(lp.s[k])
         JuMP.set_lower_bound(lp.s[k], 0.0)
     end
     return nothing

@@ -46,7 +46,7 @@ Base.@kwdef mutable struct BeamSearchParameters
     num_children_per_level::Int64 = 3 # N
     num_children_per_level_mult::Int64 = 2 # calibrá-lo: 2, 4, 8
     candidates_per_batch_mult::Float64 = 1e-3
-    num_max_it::Int64 = 1
+    num_max_it::Int64 = 2
     num_max_it_wo_impr::Int64 = 10
     is_shuffle_en::Bool = false
     time_limit::Float64 = 300.0
@@ -56,7 +56,7 @@ end
 # TODO: ProgressiveHedging -> PH
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     rho::Float64 = 1.0
-    max_it::Int64 = 100
+    max_it::Int64 = 20
     convergence_eps::Float64 = 1e-3
 end
 

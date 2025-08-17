@@ -150,8 +150,7 @@ Compute the incident flow at node i for the candidate lines.
 """
 function comp_candidate_incident_flows(inst::Instance, tep::TEPModel, i::Int64)
     e = AffExpr(0.0)
-    K = (tep isa MIPModel) ? keys(inst.K) : inst.restricted_K
-    for k in K
+    for k in keys(inst.K)
         if k[1][2] == i
             add_to_expression!(e, -1.0, tep.f[k])
         elseif k[1][3] == i
@@ -511,10 +510,9 @@ function fix_for_symmetry_contrs!(inst::Instance,
     return nothing
 end
 
-function set_state!(tep::TEPModel, 
-                    x::Dict{Tuple{Tuple3I, Int64}, T}, 
-                    y::Dict{Int64, JuMP.VariableRef}) where 
-                                        T <: Union{JuMP.VariableRef, BranchInfo}
+function set_state!(mip::MIPModel, 
+                    x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}, 
+                    y::Dict{Int64, JuMP.VariableRef})
     # In case the x is a single variable instead of a vector
     # if x isa JuMP.VariableRef
     #     x = [x]
@@ -525,18 +523,19 @@ function set_state!(tep::TEPModel,
     # if !(:state in keys(md.ext))
     #     md.ext[:state] = []
     # end
-    if tep isa MIPModel
-        tep.jump_model.ext[:state] = 
-                                State([v for (_, v) in x], [v for (_, v) in y])
-    elseif tep isa LPModel
-        key_to_idx = Dict{Tuple{Tuple3I, Int64}, Int64}()
-        i = 1
-        for (k, _) in x
-            key_to_idx[k] = i
-            i += 1
-        end
-        tep.jump_model.ext[:key_to_idx] = key_to_idx
-    end
+    mip.jump_model.ext[:state] = State([v for (_, v) in x], [v for (_, v) in y])
+
+    return nothing
+end
+
+function set_state!(inst::Instance, 
+                    lp::LPModel, 
+                    y::Dict{Int64, JuMP.VariableRef})
+    lp.jump_model.ext[:key_to_idx] = 
+                            Dict(k => i for (i, k) in enumerate(keys(inst.K)))
+    lp.jump_model.ext[:state] = 
+                        State(Vector{JuMP.VariableRef}(), [v for (_, v) in y])
+
     return nothing
 end
 
@@ -544,6 +543,18 @@ function get_state_values(mip::MIPModel)
     x = mip.jump_model.ext[:state].x
     y = mip.jump_model.ext[:state].y
     return State(value.(x), value.(y))
+end
+
+function get_state_values(inst::Instance, lp::LPModel, inserted)
+    x = zeros(Float64, inst.num_K)
+
+    for k in inserted
+        i = lp.jump_model.ext[:key_to_idx][k]
+        x[i] = 1.0
+    end
+    y = lp.jump_model.ext[:state].y
+
+    return State(x, value.(y))
 end
 
 """

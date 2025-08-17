@@ -50,12 +50,13 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         @info "End PH run"
         # Aggregation
         update_cache_x_hat!(inst, cache)
-
+        
         # Price update
         update_cache_omega!(inst, params, cache)
-
+        
         # Termination criterion
         update_cache_x_average!(inst, cache)
+        @info sum(cache.x_average)
 
         update_cache_best_convergence_delta!(inst, cache, it)
 
@@ -64,16 +65,17 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             log(params, "Convergence reached: $(cache.best_convergence_delta)")
             break
         end
-        # readline()
     end
 
-    for scen in 1:inst.num_scenarios
-        println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
-    end
+    # for scen in 1:inst.num_scenarios
+    #     println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
+    # end
 
     # JQM.mpi_barrier()
     JQM.send_termination_message()
     JQM.mpi_finalize()
+
+    @info "Obj: $(comp_ph_obj(inst, params, cache.sol_average))"
 
     return cache
 end
@@ -84,11 +86,15 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         # Build models for the first scenario
         current_model_scen = 1
 
-        mip = build_mip(inst, params, current_model_scen)
-        lp = build_lp(inst, params, current_model_scen)
+        # Set the number of threads for the LP models
+        num_threads = params.solver_num_threads
+        params.solver_num_threads = 1
 
-        set_state!(mip, mip.x, mip.g)
-        set_state!(lp, inst.K, lp.g)
+        lp = build_lp(inst, params, current_model_scen)
+        set_state!(inst, lp, lp.g)
+
+        # Reset the number of threads to the default value
+        params.solver_num_threads = num_threads
 
         # Open log files
         io = []
@@ -108,7 +114,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             # Update the model according to the current scenario
             if msg.scen != current_model_scen
                 
-                update_model!(inst, params, msg.scen, mip)
+                # update_model!(inst, params, msg.scen, mip)
                 update_model!(inst, params, msg.scen, lp)
                 
                 current_model_scen = msg.scen
@@ -118,22 +124,20 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                             Logging.global_logger(ConsoleLogger(io[msg.scen]))
                     # Logging.global_logger(Logging.SimpleLogger(io[msg.scen]))
             
-            if msg.it > 1
-                update_model_obj!(params, msg.cache, msg.scen, mip)
-                # update_model_obj!(params, msg.cache, msg.scen, lp)
-            end
+            # if msg.it > 1
+            #     update_model_obj!(params, msg.cache, msg.scen, mip)
+            #     update_model_obj!(params, msg.cache, msg.scen, lp)
+            # end
 
-            # solve!(inst, params, mip)
             # The cache data structure is incomplete in the first it
             is_ph = msg.it > 1
-            start = run_serial_bs!(inst, params, msg.scen, lp, is_ph, msg.cache)
+            state_values = 
+                    run_serial_bs!(inst, params, msg.scen, lp, is_ph, msg.cache)
+            @info "Scen: $(msg.scen)"
 
             params.log_level == 1 && flush(io[msg.scen])
 
-            fix_start!(inst, params, mip, start)
-            solve!(inst, params, mip)
-            
-            ret_msg = WorkerMessage(get_state_values(mip), msg.it, msg.scen)
+            ret_msg = WorkerMessage(state_values, msg.it, msg.scen)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end

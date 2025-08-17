@@ -17,7 +17,6 @@ function run_parallel_bs!(inst::Instance,
         # Build initial solution
         _, status, inserted, candidates = 
                         build_solution!(inst, params, scen, lp, is_ph, cache)
-        inst.restricted_K = Set(inserted)
         fix_s_vars!(inst, lp)
     end
 

@@ -500,3 +500,9 @@ capacidade média de geração
 ## Bug instâncias?
 - Não construindo nenhum candidato
 - Não alterar as demandas negativas
+
+## TODO 17/08
+- Tipar os parâmetros de todas as funções
+- Investigar a possibilidade de reduzir o tamanho do modelo LP no BS
+- Tentar reaproveitar informações de outras threads pode ajudar na convergência
+  - Para testar, basta rodar com uma única thread

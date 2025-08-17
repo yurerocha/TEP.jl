@@ -23,7 +23,7 @@ function build_solution!(inst::Instance,
     # lp = build_lp(inst, params, scen)
     # params.model.is_lp_model_s_var_set_req = is_req
 
-    lines = collect(keys(inst.K))
+    lines = is_ph ? cache.sol_average : collect(keys(inst.K))
     inserted = Set{Any}(lines)
     existing = collect(keys(inst.J))
     removed = Set{Any}()
@@ -42,12 +42,7 @@ function build_solution!(inst::Instance,
             @assert iseq(comp_s_viol(lp), 0.0)
         end
 
-        cost = 0.0
-        if is_ph
-            cost = comp_obj(inst, params, scen, lp, inserted, cache)
-        else
-            cost = comp_obj(inst, params, scen, lp, inserted)
-        end
+        cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
 
         init_cost = cost
 
@@ -136,11 +131,7 @@ function rm_and_fix(inst::Instance,
 
         cost = 0.0
         if iseq(viol, 0.0)
-            if is_ph
-                cost = comp_obj(inst, params, scen, lp, inserted, cache)
-            else
-                cost = comp_obj(inst, params, scen, lp, inserted)
-            end
+            cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
         end
 
         if iseq(viol, 0.0) && isl(cost, best_cost)

@@ -70,7 +70,6 @@ mutable struct Instance
     I::Set{Int64} # Buses
     J::Dict{Tuple3I, BranchInfo} # Existing lines
     K::Dict{Tuple{Tuple3I, Int64}, BranchInfo} # Candidates
-    restricted_K::Set{Tuple{Tuple3I, Int64}} # Restricted K
     # f_bar::Vector{Float64} # Capacity of circuits
     # gamma::Vector{Float64} # Susceptance of circuits
     # Dtheta_limits::Vector{Tuple{Float64, Float64}} 
@@ -202,8 +201,11 @@ mutable struct Cache
     scenarios::Vector{ScenarioCache}
     x_hat::Vector{Float64}
     x_average::Vector{Float64}
+    # Computed from x_average by considering candidates built on any scenario
+    sol_average::Vector{Tuple{Tuple3I, Int64}}
     best_convergence_delta::Float64
     best_it::Int64
+    best_sol::Vector{Tuple{Tuple3I, Int64}}
 
     Cache(num_scenarios::Int64, num_vars::Int64) = 
                 new(0, 
@@ -215,7 +217,9 @@ mutable struct Cache
                     # Vector{Vector{Float64}}(undef, num_vars), 
                     Vector{Float64}(), 
                     Vector{Float64}(), 
-                    const_infinite, 0)
+                    Vector{Tuple{Tuple3I, Int64}}(), 
+                    const_infinite, 0, 
+                    Vector{Tuple{Tuple3I, Int64}}())
 end
 
 mutable struct ControllerMessage

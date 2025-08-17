@@ -12,13 +12,11 @@ function run_serial_bs!(inst::Instance,
     candidates = nothing
 
     # Build initial solution
+    unfix_s_vars!(inst, lp)
     _, status, inserted, candidates = 
                         build_solution!(inst, params, scen, lp, is_ph, cache)
-    inst.restricted_K = Set(inserted)
-
     fix_s_vars!(inst, lp)
 
-    params.solver_num_threads = 8
     # lp = build_lp(inst, params)
 
     remaining_time = params.beam_search.time_limit - status.time
@@ -36,11 +34,7 @@ function run_serial_bs!(inst::Instance,
     it = 1
     for bs_it in 1:params.beam_search.num_max_it
         update_lp!(inst, params, lp, inserted)
-        if is_ph
-            obj = comp_obj(inst, params, scen, lp, inserted, cache)
-        else
-            obj = comp_obj(inst, params, scen, lp, inserted)
-        end
+        obj = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
         # params.beam_search.num_candidates_per_batch = 
         #                                             num_candidates_per_batch
 
@@ -57,7 +51,7 @@ function run_serial_bs!(inst::Instance,
                 @info "BS Time limit reached"
                 break
             end
-            LB = []
+            UB = []
 
             has_impr = false
             for (i, node) in enumerate(Q) # Evaluate nodes in the tree
@@ -72,13 +66,8 @@ function run_serial_bs!(inst::Instance,
                     # The flow values for the parent node
                     f = node.f
                     if JuMP.has_values(lp.jump_model)
-                        if is_ph
-                            obj = comp_obj(inst, params, scen, lp, 
-                                           ins_candidates, cache)
-                        else
-                            obj = comp_obj(inst, params, scen, lp, 
-                                           ins_candidates)
-                        end
+                        obj = comp_obj(inst, params, scen, lp, 
+                                       ins_candidates, is_ph, cache)
                         f = get_values(lp.f)
                         is_feas = true
                         viol = comp_viol(lp)
@@ -86,19 +75,21 @@ function run_serial_bs!(inst::Instance,
 
                     msg = BSWorkerMessage(i, k, is_feas, obj, f, viol)
 
-                    add_node!(params, LB, best_obj, msg, node)
+                    add_node!(params, UB, best_obj, msg, node)
 
                     if is_feas && isl(obj, best_obj)
                         # log(params, "Inserted update", true)
                         has_impr = true
                         best_obj = obj
-                        inserted = node.inserted
-                        num_ins = length(LB[end].inserted)
+                        inserted = UB[end].inserted
+                        num_ins = length(UB[end].inserted)
 
                         # Log info
-                        st = Status("bs", num_ins_start - num_ins, inst.num_K, 
+                        st = Status("bs", num_ins_start - num_ins, 
+                                    num_ins_start, 
                                     obj, obj_start, start_time)
                         log_status(params, st)
+                        # @info "$num_ins_start -> $num_ins"
                     end
                 end
             end
@@ -114,11 +105,11 @@ function run_serial_bs!(inst::Instance,
                 end
             end
 
-            if length(LB) == 0
+            if length(UB) == 0
                 @info "No new nodes to investigate"
                 break
             end
-            Q = select!(params, LB, K)
+            Q = select!(params, UB, K)
             
             it += 1
         end
@@ -131,47 +122,8 @@ function run_serial_bs!(inst::Instance,
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
-    elapsed_time = time() - start_time
-
-    # log(params, 
-    #     "it:$it ins_start:$num_ins_start ins_end:$num_ins " * 
-    #     "rm: $(round(1.0 - num_ins / num_ins_start, digits = 2)) " * 
-    #     "el:$(round(elapsed_time, digits = 2))", 
-    #     true)
-
-    log(params, "Build full model", true)
-    params.solver_num_threads = 8
-    build_time = @elapsed (mip = build_mip(inst, params))
-
     update_lp!(inst, params, lp, inserted)
-    # g_bus, bus_inj, viol_update = get_data(inst, lp, ptdf)
+    @warn "Num inserted: $(length(inserted))"
 
-    f = get_values(lp.f)
-    g = get_values(lp.g)
-    start = Start(Set(inserted), f, g)
-
-    log(params, "Fix the start of the model", true)
-    fix_start_time = @elapsed (fix_start!(inst, params, mip, start))
-
-    params.beam_search.time_limit = max(remaining_time - elapsed_time, 0.0)
-
-    log(params, "Solve the model", true)
-    results = solve!(inst, params, mip)
-
-    results["rnf_time"] = status.time
-    results["rnf_rm_rat"] = status.rm_ratio
-    results["rnf_impr_rat"] = status.impr_ratio
-    results["fix_start_time"] = fix_start_time
-    results["bs_time"] = elapsed_time
-
-    results["build_time"] = build_time
-    results["build_obj_rat"] = comp_build_obj_rat(inst, 
-                                                  results["objective"], 
-                                                  start.inserted)
-
-    @warn "Obj $(JuMP.objective_value(mip.jump_model))"
-
-    return results
-
-    # return start
+    return get_state_values(inst, lp, inserted)
 end

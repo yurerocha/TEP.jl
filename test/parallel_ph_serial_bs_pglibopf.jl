@@ -49,11 +49,12 @@ skip = []
             deserialize(io)
         end
         
-        results = TEP.init_results()
+        # results = TEP.init_results()
         
         # try
-            results = TEP.run_parallel_ph_serial_bs!(inst, params)
-            TEP.log_instance(log_file, file, inst, results)
+            cache = TEP.run_parallel_ph_serial_bs!(inst, params)
+            # TEP.log_instance(log_file, file, inst, results)
+            @info "Num inserted: "
         # catch e
         #     @warn e
         #     TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())

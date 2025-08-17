@@ -27,8 +27,12 @@ function update_cache_x_average!(inst::Instance,
                                  cache::Cache)
     cache.x_average = sum(inst.scenarios[scen].p * cache.scenarios[scen].state.x 
                           for scen in 1:inst.num_scenarios) / 
-                      sum(inst.scenarios[scen].p 
-                          for scen in 1:inst.num_scenarios) 
+                    sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
+    cache.sol_average = [k for (i, k) in enumerate(keys(inst.K)) 
+                         if !iseq(cache.x_average[i], 0.0)]
+
+    @warn "Num build sol average: $(length(cache.sol_average))"
+    
     return nothing
 end
 
@@ -37,13 +41,16 @@ function update_cache_best_convergence_delta!(inst::Instance,
                                               it::Int64)
     conv_delta = 0.0
     for scen in 1:inst.num_scenarios
-        delta = maximum(abs, cache.scenarios[scen].state.x - cache.x_average)
-        conv_delta = max(conv_delta, delta)
+        # delta = maximum(abs, cache.scenarios[scen].state.x - cache.x_average)
+        # conv_delta = max(conv_delta, delta)
+        delta = sum(abs, cache.scenarios[scen].state.x - cache.x_average)
+        conv_delta += delta
     end
+    @warn conv_delta, cache.best_convergence_delta
     if isl(conv_delta, cache.best_convergence_delta)
         cache.best_convergence_delta = conv_delta
         cache.best_it = it
-        # TODO: store solutions with best convergence along all it.
+        cache.best_sol = cache.sol_average
     end
     return nothing
 end
@@ -109,4 +116,25 @@ function update_cache_incumbent!(cache::Cache,
                                  msg::WorkerMessage)
     cache.scenarios[msg.scen].state = msg.state_values
     return nothing
+end
+
+"""
+    comp_ph_obj(inst::Instance, params::Parameters, build)
+
+Compute multi-scenario problem objective value.
+"""
+function comp_ph_obj(inst::Instance, params::Parameters, build)
+    obj = comp_build_obj(inst, build)
+
+    for scen in 1:inst.num_scenarios
+        lp = build_lp(inst, params, scen)
+        update_lp!(inst, params, lp, build)
+        obj += inst.scenarios[scen].p * comp_g_obj(inst, params, scen, lp)
+    end
+
+    return obj
+end
+
+function update_cache_sol_average_perturb!(cache::Cache)
+
 end

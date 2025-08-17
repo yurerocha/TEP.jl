@@ -194,10 +194,10 @@ end
 function update_lp!(inst::Instance, 
                     params::Parameters, 
                     lp::LPModel, 
-                    inserted)
+                    build)
     # log(params, "It update $it", true)
-    rm_lines!(inst, params, lp, inst.restricted_K, false)
-    add_lines!(inst, params, lp, inserted, true)
+    rm_lines!(inst, params, lp, keys(inst.K), false)
+    add_lines!(inst, params, lp, build, true)
     
     # return termination_status(lp.jump_model) == MOI.OPTIMAL
     return nothing
@@ -218,73 +218,61 @@ end
              params::Parameters, 
              scen::Int64, 
              tep::TEPModel, 
-             inserted)
+             build, 
+             is_ph::Bool, 
+             cache::Cache)
 
-Compute the objective function considering the inserted candidate lines.
+Compute the objective function considering the inserted candidate lines and the 
+cache of the progressive hedging algorithm, if in the progressive hedging.
 """
 function comp_obj(inst::Instance, 
                   params::Parameters, 
                   scen::Int64, 
                   tep::TEPModel, 
-                  inserted)
+                  build, 
+                  is_ph::Bool, 
+                  cache::Cache)
     obj = 0.0
-    g = get_values(tep.g)
 
-    for k in keys(tep.g)
-        c = reverse(inst.scenarios[scen].G[k].costs)
-        obj += comp_g_obj(params, g[k], c)
+    if is_ph
+        squared_twonorm = 0.0
+        acc_omega = 0.0
+        for k in build
+            obj += inst.K[k].cost
+            # Progressive hedging data
+            i = tep.jump_model.ext[:key_to_idx][k]
+            squared_twonorm += 1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2
+            acc_omega += cache.scenarios[scen].omega[i]
+        end
+        obj += acc_omega + 
+               (params.progressive_hedging.rho / 2.0) * squared_twonorm
+    else
+        obj = comp_build_obj(inst, build)
     end
+    
 
-    for k in inserted
+    return obj + comp_g_obj(inst, params, scen, tep)
+end
+
+function comp_build_obj(inst::Instance, build)
+    obj = 0.0
+
+    for k in build
         obj += inst.K[k].cost
     end
 
     return obj
 end
 
-"""
-    comp_obj(inst::Instance, 
-             params::Parameters, 
-             scen::Int64, 
-             tep::TEPModel, 
-             inserted, 
-             cache::Cache)
-Compute the objective function considering the inserted candidate lines and the 
-cache of the progressive hedging algorithm.
-"""
-function comp_obj(inst::Instance, 
-                  params::Parameters, 
-                  scen::Int64, 
-                  tep::TEPModel, 
-                  inserted, 
-                  cache::Cache)
+function comp_g_obj(inst::Instance, 
+                    params::Parameters, 
+                    scen::Int64, 
+                    tep::TEPModel)
     obj = 0.0
-    g = get_values(tep.g)
-    
+
     for k in keys(tep.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
-        obj += comp_g_obj(params, g[k], c)
-    end
-    
-    squared_twonorm = 0.0
-    x_hat = cache.x_hat
-    omega = cache.scenarios[scen].omega'
-    for k in inserted
-        obj += inst.K[k].cost
-        # Progressive hedging data
-        i = tep.jump_model.ext[:key_to_idx][k]
-        squared_twonorm += 1.0 - 2.0 * x_hat[i] + x_hat[i] ^ 2
-        obj += omega[i]
-    end
-    
-    penalty::Float64 = params.progressive_hedging.rho / 2.0
-    return obj + penalty * squared_twonorm
-end
-
-function comp_build_obj(inst::Instance, inserted)
-    obj = 0.0
-    for k in inserted
-        obj += inst.K[k].cost
+        obj += comp_g_obj_term(params, value(tep.g[k]), c)
     end
 
     return obj
