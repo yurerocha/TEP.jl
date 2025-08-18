@@ -30,9 +30,9 @@ Base.@kwdef mutable struct ModelParameters
 end
 
 Base.@kwdef mutable struct HeuristicParameters
-    rnf_time_limit::Float64 = 3600.0
-    rnf_percent::Float64 = 0.7 # 0.9
-    rnf_delta::Float64 = 0.2
+    rnr_time_limit::Float64 = 3600.0
+    rnr_percent::Float64 = 0.7 # 0.9
+    rnr_delta::Float64 = 0.2
     # Initial percentage of violated candidates to insert
     vf_lambda_start::Float64 = 1.0
     # Percentage of candidates connected to g to evaluate per it

@@ -506,3 +506,15 @@ capacidade média de geração
 - Investigar a possibilidade de reduzir o tamanho do modelo LP no BS
 - Tentar reaproveitar informações de outras threads pode ajudar na convergência
   - Para testar, basta rodar com uma única thread
+- Passar duas soluções para o remove and repair:
+  - Um lower bound (linhas construídas em todos) e um upper bound (linhas 
+    construídas em pelo menos um)
+  - Continuar com a melhor
+- Padronizar: cost ou obj
+- Padronizar: inserted ou build
+- Padronizar: Vector ou Set
+- Adicionar info ao PH sobre a geração dos outros cenários na inicialização e
+  decomposição
+- Duas frentes
+  - Movimentos de perturbação no PH
+  - Tentar inserir mais info, mas com relação à geração, nas fos

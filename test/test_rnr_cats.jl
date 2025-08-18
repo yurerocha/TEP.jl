@@ -17,11 +17,11 @@ end_file = 10
 num_scenarios = 10
 dir = "input"
 base_file = "CaliforniaTestSystem"
-is_rnf_heur_en = false
+is_rnr_heur_en = false
 
 suffix = ""
-if is_rnf_heur_en
-    suffix = "_rnf"
+if is_rnr_heur_en
+    suffix = "_rnr"
 end
 log_dir = "test/log$(suffix)_cats"
 log_file = "$log_dir/tep$(suffix)_cats.md"
@@ -42,7 +42,7 @@ sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 md_file = "test/log_bs_cats/tep_bs_cats.md"
 df = read_markdown_table(md_file)
 # Solve (s): 8
-# RNF (s): 15
+# RNR (s): 15
 # BS (s): 19
 time_limit = parse.(Float64, df[!, 8]) + 
              parse.(Float64, df[!, 15]) + 
@@ -50,7 +50,7 @@ time_limit = parse.(Float64, df[!, 8]) +
 
 TEP.log_header(log_file)
 
-@testset "[RNF Heur] CATS" begin
+@testset "[RNR Heur] CATS" begin
     for (i, file) in enumerate(files[start_file:end_file])
         tl = time_limit[i]
         TEP.log(params, "Processing $file $(start_file + i - 1) $tl", true)
@@ -71,7 +71,7 @@ TEP.log_header(log_file)
             build_time = @elapsed (mip = TEP.build_mip(inst, params))
     
             TEP.log(params, "Build heuristic solution", true)
-            (start, report) = TEP.build_solution(inst, params, is_rnf_heur_en)
+            (start, report) = TEP.build_solution(inst, params, is_rnr_heur_en)
     
             TEP.log(params, "Fix the start of the model", true)
             fix_start_time = 
@@ -91,9 +91,9 @@ TEP.log_header(log_file)
                                                             start.inserted)
             end
     
-            results["rnf_time"] = report.time
-            results["rnf_rm_percent"] = report.removed_percent
-            results["rnf_impr_percent"] = report.improvement_percent
+            results["rnr_time"] = report.time
+            results["rnr_rm_percent"] = report.removed_percent
+            results["rnr_impr_percent"] = report.improvement_percent
             results["fix_start_time"] = fix_start_time
             
             TEP.log_instance(log_file, file, inst, results)

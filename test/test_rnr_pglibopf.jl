@@ -13,10 +13,10 @@ params = TEP.Parameters()
 
 start_file = 40 # 40
 end_file = 61 # 62
-is_rnf_heur_en = true
+is_rnr_heur_en = true
 scen = 1
 
-log_dir = "test/quali_ub_5min/rnf"
+log_dir = "test/quali_ub_5min/rnr"
 log_file = "$log_dir/log.md"
 
 
@@ -38,10 +38,10 @@ sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
 skip = ["pglib_opf_case8387_pegase.m"]
 
-md_file = "test/quali_ub_5min/rnf_bs_mip1/log.md"
+md_file = "test/quali_ub_5min/rnr_bs_mip1/log.md"
 df = TEP.read_markdown_table(md_file)
 # Solve (s): 8
-# RNF (s): 15
+# RNR (s): 15
 # BS (s): 19
 time_limit = parse.(Float64, df[!, 8]) + 
              parse.(Float64, df[!, 16]) + 
@@ -50,7 +50,7 @@ time_limit = parse.(Float64, df[!, 8]) +
 
 TEP.log_header(log_file)
 
-@testset "[RNF Heur] PGLibOPF" begin
+@testset "[RNR Heur] PGLibOPF" begin
     for (i, file) in enumerate(files[start_file:end_file])
         if file in skip
             TEP.log(params, "Skipping instance $file")
@@ -82,7 +82,7 @@ TEP.log_header(log_file)
             TEP.log(params, "Build heuristic solution", true)
             (start, report) = TEP.build_solution!(inst, params, scen, 
                                                   lp, false, TEP.Cache(0, 0), 
-                                                  is_rnf_heur_en)
+                                                  is_rnr_heur_en)
 
             TEP.log(params, "Fix the start of the model", true)
             fix_start_time = 
@@ -101,9 +101,9 @@ TEP.log_header(log_file)
             #                                                 start.inserted)
             # end
 
-            results["rnf_time"] = report.time
-            results["rnf_rm_rat"] = report.rm_ratio
-            results["rnf_impr_rat"] = report.impr_ratio
+            results["rnr_time"] = report.time
+            results["rnr_rm_rat"] = report.rm_ratio
+            results["rnr_impr_rat"] = report.impr_ratio
             results["fix_start_time"] = fix_start_time
             results["start_ub"] = start_ub
             

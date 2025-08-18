@@ -191,18 +191,6 @@ function add_node!(params::Parameters, UB, best_obj, msg, node)
     return nothing
 end
 
-function update_lp!(inst::Instance, 
-                    params::Parameters, 
-                    lp::LPModel, 
-                    build)
-    # log(params, "It update $it", true)
-    rm_lines!(inst, params, lp, keys(inst.K), false)
-    add_lines!(inst, params, lp, build, true)
-    
-    # return termination_status(lp.jump_model) == MOI.OPTIMAL
-    return nothing
-end
-
 function get_data(inst::Instance, 
                   lp::LPModel, 
                   ptdf::PTDFSystem)

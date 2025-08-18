@@ -173,9 +173,9 @@ function run_parallel_bs!(inst::Instance,
     # @info "Solve the model"
     # results = solve!(inst, params, mip)
     
-    results["rnf_time"] = status.time
-    results["rnf_rm_rat"] = status.rm_ratio
-    results["rnf_impr_rat"] = status.impr_ratio
+    results["rnr_time"] = status.time
+    results["rnr_rm_rat"] = status.rm_ratio
+    results["rnr_impr_rat"] = status.impr_ratio
     results["fix_start_time"] = fix_start_time
     results["bs_time"] = elapsed_time
     results["start_ub"] = start_ub

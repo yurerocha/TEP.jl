@@ -2,18 +2,18 @@
     run(logname::String, 
         gl_strategy::Int64, 
         gl_ins::Float64, 
-        rnf_percent::Float64, 
-        rnf_delta::Float64, 
-        rnf_time_limit::Float64)
+        rnr_percent::Float64, 
+        rnr_delta::Float64, 
+        rnr_time_limit::Float64)
 
 Solve all instances.
 """
 # function run(logname::String = "log.md", 
 #              gl_strategy::Int64 = 2, 
 #              gl_ins::Float64 = 0.1, 
-#              rnf_percent::Float64 = 0.8, 
-#              rnf_delta::Float64 = 0.1, 
-#              rnf_time_limit::Float64 = 5.0,
+#              rnr_percent::Float64 = 0.8, 
+#              rnr_delta::Float64 = 0.1, 
+#              rnr_time_limit::Float64 = 5.0,
 #              is_symmetry_en::Bool = false)
 function run(logname::String = "log.md")
     params = Parameters()
@@ -76,7 +76,7 @@ function run(logname::String = "log.md")
             # TODO: Add parameter to indicate if an initial solution will be 
             # used
             log(params, "Build heuristic solution", true)
-            (start, status) = build_solution(inst, params, is_heur_en)
+            (start, status) = rm_and_repair(inst, params, is_heur_en)
 
             log(params, "Fix the start of the model", true)
             start_time = 
@@ -97,8 +97,8 @@ function run(logname::String = "log.md")
             end
 
             if is_heur_en
-                results["rnf_impr_rat"] = status.impr_ratio
-                results["rnf_time"] = status.time
+                results["rnr_impr_rat"] = status.impr_ratio
+                results["rnr_time"] = status.time
                 results["fix_start_time"] = start_time
             end
             
@@ -124,10 +124,10 @@ function tuning()
     # end
     # Best: 2, 0.1
     # New best: 4, 0.2
-    # rnf_percent_delta = [[0.8, 0.2], [0.9, 0.1]]
+    # rnr_percent_delta = [[0.8, 0.2], [0.9, 0.1]]
     # count_exp = 13
-    # for v in rnf_percent_delta
-    #     @warn "Tuning experiment rnf_percent:$(v[1]) rnf_delta:$(v[2])"
+    # for v in rnr_percent_delta
+    #     @warn "Tuning experiment rnr_percent:$(v[1]) rnr_delta:$(v[2])"
     #     run("exp$(count_exp).md", 4, 0.2, v[1], v[2], 5.0)
     #     count_exp += 1
     # end

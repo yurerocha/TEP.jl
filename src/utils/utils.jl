@@ -176,7 +176,7 @@ function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
              "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
              "| Rt solve (s) | Lower bound | Obj | Gap (%) | Start (s) " *
-             "| RNF (s) | RNF rm | RNF impr | BS (s) | Start UB | \n"
+             "| RNR (s) | RNR rm | RNR impr | BS (s) | Start UB | \n"
     outstr *= "|:---"^20 * "| \n"
     log(outputfile, outstr)
 
@@ -186,8 +186,8 @@ end
 function get_keys_results()
     return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
             "status", "root_best_bound", "root_time", "lower_bound", 
-            "objective", "gap", "fix_start_time", "rnf_time", "rnf_rm_rat", 
-            "rnf_impr_rat", "bs_time", "start_ub"]
+            "objective", "gap", "fix_start_time", "rnr_time", "rnr_rm_rat", 
+            "rnr_impr_rat", "bs_time", "start_ub"]
 end
 
 """
@@ -610,4 +610,95 @@ Get the name of the log file.
 """
 function get_log_filename(inst::Instance, params::Parameters, scen::Int64)
     return "$(params.log_dir)/$(inst.name)#$scen.log"
+end
+
+# ------------------------- Rm and add lines functions -------------------------
+"""
+    rm_lines!(inst::Instance, 
+              params::Parameters, 
+              lp::LPModel,  
+              candidates::T, 
+              is_opt::Bool = false) where 
+                       T <: Union{Vector{Tuple{Tuple3I, Int64}}, Set{Any}}
+
+Remove lines from the model by setting the susceptances to a small value.
+"""
+function rm_lines!(inst::Instance, 
+                   params::Parameters, 
+                   lp::LPModel,  
+                   candidates, 
+                   is_opt::Bool = false)
+    # log(params, "Rm $(length(candidates)) line(s)")
+
+    for k in candidates
+        # if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
+        if !is_fixed(lp.s[k])
+            fix(lp.s[k], 0.0; force = true)
+        end
+
+        # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
+        #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
+        #                            [0, 0])
+        set_normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]], 0)
+        fix(lp.f[k], 0.0; force = true)
+    end
+
+    if is_opt
+        optimize!(lp.jump_model)
+    end
+
+    return nothing
+end
+
+"""
+    add_lines!(inst::Instance, 
+               lp::LPModel, 
+               new_candidates::Vector{Tuple{Tuple{Int64, Int64, Int64}, Int64}}, 
+               is_opt::Bool = true)
+
+Insert lines in the model by setting the diagonal terms of the susceptance.
+"""
+function add_lines!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel,
+                    new_candidates, 
+                    is_opt::Bool = true)
+    # log(params, "Add $(length(new_candidates)) line(s)")
+
+    for k in new_candidates
+        # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
+        if is_fixed(lp.s[k])
+            unfix(lp.s[k])
+            set_lower_bound(lp.s[k], 0.0)
+        end
+
+        if is_fixed(lp.f[k])
+            unfix(lp.f[k])
+        end
+
+        # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
+        #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
+        #                            [-inst.K[k].gamma, inst.K[k].gamma])
+        set_normalized_coefficient(lp.f_cons[k], 
+                                   lp.Dtheta[k[1][2:3]], 
+                                   -inst.K[k].gamma)
+    end
+
+    if is_opt
+        optimize!(lp.jump_model)
+    end
+
+    return nothing
+end
+
+function update_lp!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel, 
+                    build)
+    # log(params, "It update $it", true)
+    rm_lines!(inst, params, lp, keys(inst.K), false)
+    add_lines!(inst, params, lp, build, true)
+
+    # return termination_status(lp.jump_model) == MOI.OPTIMAL
+    return nothing
 end
