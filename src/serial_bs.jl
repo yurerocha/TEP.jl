@@ -12,10 +12,8 @@ function run_serial_bs!(inst::Instance,
     candidates = nothing
 
     # Build initial solution
-    unfix_s_vars!(inst, lp)
-    _, status, inserted, candidates = 
+    obj, _, status, inserted, candidates = 
                         build_solution!(inst, params, scen, lp, is_ph, cache)
-    fix_s_vars!(inst, lp)
 
     # lp = build_lp(inst, params)
 
@@ -25,24 +23,24 @@ function run_serial_bs!(inst::Instance,
 
     num_ins_start = length(inserted)
     num_ins = length(inserted)
-    obj = 0.0
-    best_obj = 0.0
-    obj_start = 0.0
+    # obj = 0.0
+    best_obj = obj
+    obj_start = obj
 
     # num_candidates_per_batch = params.beam_search.num_candidates_per_batch
 
     it = 1
     for bs_it in 1:params.beam_search.num_max_it
         update_lp!(inst, params, lp, inserted)
-        obj = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
+        # obj = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
         # params.beam_search.num_candidates_per_batch = 
         #                                             num_candidates_per_batch
 
         num_it_wo_impr = 0
-        if bs_it == 1
-            best_obj = obj
-            obj_start = obj
-        end
+        # if bs_it == 1
+        #     best_obj = obj
+        #     obj_start = obj
+        # end
 
         root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K, [])
         Q = [root]

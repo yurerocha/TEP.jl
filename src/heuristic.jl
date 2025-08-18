@@ -17,16 +17,33 @@ function build_solution!(inst::Instance,
                          cache::Cache, 
                          is_heur_en::Bool = true)
     @info "Start heuristic to build initial solution"
-    # At the first it, there are no candidate lines
-    # is_req = params.model.is_lp_model_s_var_set_req
-    # params.model.is_lp_model_s_var_set_req = true
-    # lp = build_lp(inst, params, scen)
-    # params.model.is_lp_model_s_var_set_req = is_req
 
-    lines = is_ph ? cache.sol_average : collect(keys(inst.K))
-    inserted = Set{Any}(lines)
-    existing = collect(keys(inst.J))
-    removed = Set{Any}()
+    unfix_s_vars!(inst, lp)
+
+    cost = 0.0
+    inserted = Set{Any}()
+    if is_ph
+        update_lp!(inst, params, lp, cache.sol_lower_bound)
+        cost_lb = comp_obj(inst, params, scen, lp, 
+                           cache.sol_lower_bound, is_ph, cache)
+
+        update_lp!(inst, params, lp, cache.sol_upper_bound)
+        cost_ub = comp_obj(inst, params, scen, lp, 
+                           cache.sol_upper_bound, is_ph, cache)
+
+        if isl(cost_lb, cost_ub)
+            cost = cost_lb
+            inserted = Set{Any}(deepcopy(cache.sol_lower_bound))
+        else
+            cost = cost_ub
+            inserted = Set{Any}(deepcopy(cache.sol_upper_bound))
+        end
+    else
+        inserted = Set{Any}(keys(inst.K))
+        update_lp!(inst, params, lp, inserted)
+        cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
+    end
+    removed = Set{Any}(setdiff(keys(inst.K), inserted))
 
     start = nothing
     status = Status("rnf")
@@ -35,23 +52,19 @@ function build_solution!(inst::Instance,
         time_start = time()
         num_rm_start = length(removed)
 
-        optimize!(lp.jump_model)
+        # optimize!(lp.jump_model)
 
         st = termination_status(lp.jump_model)
         if params.debugging_level == 1 && st == MOI.OPTIMAL
             @assert iseq(comp_s_viol(lp), 0.0)
         end
 
-        cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
-
-        init_cost = cost
-
-        best_cost, start = rm_and_fix(inst, params, scen, 
+        cost, start = rm_and_fix(inst, params, scen, 
                                       lp, is_ph, cache, 
                                       inserted, removed, 
-                                      init_cost, init_cost)
+                                      cost, cost)
         status = Status("rnf", length(removed), inst.num_K, 
-                        best_cost, init_cost, time_start)
+                        cost, cost, time_start)
     else
         add_lines!(inst, params, lp, inserted, true)
         f = get_values(lp.f)
@@ -61,7 +74,9 @@ function build_solution!(inst::Instance,
 
     log_status(params, status)
 
-    return start, status, inserted, removed
+    fix_s_vars!(inst, lp)
+
+    return cost, start, status, inserted, removed
 end
 
 function rm_and_fix(inst::Instance, 
@@ -137,9 +152,6 @@ function rm_and_fix(inst::Instance,
         if iseq(viol, 0.0) && isl(cost, best_cost)
             if params.debugging_level == 1
                 @assert length(inserted) + length(removed) == inst.num_K
-                lp_debug = build_lp(inst, params, scen)
-                rm_lines!(inst, params, lp_debug, removed, true)
-                @assert iseq(viol, objective_value(lp_debug.jump_model))
             end
 
             # log_neigh_run(inst, params, 
@@ -271,9 +283,6 @@ function violated_flows_neigh!(inst::Instance,
 
             if params.debugging_level == 1
                 @assert length(inserted) + length(removed_all) == inst.num_K
-                lp_debug = build_lp(inst, params, scen)
-                rm_lines!(inst, params, lp_debug, removed_all, true)
-                @assert iseq(viol, objective_value(lp_debug.jump_model))
             end
         else
             # @info "Decrease lambda and restart $lambda"

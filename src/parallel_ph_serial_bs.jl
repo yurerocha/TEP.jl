@@ -55,8 +55,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         update_cache_omega!(inst, params, cache)
         
         # Termination criterion
-        update_cache_x_average!(inst, cache)
-        @info sum(cache.x_average)
+        update_cache_x_average!(inst, params, cache)
 
         update_cache_best_convergence_delta!(inst, cache, it)
 
@@ -75,7 +74,14 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     JQM.send_termination_message()
     JQM.mpi_finalize()
 
-    @info "Obj: $(comp_ph_obj(inst, params, cache.sol_average))"
+    ph_obj = comp_ph_obj(inst, params, cache)
+    @info "Obj: $ph_obj"
+    if params.debugging_level == 1
+        mip, subproblems = build_deterministic(inst, params)
+        @info "Fix the start of the model"
+        det_obj = fix_start!(inst, mip, subproblems, cache.sol_upper_bound)
+        @assert iseq(ph_obj, det_obj)
+    end
 
     return cache
 end

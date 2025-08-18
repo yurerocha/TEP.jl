@@ -24,14 +24,18 @@ function update_cache_omega!(inst::Instance, params::Parameters, cache::Cache)
 end
 
 function update_cache_x_average!(inst::Instance, 
+                                 params::Parameters, 
                                  cache::Cache)
     cache.x_average = sum(inst.scenarios[scen].p * cache.scenarios[scen].state.x 
                           for scen in 1:inst.num_scenarios) / 
                     sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
-    cache.sol_average = [k for (i, k) in enumerate(keys(inst.K)) 
-                         if !iseq(cache.x_average[i], 0.0)]
+    cache.sol_lower_bound = [k for (i, k) in enumerate(keys(inst.K)) 
+                             if iseq(cache.x_average[i], 1.0)]
+    cache.sol_upper_bound = [k for (i, k) in enumerate(keys(inst.K)) 
+                             if !iseq(cache.x_average[i], 0.0)]
 
-    @warn "Num build sol average: $(length(cache.sol_average))"
+    @warn "Num build sol lb: $(length(cache.sol_lower_bound))"
+    @warn "Num build sol ub: $(length(cache.sol_upper_bound))"
     
     return nothing
 end
@@ -50,7 +54,7 @@ function update_cache_best_convergence_delta!(inst::Instance,
     if isl(conv_delta, cache.best_convergence_delta)
         cache.best_convergence_delta = conv_delta
         cache.best_it = it
-        cache.best_sol = cache.sol_average
+        cache.best_sol = cache.sol_upper_bound
     end
     return nothing
 end
@@ -119,11 +123,12 @@ function update_cache_incumbent!(cache::Cache,
 end
 
 """
-    comp_ph_obj(inst::Instance, params::Parameters, build)
+    comp_ph_obj(inst::Instance, params::Parameters, cache::Cache)
 
 Compute multi-scenario problem objective value.
 """
-function comp_ph_obj(inst::Instance, params::Parameters, build)
+function comp_ph_obj(inst::Instance, params::Parameters, cache::Cache)
+    build = cache.sol_upper_bound
     obj = comp_build_obj(inst, build)
 
     for scen in 1:inst.num_scenarios

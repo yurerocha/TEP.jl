@@ -1,3 +1,26 @@
+"""
+    build_deterministic(inst::Instance, params::Parameters)
+
+Build the deterministic equivalent model and return both problem and 
+subproblems.
+"""
+function build_deterministic(inst::Instance, params::Parameters)
+    mip = MIPModel(params)
+    subproblems = Vector{MIPModel}(undef, inst.num_scenarios)
+
+    for scen in 1:inst.num_scenarios
+        # TODO: Change LP objective as well
+        # TODO: Run heuristic in every it
+        subproblem = build_mip(inst, params, scen, true)
+        set_state!(subproblem, subproblem.x, subproblem.g)
+        add_subproblem!(inst, mip.jump_model, scen, subproblem.jump_model)
+        subproblems[scen] = subproblem
+    end
+    add_non_anticipativity_cons!(inst, mip.jump_model, subproblems)
+    add_obj_build_costs!(inst, mip.jump_model, subproblems)
+
+    return mip, subproblems
+end
 
 """
     add_subproblem!(inst::Instance, 
@@ -40,6 +63,8 @@ function add_subproblem!(inst::Instance,
     # Atualizar as variáveis de estado dos subproblemas para que sejam as novas
     # variáveis x associadas ao problema principal
     update_state_vars!(model, subproblem, var_in_md)
+
+    subproblem.ext[:var_in_md] = var_in_md
 
     return nothing
 end
@@ -143,4 +168,48 @@ function add_obj_build_costs!(inst::Instance,
     @objective(model, Min, build + incumbent)
 
     return nothing
+end
+
+"""
+    fix_start!(inst::Instance, 
+               mip::MIPModel, 
+               subproblems::Vector{MIPModel}, 
+               build)
+
+Fix the x variables according to a list and return the corresponding objective 
+value.
+"""
+function fix_start!(inst::Instance, 
+                    mip::MIPModel, 
+                    subproblems::Vector{MIPModel}, 
+                    build)
+    if !in(:var_in_md, keys(subproblems[1].jump_model.ext))
+        return nothing
+    end
+
+    var_in_md = subproblems[1].jump_model.ext[:var_in_md]
+    for k in keys(inst.K)
+        JuMP.fix(var_in_md[subproblems[1].x[k]], 0.0; force = true)
+    end
+    for k in build
+        JuMP.fix(var_in_md[subproblems[1].x[k]], 1.0; force = true)
+    end
+
+    JuMP.set_attribute(mip.jump_model, 
+                       MOI.RawOptimizerAttribute("SolutionLimit"), 
+                       1)
+
+    optimize!(mip.jump_model)
+    obj = JuMP.result_count(mip.jump_model) > 0 ? 
+                                JuMP.objective_value(mip.jump_model) : nothing
+
+    JuMP.set_attribute(mip.jump_model, 
+                       MOI.RawOptimizerAttribute("SolutionLimit"), 
+                       MAXINT)
+
+    for k in keys(inst.K)
+        JuMP.unfix(var_in_md[subproblems[1].x[k]])
+    end
+
+    return obj
 end

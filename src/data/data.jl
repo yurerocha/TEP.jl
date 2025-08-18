@@ -201,8 +201,10 @@ mutable struct Cache
     scenarios::Vector{ScenarioCache}
     x_hat::Vector{Float64}
     x_average::Vector{Float64}
-    # Computed from x_average by considering candidates built on any scenario
-    sol_average::Vector{Tuple{Tuple3I, Int64}}
+    # Candidate circuits built in all scenarios
+    sol_lower_bound::Vector{Tuple{Tuple3I, Int64}}
+    # Candidate circuits built in at least one scenario
+    sol_upper_bound::Vector{Tuple{Tuple3I, Int64}}
     best_convergence_delta::Float64
     best_it::Int64
     best_sol::Vector{Tuple{Tuple3I, Int64}}
@@ -217,6 +219,7 @@ mutable struct Cache
                     # Vector{Vector{Float64}}(undef, num_vars), 
                     Vector{Float64}(), 
                     Vector{Float64}(), 
+                    Vector{Tuple{Tuple3I, Int64}}(), 
                     Vector{Tuple{Tuple3I, Int64}}(), 
                     const_infinite, 0, 
                     Vector{Tuple{Tuple3I, Int64}}())

@@ -56,7 +56,7 @@ end
 # TODO: ProgressiveHedging -> PH
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     rho::Float64 = 1.0
-    max_it::Int64 = 20
+    max_it::Int64 = 10
     convergence_eps::Float64 = 1e-3
 end
 
