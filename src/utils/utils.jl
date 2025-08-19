@@ -175,9 +175,9 @@ end
 function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
              "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
-             "| Rt solve (s) | Lower bound | Obj | Gap (%) | Start (s) " *
-             "| RNR (s) | RNR rm | RNR impr | BS (s) | Start UB | \n"
-    outstr *= "|:---"^20 * "| \n"
+             "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNR (s) " * 
+             "| RNR rm | RNR impr | BS (s) | Start UB | PH (s) | \n"
+    outstr *= "|:---"^21 * "| \n"
     log(outputfile, outstr)
 
     return nothing
@@ -185,9 +185,9 @@ end
 
 function get_keys_results()
     return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
-            "status", "root_best_bound", "root_time", "lower_bound", 
-            "objective", "gap", "fix_start_time", "rnr_time", "rnr_rm_rat", 
-            "rnr_impr_rat", "bs_time", "start_ub"]
+            "status", "root_best_bound", "root_time", "lb", "ub", "gap", 
+            "fix_start_time", "rnr_time", "rnr_rm_rat", "rnr_impr_rat", 
+            "bs_time", "start_ub", "ph_time"]
 end
 
 """
@@ -284,13 +284,10 @@ function log(params::Parameters, msg::String, is_info::Bool = false)
     return nothing
 end
 
-function log_status(params::Parameters, st::Status)
+function log_status(st::Status)
     d = (st.rm_ratio, st.impr_ratio, st.time)
     d = round.(d, digits = 5)
-
-    log(params, "$(st.name) rm:$(d[1]) impr:$(d[2]) t:$(d[3])", true)
-
-    return nothing
+    return "$(st.name) rm:$(d[1]) impr:$(d[2]) t:$(d[3])"
 end
 
 """

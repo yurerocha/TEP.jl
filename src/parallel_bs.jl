@@ -24,7 +24,7 @@ function run_parallel_bs!(inst::Instance,
 
     @warn JQM.is_worker_process(), JQM.num_workers()
     if JQM.is_worker_process()
-        params.solver_num_threads = 1
+        params.solver.num_threads = 1
         bs_workers_loop(inst, params)
         return nothing
     end
@@ -32,7 +32,7 @@ function run_parallel_bs!(inst::Instance,
     # Initialization
     controller = JQM.Controller(JQM.num_workers())
 
-    params.solver_num_threads = 8
+    params.solver.num_threads = 8
 
     remaining_time = params.beam_search.time_limit - status.time
 
@@ -199,10 +199,10 @@ function bs_workers_loop(inst::Instance, params::Parameters)
         worker = JQM.Worker()
         # Build the model for the first scenario
         # Solve subscenarios with a single thread
-        num_threads = params.solver_num_threads
-        params.solver_num_threads = 1
+        num_threads = params.solver.num_threads
+        params.solver.num_threads = 1
         lp = build_lp(inst, params, scen)
-        params.solver_num_threads = num_threads
+        params.solver.num_threads = num_threads
 
         fix_s_vars!(inst, lp)
         scen = 1

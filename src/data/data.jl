@@ -201,10 +201,11 @@ mutable struct Cache
     scenarios::Vector{ScenarioCache}
     x_hat::Vector{Float64}
     x_average::Vector{Float64}
-    # Candidate circuits built in all scenarios
-    sol_lower_bound::Vector{Tuple{Tuple3I, Int64}}
-    # Candidate circuits built in at least one scenario
-    sol_upper_bound::Vector{Tuple{Tuple3I, Int64}}
+    sol_intersection::Vector{Tuple{Tuple3I, Int64}}
+    count_use_sol_intersection::Int64
+    sol_union::Vector{Tuple{Tuple3I, Int64}}
+    count_use_sol_union::Int64
+    deltas::Vector{Float64}
     best_convergence_delta::Float64
     best_it::Int64
     best_sol::Vector{Tuple{Tuple3I, Int64}}
@@ -219,8 +220,9 @@ mutable struct Cache
                     # Vector{Vector{Float64}}(undef, num_vars), 
                     Vector{Float64}(), 
                     Vector{Float64}(), 
-                    Vector{Tuple{Tuple3I, Int64}}(), 
-                    Vector{Tuple{Tuple3I, Int64}}(), 
+                    Vector{Tuple{Tuple3I, Int64}}(), 0,  
+                    Vector{Tuple{Tuple3I, Int64}}(), 0, 
+                    Vector{Float64}(undef,num_scenarios), 
                     const_infinite, 0, 
                     Vector{Tuple{Tuple3I, Int64}}())
 end
@@ -229,12 +231,15 @@ mutable struct ControllerMessage
     cache::Cache
     it::Int64
     scen::Int64
+    time_limit::Float64
 end
 
 mutable struct WorkerMessage
     state_values::State{Float64}
     it::Int64
     scen::Int64
+    count_use_sol_intersection::Int64
+    count_use_sol_union::Int64
 end
 
 mutable struct WorkerCache

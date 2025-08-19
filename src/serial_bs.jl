@@ -4,20 +4,18 @@ function run_serial_bs!(inst::Instance,
                         lp::LPModel, 
                         is_ph::Bool = false, 
                         cache::Cache = Cache())
-    @info "Serial beam search heuristic"
-
     start_time = time()
-    status = nothing
+    st = nothing
     inserted = nothing
     candidates = nothing
 
     # Build initial solution
-    obj, _, status, inserted, candidates = 
-                        build_solution!(inst, params, scen, lp, is_ph, cache)
+    obj, st, inserted, candidates, count_use_sol_inter, count_use_sol_union = 
+        build_solution!(inst, params, scen, lp, is_ph, cache)
 
     # lp = build_lp(inst, params)
 
-    remaining_time = params.beam_search.time_limit - status.time
+    remaining_time = params.beam_search.time_limit - st.time
 
     K = collect(candidates)
 
@@ -46,7 +44,7 @@ function run_serial_bs!(inst::Instance,
         Q = [root]
         while true # Evaluate levels in the tree
             if isg(time() - start_time, remaining_time)
-                @info "BS Time limit reached"
+                @info "bs time limit reached"
                 break
             end
             UB = []
@@ -83,11 +81,13 @@ function run_serial_bs!(inst::Instance,
                         num_ins = length(UB[end].inserted)
 
                         # Log info
-                        st = Status("bs", num_ins_start - num_ins, 
-                                    num_ins_start, 
-                                    obj, obj_start, start_time)
-                        log_status(params, st)
-                        # @info "$num_ins_start -> $num_ins"
+                        LoggingExtras.withlevel(Info; 
+                                                verbosity = params.log_level) do
+                            st = Status("bs", num_ins_start - num_ins, 
+                                        num_ins_start, 
+                                        obj, obj_start, start_time)
+                            @infov 2 log_status(st)
+                        end
                     end
                 end
             end
@@ -98,13 +98,17 @@ function run_serial_bs!(inst::Instance,
                 num_it_wo_impr += 1
 
                 if num_it_wo_impr >= params.beam_search.num_max_it_wo_impr
-                    @info "Max it wo impr reached"
+                    st = Status("bs", num_ins_start - num_ins, 
+                                num_ins_start, 
+                                obj, obj_start, start_time)
+                    @info log_status(st)
+                    @info "max it wo impr reached"
                     break
                 end
             end
 
             if length(UB) == 0
-                @info "No new nodes to investigate"
+                @info "no new nodes to investigate"
                 break
             end
             Q = select!(params, UB, K)
@@ -116,12 +120,12 @@ function run_serial_bs!(inst::Instance,
            isg(time() - start_time, remaining_time)
             break
         else
-            @info "Change shuffle strategy"
+            @info "enable shuffle strategy"
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
     update_lp!(inst, params, lp, inserted)
-    @warn "Num inserted: $(length(inserted))"
 
-    return get_state_values(inst, lp, inserted)
+    return get_state_values(inst, lp, inserted), 
+           count_use_sol_inter, count_use_sol_union
 end

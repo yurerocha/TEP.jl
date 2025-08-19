@@ -7,32 +7,21 @@ Configure the solver parameters.
 function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
     set_attribute(tep.jump_model, 
                   MOI.RawOptimizerAttribute("Threads"), 
-                  params.solver_num_threads)
+                  params.solver.num_threads)
     # set_attribute(tep.jump_model, 
     #               MOI.RawOptimizerAttribute("DualReductions"), 
     #               0)
     if params.model.optimizer == Gurobi.Optimizer
-        set_attribute(tep.jump_model, 
-                      MOI.RawOptimizerAttribute("LogFile"), 
-                      get_log_filename(inst, params, scen))
-        if tep isa LPModel
-            # set_attribute(tep.jump_model, 
-            #               MOI.RawOptimizerAttribute("Method"), 2)
-            # set_attribute(tep.jump_model, 
-            #               MOI.RawOptimizerAttribute("Crossover"), 0)
-        end
-        if params.log_level == 0 || params.log_level == 4
+        if params.solver.log_level == 0
             JuMP.set_silent(tep.jump_model)
             # set_attribute(tep.jump_model, 
             #               MOI.RawOptimizerAttribute("OutputFlag"), 
             #               0)
-        end
-        if params.log_level == 1 || params.log_level == 3
+        elseif params.solver.log_level == 1 || params.solver.log_level == 3
             set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("LogFile"), 
                           get_log_filename(inst, params, scen))
-        end
-        if params.log_level == 2 || params.log_level == 3
+        elseif params.solver.log_level == 2 || params.solver.log_level == 3
             set_attribute(tep.jump_model, 
                           MOI.RawOptimizerAttribute("LogToConsole"), 1)
         end
@@ -752,7 +741,7 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
         set_attribute(model, MOI.RawOptimizerAttribute("SolutionLimit"), MAXINT)
         set_attribute(model, 
                       MOI.RawOptimizerAttribute("TimeLimit"), 
-                      params.solver_time_limit)
+                      params.solver.time_limit)
         # terminates the optimization process as soon as pre-processing and the 
         # computation of the root relaxation is finished
         # set_attribute(model, MOI.RawOptimizerAttribute("NodeLimit"), 0)
@@ -762,7 +751,7 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     end
 
     rt_runtime = 0.0
-    incumbent_time = params.solver_time_limit
+    incumbent_time = params.solver.time_limit
     rt_best_bound = 0.0
     mip_start_gap = Inf64
     has_solved_rt_relaxation = false
@@ -799,7 +788,7 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
                 # GRBterminate(backend(model).optimizer.model.inner)
             end
         elseif cb_where == GRB_CB_MIPSOL && 
-               iseq(incumbent_time, params.solver_time_limit)
+               iseq(incumbent_time, params.solver.time_limit)
             # Prevents incumbent_time from being updated after the first 
             # incumbent solution is found
             runtime = Ref{Cdouble}()

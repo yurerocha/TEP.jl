@@ -55,19 +55,25 @@ end
 
 # TODO: ProgressiveHedging -> PH
 Base.@kwdef mutable struct ProgressiveHedgingParameters
+    time_limit::Float64 = 3600.0
     rho::Float64 = 1.0
-    max_it::Int64 = 10
+    max_it::Int64 = 1000000
     convergence_eps::Float64 = 1e-3
 end
 
+Base.@kwdef mutable struct SolverParameters
+    time_limit::Float64 = 200
+    num_threads::Int64 = 8
+    log_level::Int64 = 0
+end
+
 Base.@kwdef mutable struct Parameters
-    log_level::Int64 = 4
+    log_level::Int64 = 2
     log_dir::String = "logs"
     log_file::String = "log.txt"
     debugging_level::Int64 = 0
-    solver_time_limit::Float64 = 1800.0
-    solver_num_threads::Int64 = 8
     stochastic_inst_round_digits::Int64 = 5
+    solver::SolverParameters = SolverParameters()
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
     heuristic::HeuristicParameters = HeuristicParameters()

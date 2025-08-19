@@ -16,27 +16,31 @@ function build_solution!(inst::Instance,
                          is_ph::Bool, 
                          cache::Cache, 
                          is_heur_en::Bool = true)
-    @info "Start remove and repair"
+    # @info "start remove and repair"
 
     unfix_s_vars!(inst, lp)
 
     cost = 0.0
     inserted = Set{Any}()
+    count_use_sol_inter = 0
+    count_use_sol_union = 0
     if is_ph
-        update_lp!(inst, params, lp, cache.sol_lower_bound)
+        update_lp!(inst, params, lp, cache.sol_intersection)
         cost_lb = comp_obj(inst, params, scen, lp, 
-                           cache.sol_lower_bound, is_ph, cache)
+                           cache.sol_intersection, is_ph, cache)
 
-        update_lp!(inst, params, lp, cache.sol_upper_bound)
+        update_lp!(inst, params, lp, cache.sol_union)
         cost_ub = comp_obj(inst, params, scen, lp, 
-                           cache.sol_upper_bound, is_ph, cache)
+                           cache.sol_union, is_ph, cache)
 
         if isl(cost_lb, cost_ub)
+            count_use_sol_inter = 1
             cost = cost_lb
-            inserted = Set{Any}(deepcopy(cache.sol_lower_bound))
+            inserted = Set{Any}(deepcopy(cache.sol_intersection))
         else
+            count_use_sol_union = 1
             cost = cost_ub
-            inserted = Set{Any}(deepcopy(cache.sol_upper_bound))
+            inserted = Set{Any}(deepcopy(cache.sol_union))
         end
     else
         inserted = Set{Any}(keys(inst.K))
@@ -44,12 +48,12 @@ function build_solution!(inst::Instance,
         cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
     end
     removed = Set{Any}(setdiff(keys(inst.K), inserted))
+    num_ins_start = length(inserted)
 
     start = nothing
-    status = Status("rr")
+    time_start = time()
 
     if is_heur_en
-        time_start = time()
         num_rm_start = length(removed)
 
         # optimize!(lp.jump_model)
@@ -59,23 +63,21 @@ function build_solution!(inst::Instance,
             @assert iseq(comp_s_viol(lp), 0.0)
         end
 
-        cost, start = rm_and_repair(inst, params, scen, lp, is_ph, cache, 
-                                    inserted, removed, cost, cost)
-
-        status = Status("rr", length(removed), inst.num_K, 
-                        cost, cost, time_start)
+        cost = rm_and_repair(inst, params, scen, lp, is_ph, cache, 
+                             inserted, removed, cost, cost)
     else
         add_lines!(inst, params, lp, inserted, true)
         f = get_values(lp.f)
         g = get_values(lp.g)
-        start = Start(inserted, f, g)
     end
+    @warn length(removed), num_ins_start, inst.num_K
+    st = Status("rr", length(removed), num_ins_start, cost, cost, time_start)
 
-    log_status(params, status)
+    @info log_status(st)
 
     fix_s_vars!(inst, lp)
 
-    return cost, start, status, inserted, removed
+    return cost, st, inserted, removed, count_use_sol_inter, count_use_sol_union
 end
 
 function rm_and_repair(inst::Instance, 
@@ -97,9 +99,7 @@ function rm_and_repair(inst::Instance,
     end
 
     rnr_percent = params.heuristic.rnr_percent
-    inserted_start = deepcopy(inserted)
     f = get_values(lp.f)
-    g = get_values(lp.g)
     lines = comp_f_residuals(inst, lp, f, inserted)
     it = 1
     while true
@@ -157,15 +157,14 @@ function rm_and_repair(inst::Instance,
             
             best_cost = cost
                           
+            @warn length(removed), inst.num_K
             st = Status("rr", length(removed), inst.num_K, 
                         cost, init_cost, time_start)
-            log_status(params, st)
+            @info log_status(st)
             # if !has_values(lp.jump_model)
             #     optimize!(lp.jump_model)
             # end
-            inserted_start = deepcopy(inserted)
             f = get_values(lp.f)
-            g = get_values(lp.g)
 
             lines = comp_f_residuals(inst, lp, f, inserted)
             rnr_percent = min(1.0, rnr_percent + params.heuristic.rnr_delta)
@@ -186,7 +185,7 @@ function rm_and_repair(inst::Instance,
         it += 1
     end
 
-    return best_cost, Start(inserted_start, f, g)
+    return best_cost
 end
 
 function repair!(inst::Instance, 

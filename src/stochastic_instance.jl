@@ -17,8 +17,8 @@ function build_stochastic_instance(params::Parameters,
     # -------------- Set the scenarios based on the selected days --------------
     scenarios = Vector{Int64}()
     for d in days
-        s = (d - 1) * 5 + 1
-        e = d * 5
+        s = (d - 1) * 10 + 1
+        e = d * 10
         scenarios = vcat(scenarios, collect(range(s, e)))
     end
     # start_scen = 8649

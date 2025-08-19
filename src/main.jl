@@ -83,7 +83,7 @@ function run(logname::String = "log.md")
                     @elapsed (obj = fix_start!(inst, params, mip, start))
             results["objective"] = obj
 
-            params.solver_time_limit -= (start_time + status.time)
+            params.solver.time_limit -= (start_time + status.time)
 
             # TODO: Add tuning flag
             log(params, "Solve the model", true)

@@ -47,7 +47,7 @@ function root_node_callback(cb_data, cb_where::Cint)
             ext[:rt_best_bound] = root_bound[]
         end
     elseif cb_where == GRB_CB_MIPSOL && 
-           iseq(ext[:incumbent_time], params.solver_time_limit)
+           iseq(ext[:incumbent_time], params.solver.time_limit)
         # Prevents ext[:incumbent_time] from being updated after the first 
         # incumbent solution is found
         runtime = Ref{Cdouble}()

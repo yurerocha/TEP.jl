@@ -11,6 +11,7 @@ using JSON
 using JuMP
 using LinearAlgebra
 using Logging
+using LoggingExtras
 using MPI
 using OrderedCollections # OrderedDict
 using PowerModels
