@@ -3,21 +3,22 @@ module TestDeterministicPGLibOPF
 using JuMP
 using PowerModels
 using Random
+using Serialization
 using TEP
 using Test
 
 params = TEP.Parameters()
 
-start_file = 40
-end_file = 40
-dir = "submodules/pglib-opf/"
+start_file = 2
+end_file = 2
+dir = "input_bin/"
 # num_tests = 10
 # files = TEP.select_files(path, num_tests)
-log_dir = "test/logs/tmp"
+log_dir = "test/det"
 log_file = "$log_dir/log.md"
 
 try
-    rm_dir(log_dir)
+    TEP.rm_dir(log_dir)
 catch e
     @warn e
 end
@@ -40,19 +41,33 @@ skip = []
         end
         TEP.log(params, "Test $file num $(start_file + i - 1)", true)
 
-        inst = TEP.build_stochastic_instance(params, dir * file)
-        
         filepath = "$dir/$file"
     
         params.log_dir = log_dir
         params.log_file = "$log_dir/$file"
 
-        # try
-            cache, results = TEP.solve_deterministic!(inst, params)
+        inst = open(filepath, "r") do io
+            deserialize(io)
+        end
+
+        try
+            results = TEP.init_results()
+
+            mip, _ = TEP.build_deterministic(inst, params)
+            JuMP.set_attribute(mip.jump_model, 
+                               MOI.RawOptimizerAttribute("TimeLimit"), 
+                               params.solver.time_limit)
+            start = time()
+            JuMP.optimize!(mip.jump_model)
+            results["ph_time"] = time() - start
+            results["ub"] = JuMP.result_count(mip.jump_model) > 0 ?
+                        JuMP.objective_value(mip.jump_model) : const_infinite
+
             TEP.log_instance(log_file, file, inst, results)
-        # catch e
-        #     TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
-        # end
+        catch e
+            @warn e
+            TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
+        end
     end
 end
 

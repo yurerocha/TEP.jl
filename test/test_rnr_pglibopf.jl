@@ -56,8 +56,8 @@ TEP.log_header(log_file)
             TEP.log(params, "Skipping instance $file")
             continue
         end
-        tl = max(time_limit[21], params.solver_time_limit)
-        # tl = params.solver_time_limit
+        tl = max(time_limit[21], params.solver.time_limit)
+        # tl = params.solver.time_limit
         TEP.log(params, "Processing $file $(start_file + i - 1) $tl", true)
 
         filepath = "$(dir)/$file"
@@ -65,7 +65,7 @@ TEP.log_header(log_file)
 
         params.log_dir = log_dir
         params.log_file = "$log_dir/$file"
-        params.solver_time_limit = tl
+        params.solver.time_limit = tl
 
         inst = TEP.build_instance(params, filepath)
 
@@ -88,7 +88,7 @@ TEP.log_header(log_file)
             fix_start_time = 
                 @elapsed (start_ub = TEP.fix_start!(inst, params, mip, start))
 
-            params.solver_time_limit -= (fix_start_time + report.time)
+            params.solver.time_limit -= (fix_start_time + report.time)
 
             # # TODO: Add tuning flag
             # TEP.log(params, "Solve the model", true)

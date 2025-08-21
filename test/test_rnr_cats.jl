@@ -57,7 +57,7 @@ TEP.log_header(log_file)
     
         filepath = "$(dir)/$file"
         params.log_file = "$log_dir/$file"
-        params.solver_time_limit = tl
+        params.solver.time_limit = tl
     
         inst = TEP.build_instance(params, filepath)
     
@@ -78,7 +78,7 @@ TEP.log_header(log_file)
                     @elapsed (obj = TEP.fix_start!(inst, params, mip, start))
             results["objective"] = obj
     
-            params.solver_time_limit -= (fix_start_time + report.time)
+            params.solver.time_limit -= (fix_start_time + report.time)
     
             # TODO: Add tuning flag
             TEP.log(params, "Solve the model", true)
