@@ -29,10 +29,28 @@ function update_cache_x_average!(inst::Instance,
     cache.x_average = sum(inst.scenarios[scen].p * cache.scenarios[scen].state.x 
                           for scen in 1:inst.num_scenarios) / 
                     sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
+
     cache.sol_intersection = [k for (i, k) in enumerate(keys(inst.K)) 
                               if isg(cache.x_average[i], 0.5)]
     cache.sol_union = [k for (i, k) in enumerate(keys(inst.K)) 
                        if !iseq(cache.x_average[i], 0.0)]
+    
+    cache.sep_rho_x_min = cache.scenarios[1].state.x
+    cache.sep_rho_x_max = cache.scenarios[1].state.x
+    for scen in 2:inst.num_scenarios
+        cache.sep_rho_x_min = 
+            min.(cache.sep_rho_x_min, cache.scenarios[scen].state.x)
+        cache.sep_rho_x_max = 
+            min.(cache.sep_rho_x_max, cache.scenarios[scen].state.x)
+    end
+
+    LoggingExtras.withlevel(Info; verbosity = params.log_level) do
+        @infov 1 "num_candidates start:$(inst.num_K) " * 
+                 "inter:$(length(cache.sol_intersection)) " * 
+                 "union:$(length(cache.sol_union))"
+        @infov 2 "count_init_sol inter:$(cache.count_use_sol_intersection) " * 
+                 "union:$(cache.count_use_sol_union)"
+    end
 
     return nothing
 end
@@ -43,16 +61,17 @@ function update_cache_best_convergence_delta!(inst::Instance,
                                               it::Int64)
     conv_delta = 0.0
     for scen in 1:inst.num_scenarios
-        cache.deltas[scen] = 
-                maximum(abs, cache.scenarios[scen].state.x - cache.x_average)
-        # conv_delta = max(conv_delta, delta)
-        # delta = sum(abs, cache.scenarios[scen].state.x - cache.x_average)
-        # conv_delta += delta
+        # cache.deltas[scen] = 
+        #         maximum(abs, cache.scenarios[scen].state.x - cache.x_average)
+        cache.deltas[scen] = 100.0 * 
+                    sum(abs, cache.scenarios[scen].state.x - cache.x_average) / 
+                    inst.num_K
     end
-    conv_delta = maximum(cache.deltas)
+    # conv_delta = maximum(cache.deltas)
+    conv_delta = sum(cache.deltas)
 
     LoggingExtras.withlevel(Info; verbosity = params.log_level) do
-        @infov 1 "ph delta:$(round(conv_delta, digits = 2)) "
+        @infov 1 "ph delta:$(round(conv_delta, digits = 2)) " * 
                  "best:$(round(cache.best_convergence_delta, digits = 2))"
         @infov 2 join(round.(cache.deltas, digits = 2), " ")
     end
@@ -115,6 +134,8 @@ function get_state(params::Parameters, mip::MIPModel)
     else
         log(params, "Error: symbol :state not found in model", true)
     end
+
+    return nothing
 end
 
 # --------------------------------- Parallel PH --------------------------------
@@ -128,6 +149,7 @@ function update_cache_incumbent!(cache::Cache,
     cache.scenarios[msg.scen].state = msg.state_values
     cache.count_use_sol_intersection += msg.count_use_sol_intersection
     cache.count_use_sol_union += msg.count_use_sol_union
+
     return nothing
 end
 

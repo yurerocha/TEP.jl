@@ -223,17 +223,21 @@ function comp_obj(inst::Instance,
     obj = 0.0
 
     if is_ph
-        squared_twonorm = 0.0
+        sq2norm = 0.0
         acc_omega = 0.0
         for k in build
             obj += inst.K[k].cost
             # Progressive hedging data
             i = tep.jump_model.ext[:key_to_idx][k]
-            squared_twonorm += 1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2
+            # sq2norm += 1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2
+            rho = inst.K[k].cost / 
+                    (cache.sep_rho_x_max[i] - cache.sep_rho_x_min[i] + 1)
+            sq2norm += rho * (1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2)
             acc_omega += cache.scenarios[scen].omega[i]
         end
-        obj += acc_omega + 
-               (params.progressive_hedging.rho / 2.0) * squared_twonorm
+        # obj += acc_omega + 
+        #        (params.progressive_hedging.rho / 2.0) * sq2norm
+        obj += acc_omega
     else
         obj = comp_build_obj(inst, build)
     end

@@ -42,12 +42,15 @@ function build_solution!(inst::Instance,
             cost = cost_ub
             inserted = Set{Any}(deepcopy(cache.sol_union))
         end
+        # We eliminate candidates that are not built in any of the scenarios 
+        # considered
+        removed = Set{Any}(setdiff(cache.sol_union, inserted))
     else
         inserted = Set{Any}(keys(inst.K))
         update_lp!(inst, params, lp, inserted)
         cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
+        removed = Set{Any}(setdiff(keys(inst.K), inserted))
     end
-    removed = Set{Any}(setdiff(keys(inst.K), inserted))
     num_ins_start = length(inserted)
 
     start = nothing
@@ -70,7 +73,7 @@ function build_solution!(inst::Instance,
         f = get_values(lp.f)
         g = get_values(lp.g)
     end
-    @warn length(removed), num_ins_start, inst.num_K
+    # @warn length(removed), num_ins_start, inst.num_K
     st = Status("rr", length(removed), num_ins_start, cost, cost, time_start)
 
     @info log_status(st)
@@ -157,7 +160,7 @@ function rm_and_repair(inst::Instance,
             
             best_cost = cost
                           
-            @warn length(removed), inst.num_K
+            # @warn length(removed), inst.num_K
             st = Status("rr", length(removed), inst.num_K, 
                         cost, init_cost, time_start)
             @info log_status(st)

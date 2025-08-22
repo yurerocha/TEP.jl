@@ -31,6 +31,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     Logging.global_logger(ConsoleLogger(io))
 
     for it in 1:params.progressive_hedging.max_it
+        @info "-------------------- it $it --------------------"
         el = time() - start
         if isg(el, params.progressive_hedging.time_limit)
             @info "ph time limit reached"
@@ -69,9 +70,6 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         update_cache_x_average!(inst, params, cache)
 
         update_cache_best_convergence_delta!(inst, params, cache, it)
-
-        @info "init_sol inter:$(cache.count_use_sol_intersection) " * 
-              "union:$(cache.count_use_sol_union)"
 
         flush(io)
         if isl(cache.best_convergence_delta, 

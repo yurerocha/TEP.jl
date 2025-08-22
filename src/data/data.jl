@@ -205,6 +205,9 @@ mutable struct Cache
     count_use_sol_intersection::Int64
     sol_union::Vector{Tuple{Tuple3I, Int64}}
     count_use_sol_union::Int64
+    # SEP rho heuristic by https://doi.org/10.1007/s10287-010-0125-4
+    sep_rho_x_min::Vector{Float64}
+    sep_rho_x_max::Vector{Float64}
     deltas::Vector{Float64}
     best_convergence_delta::Float64
     best_it::Int64
@@ -220,8 +223,10 @@ mutable struct Cache
                     # Vector{Vector{Float64}}(undef, num_vars), 
                     Vector{Float64}(), 
                     Vector{Float64}(), 
-                    Vector{Tuple{Tuple3I, Int64}}(), 0,  
                     Vector{Tuple{Tuple3I, Int64}}(), 0, 
+                    Vector{Tuple{Tuple3I, Int64}}(), 0, 
+                    Vector{Tuple{Tuple3I, Int64}}(), 
+                    Vector{Tuple{Tuple3I, Int64}}(), 
                     Vector{Float64}(undef,num_scenarios), 
                     const_infinite, 0, 
                     Vector{Tuple{Tuple3I, Int64}}())
