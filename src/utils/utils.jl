@@ -525,11 +525,9 @@ function set_state!(mip::MIPModel,
     return nothing
 end
 
-function set_state!(inst::Instance, 
-                    lp::LPModel, 
-                    y::Dict{Int64, JuMP.VariableRef})
-    lp.jump_model.ext[:key_to_idx] = 
-                            Dict(k => i for (i, k) in enumerate(keys(inst.K)))
+function set_state!(lp::LPModel, y::Dict{Int64, JuMP.VariableRef})
+    # lp.jump_model.ext[:key_to_index] = 
+    #                         Dict(k => i for (i, k) in enumerate(keys(inst.K)))
     lp.jump_model.ext[:state] = 
                         State(Vector{JuMP.VariableRef}(), [v for (_, v) in y])
 
@@ -546,7 +544,7 @@ function get_state_values(inst::Instance, lp::LPModel, inserted)
     x = zeros(Float64, inst.num_K)
 
     for k in inserted
-        i = lp.jump_model.ext[:key_to_idx][k]
+        i = inst.key_to_index[k]
         x[i] = 1.0
     end
     y = lp.jump_model.ext[:state].y

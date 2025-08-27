@@ -21,8 +21,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
     # Initialization
     start = time()
-    cache = Cache(inst.num_scenarios, inst.num_K)
-    models = Vector{MIPModel}(undef, inst.num_scenarios)
+    cache = Cache(inst, params)
 
     controller = JQM.Controller(JQM.num_workers())
 
@@ -30,22 +29,13 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     io = open(get_log_filename(inst, params, 0), "w+")
     Logging.global_logger(ConsoleLogger(io))
 
+    is_last_it = false
+    has_impr = false
     for it in 1:params.progressive_hedging.max_it
-        @info "-------------------- it $it --------------------"
-        el = time() - start
-        if isg(el, params.progressive_hedging.time_limit)
-            @info "ph time limit reached"
-            break
-        end
-        # TODO: Guardar os modelos por cenário
-        # TODO: Cenários como um vector, pois pode ser mais difícil causar erros
-        # Imagine se o usuário dá um id que não corresponde a um índice válido
         for scen in 1:inst.num_scenarios
-            # Set the time limit
-            tl = max(params.progressive_hedging.time_limit - el, 0.0)
-            tl = min(tl, params.beam_search.time_limit)
+            tl = comp_bs_time_limit(params, time() - start)
             
-            msg = ControllerMessage(cache, it, scen, tl)
+            msg = ControllerMessage(cache, it, scen, tl, is_last_it, has_impr)
             JQM.add_job_to_queue!(controller, msg)
         end
         while !has_finished_all_jobs(controller)
@@ -57,9 +47,22 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
                 if !isnothing(job_answer)
                     msg = JQM.get_message(job_answer)
                     update_cache_incumbent!(cache, msg)
+                    if has_impr
+                        update_cache_sol_costs!(cache, msg)
+                    end
                 end
             end
         end
+        if has_impr
+            comp_ph_obj(inst, cache)
+        end
+
+        @info "-------------------- it $it --------------------"
+
+        if is_last_it
+            break
+        end
+        
         # Aggregation
         update_cache_x_hat!(inst, cache)
         
@@ -69,14 +72,30 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         # Termination criterion
         update_cache_x_average!(inst, params, cache)
 
-        update_cache_best_convergence_delta!(inst, params, cache, it)
+        # Update SEP-rho parameters
+        update_cache_sep_rho_x_min_max!(inst, cache)
+        if it == 1 && params.progressive_hedging.en_sep_rho
+            update_cache_sep_rho!(inst, cache)
+        end
 
-        flush(io)
+        has_impr = update_cache_best_convergence_delta!(inst, params, cache, it)
+
         if isl(cache.best_convergence_delta, 
                params.progressive_hedging.convergence_eps)
             @info "convergence reached: $(cache.best_convergence_delta)"
+            is_last_it = true
+            # break
+        elseif isg(time() - start, params.progressive_hedging.time_limit)
+            @info "ph time limit reached"
+            is_last_it = true
+        end
+
+        # If the incumbent sol is improved, the cost is updated in the next it
+        if is_last_it && !has_impr
             break
         end
+
+        flush(io)
     end
 
     # for scen in 1:inst.num_scenarios
@@ -113,7 +132,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         params.solver.num_threads = 1
 
         lp = build_lp(inst, params, current_model_scen)
-        set_state!(inst, lp, lp.g)
+        set_state!(lp, lp.g)
 
         # Reset the number of threads to the default value
         params.solver.num_threads = num_threads
@@ -131,9 +150,11 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                 break
             end
 
-            state_values = []
+            state_values = State(Vector{Float64}(), Vector{Float64}())
             count_use_sol_inter = 0
             count_use_sol_union = 0
+            g_cost_lb = 0.0
+            g_cost_ub = 0.0
             Logging.with_logger(ConsoleLogger(io[msg.scen])) do
                 @info "-------------------- it $(msg.it) --------------------"
 
@@ -146,24 +167,28 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                     current_model_scen = msg.scen
                 end
 
-                # Logging.global_logger(Logging.SimpleLogger(io[msg.scen]))
-                
-                # if msg.it > 1
-                #     update_model_obj!(params, msg.cache, msg.scen, mip)
-                #     update_model_obj!(params, msg.cache, msg.scen, lp)
-                # end
-
-                # The cache data structure is incomplete in the first it
                 is_ph = msg.it > 1
-                params.beam_search.time_limit = msg.time_limit
-                state_values, count_use_sol_inter, count_use_sol_union = 
-                    run_serial_bs!(inst, params, msg.scen, lp, is_ph, msg.cache)
+                if msg.is_last_it && msg.has_improved
+                    update_lp!(inst, params, lp, msg.cache.sol_intersection)
+                    g_cost_lb = comp_g_obj(inst, params, msg.scen, lp)
 
+                    update_lp!(inst, params, lp, msg.cache.sol_union)
+                    g_cost_ub = comp_g_obj(inst, params, msg.scen, lp)
+                else
+                    # The cache data structure is incomplete in the first it
+                    params.beam_search.time_limit = msg.time_limit
+
+                    state_values, count_use_sol_inter, count_use_sol_union, g_cost_lb, g_cost_ub = 
+                        run_serial_bs!(inst, params, msg.scen, 
+                                       lp, is_ph, msg.cache)
+                
+                end
                 flush(io[msg.scen])
             end
 
             ret_msg = WorkerMessage(state_values, msg.it, msg.scen, 
-                                    count_use_sol_inter, count_use_sol_union)
+                                    count_use_sol_inter, count_use_sol_union, 
+                                    g_cost_lb, g_cost_ub)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end

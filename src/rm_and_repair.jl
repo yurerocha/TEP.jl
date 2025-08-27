@@ -24,14 +24,16 @@ function build_solution!(inst::Instance,
     inserted = Set{Any}()
     count_use_sol_inter = 0
     count_use_sol_union = 0
+    g_cost_lb = 0.0
+    g_cost_ub = 0.0
     if is_ph
         update_lp!(inst, params, lp, cache.sol_intersection)
-        cost_lb = comp_obj(inst, params, scen, lp, 
-                           cache.sol_intersection, is_ph, cache)
+        cost_lb, g_cost_lb = comp_obj(inst, params, scen, lp, 
+                                      cache.sol_intersection, is_ph, cache)
 
         update_lp!(inst, params, lp, cache.sol_union)
-        cost_ub = comp_obj(inst, params, scen, lp, 
-                           cache.sol_union, is_ph, cache)
+        cost_ub, g_cost_ub = comp_obj(inst, params, scen, lp, 
+                                      cache.sol_union, is_ph, cache)
 
         if isl(cost_lb, cost_ub)
             count_use_sol_inter = 1
@@ -48,7 +50,7 @@ function build_solution!(inst::Instance,
     else
         inserted = Set{Any}(keys(inst.K))
         update_lp!(inst, params, lp, inserted)
-        cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
+        cost, _ = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
         removed = Set{Any}(setdiff(keys(inst.K), inserted))
     end
     num_ins_start = length(inserted)
@@ -80,7 +82,9 @@ function build_solution!(inst::Instance,
 
     fix_s_vars!(inst, lp)
 
-    return cost, st, inserted, removed, count_use_sol_inter, count_use_sol_union
+    return cost, st, inserted, removed, 
+           count_use_sol_inter, count_use_sol_union, 
+           g_cost_lb, g_cost_ub
 end
 
 function rm_and_repair(inst::Instance, 
@@ -146,7 +150,7 @@ function rm_and_repair(inst::Instance,
 
         cost = 0.0
         if iseq(viol, 0.0)
-            cost = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
+            cost, _ = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
         end
 
         if iseq(viol, 0.0) && isl(cost, best_cost)

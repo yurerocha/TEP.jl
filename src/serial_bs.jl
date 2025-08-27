@@ -10,7 +10,7 @@ function run_serial_bs!(inst::Instance,
     candidates = nothing
 
     # Build initial solution
-    obj, st, inserted, candidates, count_use_sol_inter, count_use_sol_union = 
+    obj, st, inserted, candidates, count_use_sol_inter, count_use_sol_union, g_cost_lb, g_cost_ub = 
         build_solution!(inst, params, scen, lp, is_ph, cache)
 
     # lp = build_lp(inst, params)
@@ -62,8 +62,8 @@ function run_serial_bs!(inst::Instance,
                     # The flow values for the parent node
                     f = node.f
                     if JuMP.has_values(lp.jump_model)
-                        obj = comp_obj(inst, params, scen, lp, 
-                                       ins_candidates, is_ph, cache)
+                        obj, _ = comp_obj(inst, params, scen, lp, 
+                                          ins_candidates, is_ph, cache)
                         f = get_values(lp.f)
                         is_feas = true
                         viol = comp_viol(lp)
@@ -127,5 +127,6 @@ function run_serial_bs!(inst::Instance,
     update_lp!(inst, params, lp, inserted)
 
     return get_state_values(inst, lp, inserted), 
-           count_use_sol_inter, count_use_sol_union
+           count_use_sol_inter, count_use_sol_union, 
+           g_cost_lb, g_cost_ub
 end

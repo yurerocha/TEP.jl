@@ -31,7 +31,10 @@ function build_instance(params::Parameters, filepath::String)
 
     scenarios = [Scenario(1.0, D, G)]
 
+    key_to_idx = Dict(k => i for (i, k) in enumerate(keys(K)))
+    costs = [K[k].cost for k in keys(K)]
     return Instance(get_inst_name(filepath), I, J, K, 
+                    key_to_idx, costs, 
                     length(I), length(J), length(K), 
                     ref_bus, 
                     scenarios, length(scenarios))

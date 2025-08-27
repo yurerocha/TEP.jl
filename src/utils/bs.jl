@@ -221,6 +221,7 @@ function comp_obj(inst::Instance,
                   is_ph::Bool, 
                   cache::Cache)
     obj = 0.0
+    g_obj = comp_g_obj(inst, params, scen, tep)
 
     if is_ph
         sq2norm = 0.0
@@ -228,22 +229,20 @@ function comp_obj(inst::Instance,
         for k in build
             obj += inst.K[k].cost
             # Progressive hedging data
-            i = tep.jump_model.ext[:key_to_idx][k]
+            i = inst.key_to_index[k]
             # sq2norm += 1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2
-            rho = inst.K[k].cost / 
-                    (cache.sep_rho_x_max[i] - cache.sep_rho_x_min[i] + 1)
-            sq2norm += rho * (1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2)
+            sq2norm += 
+                cache.rho[i] * (1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2)
             acc_omega += cache.scenarios[scen].omega[i]
         end
         # obj += acc_omega + 
         #        (params.progressive_hedging.rho / 2.0) * sq2norm
-        obj += acc_omega
+        obj += acc_omega + sq2norm
     else
         obj = comp_build_obj(inst, build)
     end
-    
 
-    return obj + comp_g_obj(inst, params, scen, tep)
+    return obj + g_obj, g_obj
 end
 
 function comp_build_obj(inst::Instance, build)
@@ -260,6 +259,9 @@ function comp_g_obj(inst::Instance,
                     params::Parameters, 
                     scen::Int64, 
                     tep::TEPModel)
+    if JuMP.result_count(tep.jump_model) == 0
+        return const_infinite
+    end
     obj = 0.0
 
     for k in keys(tep.g)

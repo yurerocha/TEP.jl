@@ -70,6 +70,8 @@ mutable struct Instance
     I::Set{Int64} # Buses
     J::Dict{Tuple3I, BranchInfo} # Existing lines
     K::Dict{Tuple{Tuple3I, Int64}, BranchInfo} # Candidates
+    key_to_index::Dict{Tuple{Tuple3I, Int64}, Int64}
+    costs::Vector{Float64}
     # f_bar::Vector{Float64} # Capacity of circuits
     # gamma::Vector{Float64} # Susceptance of circuits
     # Dtheta_limits::Vector{Tuple{Float64, Float64}} 
@@ -202,34 +204,45 @@ mutable struct Cache
     x_hat::Vector{Float64}
     x_average::Vector{Float64}
     sol_intersection::Vector{Tuple{Tuple3I, Int64}}
-    count_use_sol_intersection::Int64
     sol_union::Vector{Tuple{Tuple3I, Int64}}
+    count_use_sol_intersection::Int64
     count_use_sol_union::Int64
+    g_costs_sol_intersection::Vector{Float64}
+    g_costs_sol_union::Vector{Float64}
     # SEP rho heuristic by https://doi.org/10.1007/s10287-010-0125-4
+    rho::Vector{Float64}
     sep_rho_x_min::Vector{Float64}
     sep_rho_x_max::Vector{Float64}
     deltas::Vector{Float64}
     best_convergence_delta::Float64
+    t_deviation::Float64
+    quality_deviation::Float64
     best_it::Int64
     best_sol::Vector{Tuple{Tuple3I, Int64}}
+    best_cost::Float64
 
-    Cache(num_scenarios::Int64, num_vars::Int64) = 
+    Cache(inst::Instance, params::Parameters) = 
                 new(0, 
-                    [ScenarioCache(zeros(num_vars), 
-                            State(Vector{Float64}(), 
-                                  Vector{Float64}())) for _ in 1:num_scenarios],
+                    [ScenarioCache(zeros(inst.num_K), 
+                        State(Vector{Float64}(), 
+                            Vector{Float64}())) for _ in 1:inst.num_scenarios],
                     # [zeros(num_vars) for _ in 1:num_scenarios], 
                     # Vector{Vector{Float64}}(undef, num_vars), 
                     # Vector{Vector{Float64}}(undef, num_vars), 
                     Vector{Float64}(), 
                     Vector{Float64}(), 
-                    Vector{Tuple{Tuple3I, Int64}}(), 0, 
-                    Vector{Tuple{Tuple3I, Int64}}(), 0, 
                     Vector{Tuple{Tuple3I, Int64}}(), 
+                    Vector{Tuple{Tuple3I, Int64}}(),
+                    0, 0, 
+                    Vector{Float64}(undef, inst.num_scenarios), 
+                    Vector{Float64}(undef, inst.num_scenarios), 
+                    [params.progressive_hedging.rho for _ in eachindex(inst.K)], 
+                    Vector{Float64}(), 
+                    Vector{Float64}(), 
+                    Vector{Float64}(undef, inst.num_scenarios), 
+                    const_infinite, const_infinite, 100.0, 0, 
                     Vector{Tuple{Tuple3I, Int64}}(), 
-                    Vector{Float64}(undef,num_scenarios), 
-                    const_infinite, 0, 
-                    Vector{Tuple{Tuple3I, Int64}}())
+                    const_infinite)
 end
 
 mutable struct ControllerMessage
@@ -237,6 +250,8 @@ mutable struct ControllerMessage
     it::Int64
     scen::Int64
     time_limit::Float64
+    is_last_it::Bool
+    has_improved::Bool
 end
 
 mutable struct WorkerMessage
@@ -245,6 +260,8 @@ mutable struct WorkerMessage
     scen::Int64
     count_use_sol_intersection::Int64
     count_use_sol_union::Int64
+    g_cost_intersection::Float64
+    g_cost_union::Float64
 end
 
 mutable struct WorkerCache

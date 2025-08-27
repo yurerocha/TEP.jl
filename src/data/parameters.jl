@@ -55,10 +55,11 @@ end
 
 # TODO: ProgressiveHedging -> PH
 Base.@kwdef mutable struct ProgressiveHedgingParameters
-    time_limit::Float64 = 3600.0
+    time_limit::Float64 = 600.0
     rho::Float64 = 1.0
+    en_sep_rho::Bool = true
     max_it::Int64 = 1000000
-    convergence_eps::Float64 = 1e-5
+    convergence_eps::Float64 = 1e-3
 end
 
 Base.@kwdef mutable struct SolverParameters
