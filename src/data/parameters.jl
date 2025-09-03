@@ -29,16 +29,11 @@ Base.@kwdef mutable struct ModelParameters
     optimizer = Gurobi.Optimizer
 end
 
-Base.@kwdef mutable struct HeuristicParameters
-    rnr_time_limit::Float64 = 3600.0
-    rnr_percent::Float64 = 0.7 # 0.9
-    rnr_delta::Float64 = 0.2
-    # Initial percentage of violated candidates to insert
-    vf_lambda_start::Float64 = 1.0
-    # Percentage of candidates connected to g to evaluate per it
-    gl_ins::Float64 = 0.1 
-    # 1 - g lines; 2 - d lines; 3 - g or d lines; 4 - !(g or d) lines
-    gl_strategy::Int64 = 3
+Base.@kwdef mutable struct RemoveAndRepairParameters
+    is_active::Bool = true
+    time_limit::Float64 = 3600.0
+    remove_ratio::Float64 = 0.5
+    delta::Float64 = 0.2
 end
 
 Base.@kwdef mutable struct BeamSearchParameters
@@ -49,13 +44,13 @@ Base.@kwdef mutable struct BeamSearchParameters
     num_max_it::Int64 = 2
     num_max_it_wo_impr::Int64 = 10
     is_shuffle_en::Bool = false
-    time_limit::Float64 = 300.0
+    time_limit::Float64 = 50.0
     restricted_list_ratio::Float64 = 0.5 # TODO: calibrar: 0.6, 0.7, 0.8
 end
 
-# TODO: ProgressiveHedging -> PH
 Base.@kwdef mutable struct ProgressiveHedgingParameters
-    time_limit::Float64 = 600.0
+    is_active::Bool = true
+    time_limit::Float64 = 3600.0
     rho::Float64 = 1.0
     en_sep_rho::Bool = true
     max_it::Int64 = 1000000
@@ -63,8 +58,8 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
 end
 
 Base.@kwdef mutable struct SolverParameters
-    time_limit::Float64 = 200
-    num_threads::Int64 = 8
+    time_limit::Float64 = 3600.0
+    num_threads::Int64 = 1
     log_level::Int64 = 0
 end
 
@@ -77,7 +72,7 @@ Base.@kwdef mutable struct Parameters
     solver::SolverParameters = SolverParameters()
     instance::InstanceParameters = InstanceParameters()
     model::ModelParameters = ModelParameters()
-    heuristic::HeuristicParameters = HeuristicParameters()
+    remove_repair::RemoveAndRepairParameters = RemoveAndRepairParameters()
     beam_search::BeamSearchParameters = BeamSearchParameters()
     progressive_hedging::ProgressiveHedgingParameters = 
                                                   ProgressiveHedgingParameters()

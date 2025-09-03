@@ -2,45 +2,33 @@ function run_serial_bs!(inst::Instance,
                         params::Parameters, 
                         scen::Int64, 
                         lp::LPModel, 
-                        is_ph::Bool = false, 
-                        cache::Cache = Cache())
+                        cache::Cache, 
+                        inserted::Set{Any}, 
+                        removed::Set{Any}, 
+                        cost::Float64)
     start_time = time()
-    st = nothing
-    inserted = nothing
-    candidates = nothing
 
-    # Build initial solution
-    obj, st, inserted, candidates, count_use_sol_inter, count_use_sol_union, g_cost_lb, g_cost_ub = 
-        build_solution!(inst, params, scen, lp, is_ph, cache)
+    cost = 
+        rm_and_repair!(inst, params, scen, lp, cache, inserted, removed, cost)
 
-    # lp = build_lp(inst, params)
+    fix_s_vars!(lp)
 
-    remaining_time = params.beam_search.time_limit - st.time
+    remaining_time = params.beam_search.time_limit - (time() - start_time)
 
-    K = collect(candidates)
+    K = collect(removed)
 
     num_ins_start = length(inserted)
     num_ins = length(inserted)
-    # obj = 0.0
-    best_obj = obj
-    obj_start = obj
-
-    # num_candidates_per_batch = params.beam_search.num_candidates_per_batch
+    best_cost = cost
+    start_cost = cost
 
     it = 1
     for bs_it in 1:params.beam_search.num_max_it
         update_lp!(inst, params, lp, inserted)
-        # obj = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
-        # params.beam_search.num_candidates_per_batch = 
-        #                                             num_candidates_per_batch
 
         num_it_wo_impr = 0
-        # if bs_it == 1
-        #     best_obj = obj
-        #     obj_start = obj
-        # end
 
-        root = Node(obj, get_values(lp.f), 0.0, collect(inserted), K, [])
+        root = Node(cost, get_values(lp.f), 0.0, collect(inserted), K, [])
         Q = [root]
         while true # Evaluate levels in the tree
             if isg(time() - start_time, remaining_time)
@@ -56,27 +44,27 @@ function run_serial_bs!(inst::Instance,
                     ins_candidates = setdiff(node.inserted, k)
                     update_lp!(inst, params, lp, ins_candidates)
 
-                    obj = const_infinite
+                    cost = const_infinite
                     is_feas = false
                     viol = 0.0
                     # The flow values for the parent node
                     f = node.f
                     if JuMP.has_values(lp.jump_model)
-                        obj, _ = comp_obj(inst, params, scen, lp, 
-                                          ins_candidates, is_ph, cache)
+                        cost, _ = comp_penalized_cost(inst, params, scen, lp, 
+                                                      cache, ins_candidates)
                         f = get_values(lp.f)
                         is_feas = true
                         viol = comp_viol(lp)
                     end
 
-                    msg = BSWorkerMessage(i, k, is_feas, obj, f, viol)
+                    msg = BSWorkerMessage(i, k, is_feas, cost, f, viol)
 
-                    add_node!(params, UB, best_obj, msg, node)
+                    add_node!(params, UB, best_cost, msg, node)
 
-                    if is_feas && isl(obj, best_obj)
+                    if is_feas && isl(cost, best_cost)
                         # log(params, "Inserted update", true)
                         has_impr = true
-                        best_obj = obj
+                        best_cost = cost
                         inserted = UB[end].inserted
                         num_ins = length(UB[end].inserted)
 
@@ -85,8 +73,8 @@ function run_serial_bs!(inst::Instance,
                                                 verbosity = params.log_level) do
                             st = Status("bs", num_ins_start - num_ins, 
                                         num_ins_start, 
-                                        obj, obj_start, start_time)
-                            @infov 2 log_status(st)
+                                        cost, start_cost, start_time)
+                            @infov 2 log(st)
                         end
                     end
                 end
@@ -100,8 +88,8 @@ function run_serial_bs!(inst::Instance,
                 if num_it_wo_impr >= params.beam_search.num_max_it_wo_impr
                     st = Status("bs", num_ins_start - num_ins, 
                                 num_ins_start, 
-                                obj, obj_start, start_time)
-                    @info log_status(st)
+                                best_cost, start_cost, start_time)
+                    @info log(st)
                     @info "max it wo impr reached"
                     break
                 end
@@ -124,9 +112,8 @@ function run_serial_bs!(inst::Instance,
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
+    union!(inserted, Set(cache.fixed_x_variables))
     update_lp!(inst, params, lp, inserted)
 
-    return get_state_values(inst, lp, inserted), 
-           count_use_sol_inter, count_use_sol_union, 
-           g_cost_lb, g_cost_ub
+    return inserted
 end

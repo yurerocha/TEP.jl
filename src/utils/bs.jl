@@ -202,32 +202,30 @@ function get_data(inst::Instance,
 end
 
 """
-    comp_obj(inst::Instance, 
-             params::Parameters, 
-             scen::Int64, 
-             tep::TEPModel, 
-             build, 
-             is_ph::Bool, 
-             cache::Cache)
+    comp_penalized_cost(inst::Instance, 
+                        params::Parameters, 
+                        scen::Int64, 
+                        lp::LPModel, 
+                        cache::Cache, 
+                        build)
 
 Compute the objective function considering the inserted candidate lines and the 
 cache of the progressive hedging algorithm, if in the progressive hedging.
 """
-function comp_obj(inst::Instance, 
-                  params::Parameters, 
-                  scen::Int64, 
-                  tep::TEPModel, 
-                  build, 
-                  is_ph::Bool, 
-                  cache::Cache)
-    obj = 0.0
-    g_obj = comp_g_obj(inst, params, scen, tep)
+function comp_penalized_cost(inst::Instance, 
+                             params::Parameters, 
+                             scen::Int64, 
+                             lp::LPModel, 
+                             cache::Cache, 
+                             build)
+    cost = const_infinite * comp_viol(lp)
+    g_cost = comp_g_cost(inst, params, scen, lp)
 
-    if is_ph
+    if params.progressive_hedging.is_active
         sq2norm = 0.0
         acc_omega = 0.0
         for k in build
-            obj += inst.K[k].cost
+            cost += inst.K[k].cost
             # Progressive hedging data
             i = inst.key_to_index[k]
             # sq2norm += 1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2
@@ -235,39 +233,39 @@ function comp_obj(inst::Instance,
                 cache.rho[i] * (1.0 - 2.0 * cache.x_hat[i] + cache.x_hat[i] ^ 2)
             acc_omega += cache.scenarios[scen].omega[i]
         end
-        # obj += acc_omega + 
+        # cost += acc_omega + 
         #        (params.progressive_hedging.rho / 2.0) * sq2norm
-        obj += acc_omega + sq2norm
+        cost += acc_omega + sq2norm
     else
-        obj = comp_build_obj(inst, build)
+        cost = comp_build_cost(inst, build)
     end
 
-    return obj + g_obj, g_obj
+    return cost + g_cost, g_cost
 end
 
-function comp_build_obj(inst::Instance, build)
-    obj = 0.0
+function comp_build_cost(inst::Instance, build)
+    cost = 0.0
 
     for k in build
-        obj += inst.K[k].cost
+        cost += inst.K[k].cost
     end
 
-    return obj
+    return cost
 end
 
-function comp_g_obj(inst::Instance, 
-                    params::Parameters, 
-                    scen::Int64, 
-                    tep::TEPModel)
+function comp_g_cost(inst::Instance, 
+                     params::Parameters, 
+                     scen::Int64, 
+                     tep::TEPModel)
     if JuMP.result_count(tep.jump_model) == 0
         return const_infinite
     end
-    obj = 0.0
+    cost = 0.0
 
     for k in keys(tep.g)
         c = reverse(inst.scenarios[scen].G[k].costs)
-        obj += comp_g_obj_term(params, value(tep.g[k]), c)
+        cost += comp_g_obj(params, value(tep.g[k]), c)
     end
 
-    return obj
+    return cost
 end

@@ -31,7 +31,7 @@ function update_cache_x_average!(inst::Instance,
                     sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
 
     cache.sol_intersection = [k for (i, k) in enumerate(keys(inst.K)) 
-                              if isg(cache.x_average[i], 0.5)]
+                              if isg(cache.x_average[i], 0.25)]
     cache.sol_union = [k for (i, k) in enumerate(keys(inst.K)) 
                        if !iseq(cache.x_average[i], 0.0)]
 
@@ -69,17 +69,13 @@ function update_cache_best_convergence_delta!(inst::Instance,
     conv_delta = 0.0
     x_avg = cache.x_average
     for scen in eachindex(inst.scenarios)
-        # cache.deltas[scen] = 
-        #         maximum(abs, cache.scenarios[scen].state.x - cache.x_average)
-        # cache.deltas[scen] = 100.0 * 
-        #             sum(abs, cache.scenarios[scen].state.x - cache.x_average) / 
-        #             inst.num_K
         x =  cache.scenarios[scen].state.x
+        # cache.deltas[scen] = maximum(abs, x - cache.x_average)
         cache.deltas[scen] = 
             sum(abs(x[i] - x_avg[i]) / x_avg[i] for i in 1:inst.num_K 
                                                 if isg(x_avg[i], 0.0)) 
     end
-    # conv_delta = maximum(cache.deltas)
+    # cache.t_deviation = maximum(cache.deltas)
     # Compute the average per-scenario deviation from the average solution
     cache.t_deviation = sum(cache.deltas) / inst.num_scenarios
     cache.quality_deviation = comp_quality_deviation(inst, cache)
@@ -196,20 +192,20 @@ Compute multi-scenario problem objective value.
 """
 function comp_ph_obj(inst::Instance, params::Parameters, cache::Cache)
     build = cache.sol_union
-    obj = comp_build_obj(inst, build)
+    obj = comp_build_cost(inst, build)
 
     for scen in 1:inst.num_scenarios
         lp = build_lp(inst, params, scen)
         update_lp!(inst, params, lp, build)
-        obj += inst.scenarios[scen].p * comp_g_obj(inst, params, scen, lp)
+        obj += inst.scenarios[scen].p * comp_g_cost(inst, params, scen, lp)
     end
 
     return obj
 end
 
 function comp_ph_obj(inst::Instance, cache::Cache)
-    obj_inter = comp_build_obj(inst, cache.sol_intersection)
-    obj_union = comp_build_obj(inst, cache.sol_union)
+    obj_inter = comp_build_cost(inst, cache.sol_intersection)
+    obj_union = comp_build_cost(inst, cache.sol_union)
 
     cost_inter = obj_inter + sum(inst.scenarios[scen].p * 
         cache.g_costs_sol_intersection[scen] for scen in 1:inst.num_scenarios)
@@ -219,7 +215,7 @@ function comp_ph_obj(inst::Instance, cache::Cache)
     @warn "costs inter:$(round(cost_inter, digits = 2)) " * 
           "union:$(round(cost_union, digits = 2))"
 
-    return nothing
+    return isl(cost_inter, cost_union) ? cost_inter : cost_union
 end
 
 """
@@ -239,7 +235,136 @@ function comp_quality_deviation(inst::Instance, cache::Cache)
         return 100.0
     end
 
-    return 100.0 * (1.0 - vmin / (inst.costs' *  cache.sep_rho_x_max))
+    return 100.0 * (inst.costs' *  cache.sep_rho_x_max) / vmin
+end
+
+function comp_hash_values(inst::Instance, cache::Cache)
+    hash = Vector{Float64}(undef, inst.num_K)
+    for k in cache.sol_union
+        i = inst.key_to_index[k]
+        hash[i] = sum(cache.hash_weights[scen] * cache.scenarios[scen].omega[i] 
+                        for scen in eachindex(inst.scenarios))
+    end
+
+    return hash
+end
+
+function update_cache_detect_cycles!(inst::Instance, cache::Cache)
+    hash_values = comp_hash_values(inst, cache)
+    for k in cache.sol_union
+        i = inst.key_to_index[k]
+        # TODO: Modificar tipo de cache.fixed_x_variables para Set
+        if iseq(cache.hash_values[i], hash_values[i]) 
+            if iseq(cache.sep_rho_x_max[i], 1.0) && 
+                !(k in cache.fixed_x_variables)
+                if cache.count_cycle_it[i] == 5
+                    push!(cache.fixed_x_variables, k)
+                    cache.count_cycle_it[i] = 0
+                else
+                    cache.count_cycle_it[i] += 1
+                end
+            else
+                cache.count_cycle_it[i] = 0
+            end
+        end
+    end
+    cache.hash_values = hash_values
+
+    return nothing
+end
+
+"""
+    build_start_sol(inst::Instance, 
+                    params::Parameters, 
+                    scen::Int64, 
+                    cache::Cache)
+
+Build the best starting solution considering both lower and upper bound 
+solutions.
+
+At the end of this procedure, the model contains data associated with the best 
+solution found.
+"""
+function build_start_sol(inst::Instance, 
+                         params::Parameters, 
+                         scen::Int64, 
+                         lp::LPModel, 
+                         cache::Cache)
+    cost = 0.0
+    inserted = Set{Any}()
+    removed = Set{Any}()
+    count_use_sol_lb = 0
+    count_use_sol_ub = 0
+    g_cost_lb = 0.0
+    g_cost_ub = 0.0
+
+    unfix_s_vars!(lp)
+
+    if params.progressive_hedging.is_active
+        # Solution ub costs and viol
+        update_lp!(inst, params, lp, cache.sol_union)
+        cost_ub, g_cost_ub = comp_penalized_cost(inst, params, scen, lp, cache,  
+                                                    cache.sol_union)
+        viol_ub = comp_viol(lp)
+
+        # Solution lb costs and viol
+        # If the lb is used more often, we save one optimizer run
+        update_lp!(inst, params, lp, cache.sol_intersection)
+        cost_lb, g_cost_lb = comp_penalized_cost(inst, params, scen, lp, cache,
+                                                 cache.sol_intersection)
+        viol_lb = comp_viol(lp)
+
+        viol = max(viol_lb, viol_ub)
+
+        # Compare penalized costs
+        if isl(cost_lb, cost_ub)
+            count_use_sol_lb = 1
+            cost = cost_lb
+            inserted = Set{Any}(deepcopy(cache.sol_intersection))
+            @info "lb"
+        else
+            count_use_sol_ub = 1
+            cost = cost_ub
+            inserted = Set{Any}(deepcopy(cache.sol_union))
+            @info "ub"
+            if iseq(viol, 0.0)
+                update_lp!(inst, params, lp, cache.sol_union)
+            end
+        end
+
+        # Try to repair the best solution, if infeasible
+        if isg(viol, 0.0)
+            @info "viol: $viol"
+            removed = Set{Any}(setdiff(keys(inst.K), inserted))
+            removed_all = deepcopy(removed)
+
+            # TODO: Implement a method that insert new candidate lines
+            viol = repair!(inst, params, scen, lp, removed, 
+                            removed_all, inserted, viol, 0.0)
+
+            @info "viol repair: $viol"
+            if isg(viol, 0.0)
+                inserted = Set{Any}(keys(inst.K))
+                removed = Set{Any}()
+                @info "unable to repair initial sol"
+            end
+            update_lp!(inst, params, lp, inserted)
+            cost, _ = 
+                    comp_penalized_cost(inst, params, scen, lp, cache, inserted)
+        else
+            # We eliminate candidates that are not built in any of the scenarios 
+            # considered
+            removed = Set{Any}(setdiff(cache.sol_union, inserted))
+        end
+    else
+        inserted = Set{Any}(keys(inst.K))
+        removed = Set{Any}(setdiff(keys(inst.K), inserted))
+        update_lp!(inst, params, lp, inserted)
+        cost, _ = comp_penalized_cost(inst, params, scen, lp, cache, inserted)
+    end
+
+    return cost, inserted, removed, count_use_sol_lb, 
+            count_use_sol_ub, g_cost_lb, g_cost_ub
 end
 
 # --------------------------------- Parallel PH --------------------------------

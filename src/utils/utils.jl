@@ -284,7 +284,7 @@ function log(params::Parameters, msg::String, is_info::Bool = false)
     return nothing
 end
 
-function log_status(st::Status)
+function log(st::Status)
     d = (st.rm_ratio, st.impr_ratio, st.time)
     d = round.(d, digits = 5)
     return "$(st.name) rm:$(d[1]) impr:$(d[2]) t:$(d[3])"
@@ -327,11 +327,11 @@ function log_neigh_run(inst::Instance,
 end
 
 """
-    comp_cost(inst::Instance, inserted::Set{Any})
+    comp_penalized_cost(inst::Instance, inserted::Set{Any})
 
 Compute the cost of the solution.
 """
-function comp_cost(inst::Instance, inserted::Set{Any})
+function comp_penalized_cost(inst::Instance, inserted::Set{Any})
     cost = 0.0
     for k in inserted
         cost += inst.K[k].cost
@@ -594,7 +594,7 @@ Compute the percentage ratio of the build cost over the total objective value.
 function comp_build_obj_rat(inst::Instance, 
                             obj::Float64, 
                             inserted)
-    return 100.0 * comp_build_obj(inst, inserted) / obj
+    return 100.0 * comp_build_cost(inst, inserted) / obj
 end
 
 

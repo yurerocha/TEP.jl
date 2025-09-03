@@ -31,6 +31,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
     is_last_it = false
     has_impr = false
+    ph_obj = const_infinite
     for it in 1:params.progressive_hedging.max_it
         for scen in 1:inst.num_scenarios
             tl = comp_bs_time_limit(params, time() - start)
@@ -54,13 +55,23 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             end
         end
         if has_impr
-            comp_ph_obj(inst, cache)
+            cost = comp_ph_obj(inst, cache)
+            if isl(cost, ph_obj)
+                ph_obj = cost
+            end
         end
+        flush(io)
 
         @info "-------------------- it $it --------------------"
 
         if is_last_it
             break
+        end
+
+        # Update SEP-rho parameters
+        update_cache_sep_rho_x_min_max!(inst, cache)
+        if it == 1 && params.progressive_hedging.en_sep_rho
+            update_cache_sep_rho!(inst, cache)
         end
         
         # Aggregation
@@ -71,12 +82,6 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         
         # Termination criterion
         update_cache_x_average!(inst, params, cache)
-
-        # Update SEP-rho parameters
-        update_cache_sep_rho_x_min_max!(inst, cache)
-        if it == 1 && params.progressive_hedging.en_sep_rho
-            update_cache_sep_rho!(inst, cache)
-        end
 
         has_impr = update_cache_best_convergence_delta!(inst, params, cache, it)
 
@@ -95,6 +100,8 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             break
         end
 
+        # update_cache_detect_cycles!(inst, cache)
+
         flush(io)
     end
 
@@ -107,8 +114,8 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     JQM.mpi_finalize()
 
     el = time() - start
-    ph_obj = comp_ph_obj(inst, params, cache)
-    @info "obj: $ph_obj"
+    # ph_obj = comp_ph_obj(inst, params, cache)
+    @info "obj:$ph_obj elapsed_time:$el"
     if params.debugging_level == 1
         mip, subproblems = build_deterministic(inst, params)
         @info "fix the start of the model"
@@ -131,6 +138,9 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         num_threads = params.solver.num_threads
         params.solver.num_threads = 1
 
+        mip = build_mip(inst, params, current_model_scen)
+        set_state!(mip, mip.x, mip.g)
+
         lp = build_lp(inst, params, current_model_scen)
         set_state!(lp, lp.g)
 
@@ -138,10 +148,10 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         params.solver.num_threads = num_threads
 
         # Open log files
-        io = []
-        for scen in 1:inst.num_scenarios
-            push!(io, open(get_log_filename(inst, params, scen), "w+"))
-        end
+        # io = []
+        # for scen in 1:inst.num_scenarios
+        #     push!(io, open(get_log_filename(inst, params, scen), "a"))
+        # end
 
         while true
             job = JQM.receive_job(worker)
@@ -151,49 +161,95 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             end
 
             state_values = State(Vector{Float64}(), Vector{Float64}())
-            count_use_sol_inter = 0
-            count_use_sol_union = 0
+            count_use_sol_lb = 0
+            count_use_sol_ub = 0
             g_cost_lb = 0.0
             g_cost_ub = 0.0
-            Logging.with_logger(ConsoleLogger(io[msg.scen])) do
+            start_time = time()
+
+            io = open(get_log_filename(inst, params, msg.scen), "a")
+            # Logging.with_logger(ConsoleLogger(io[msg.scen])) do
+            Logging.with_logger(ConsoleLogger(io)) do
                 @info "-------------------- it $(msg.it) --------------------"
 
                 # Update the model according to the current scenario
                 if msg.scen != current_model_scen
                     
-                    # update_model!(inst, params, msg.scen, mip)
+                    update_model!(inst, params, msg.scen, mip)
                     update_model!(inst, params, msg.scen, lp)
                     
                     current_model_scen = msg.scen
                 end
 
-                is_ph = msg.it > 1
+                # Cache is initially empty
+                params.progressive_hedging.is_active = msg.it > 1
                 if msg.is_last_it && msg.has_improved
-                    update_lp!(inst, params, lp, msg.cache.sol_intersection)
-                    g_cost_lb = comp_g_obj(inst, params, msg.scen, lp)
+                    _, g_cost_lb = 
+                        update_lp!(inst, params, lp, msg.cache.sol_intersection)
 
-                    update_lp!(inst, params, lp, msg.cache.sol_union)
-                    g_cost_ub = comp_g_obj(inst, params, msg.scen, lp)
+                    _, g_cost_ub = 
+                            update_lp!(inst, params, lp, msg.cache.sol_union)
                 else
                     # The cache data structure is incomplete in the first it
                     params.beam_search.time_limit = msg.time_limit
 
-                    state_values, count_use_sol_inter, count_use_sol_union, g_cost_lb, g_cost_ub = 
-                        run_serial_bs!(inst, params, msg.scen, 
-                                       lp, is_ph, msg.cache)
-                
+                    # inserted, 
+                    # count_use_sol_lb, count_use_sol_ub, 
+                    # g_cost_lb, g_cost_ub = 
+                    #                     run_serial_bs!(inst, params, msg.scen, 
+                    #                                    lp, msg.cache)
+
+                    cost, in, rm, count_use_sol_lb, 
+                    count_use_sol_ub, g_cost_lb, g_cost_ub = 
+                        build_start_sol(inst, params, msg.scen, lp, msg.cache)
+
+                    inserted = run_serial_bs!(inst, params, msg.scen, lp, 
+                                                msg.cache, in, rm, cost)
+                    
+                    tl = max(msg.time_limit - (time() - start_time), 0.0)
+
+                    has_mip_state_vals = false
+                    if isg(tl, 0.0)
+                        # flush(io[msg.scen])
+
+                        start = Start(inserted, 
+                                      Dict{Any, Float64}(), 
+                                      Dict{Any, Float64}())
+
+                        fix_start!(inst, params, mip, start, msg.scen)
+
+                        set_attribute(mip.jump_model, 
+                                    MOI.RawOptimizerAttribute("SolutionLimit"), 
+                                    MAXINT)
+                        set_attribute(mip.jump_model, 
+                                      MOI.RawOptimizerAttribute("TimeLimit"), 
+                                      tl)
+
+                        JuMP.optimize!(mip.jump_model)
+
+                        has_mip_state_vals = 
+                                        JuMP.result_count(mip.jump_model) > 0
+                    end
+
+                    if has_mip_state_vals
+                        state_values = get_state_values(mip)
+                    else
+                        state_values = get_state_values(inst, lp, inserted)
+                    end
                 end
-                flush(io[msg.scen])
+                # flush(io[msg.scen])
+                flush(io)
             end
+            close(io)
 
             ret_msg = WorkerMessage(state_values, msg.it, msg.scen, 
-                                    count_use_sol_inter, count_use_sol_union, 
+                                    count_use_sol_lb, count_use_sol_ub, 
                                     g_cost_lb, g_cost_ub)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end
         # Close log files
-        close.(io)
+        # close.(io)
         exit(0)
     end
 

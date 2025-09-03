@@ -1,131 +1,57 @@
 """
-    build_solution!(inst::Instance, 
-                    params::Parameters, 
-                    scen::Int64, 
-                    lp::LPModel, 
-                    is_ph::Bool, 
-                    cache::Cache, 
-                    is_heur_en::Bool = true)
+    rm_and_repair!(inst::Instance, 
+                   params::Parameters, 
+                   scen::Int64, 
+                   lp::LPModel, 
+                   cache::Cache, 
+                   inserted::Set{Any}, 
+                   removed::Set{Any}, 
+                   cost::Float64)
 
-Build solution with the full linear programming model.
+Remove and repair procedure for building feasible initial solutions.
 """
-function build_solution!(inst::Instance, 
-                         params::Parameters, 
-                         scen::Int64, 
-                         lp::LPModel, 
-                         is_ph::Bool, 
-                         cache::Cache, 
-                         is_heur_en::Bool = true)
-    # @info "start remove and repair"
+function rm_and_repair!(inst::Instance, 
+                        params::Parameters, 
+                        scen::Int64, 
+                        lp::LPModel, 
+                        cache::Cache, 
+                        inserted::Set{Any}, 
+                        removed::Set{Any}, 
+                        cost::Float64)
+    start_time = time()
 
-    unfix_s_vars!(inst, lp)
+    unfix_s_vars!(lp)
 
-    cost = 0.0
-    inserted = Set{Any}()
-    count_use_sol_inter = 0
-    count_use_sol_union = 0
-    g_cost_lb = 0.0
-    g_cost_ub = 0.0
-    if is_ph
-        update_lp!(inst, params, lp, cache.sol_intersection)
-        cost_lb, g_cost_lb = comp_obj(inst, params, scen, lp, 
-                                      cache.sol_intersection, is_ph, cache)
-
-        update_lp!(inst, params, lp, cache.sol_union)
-        cost_ub, g_cost_ub = comp_obj(inst, params, scen, lp, 
-                                      cache.sol_union, is_ph, cache)
-
-        if isl(cost_lb, cost_ub)
-            count_use_sol_inter = 1
-            cost = cost_lb
-            inserted = Set{Any}(deepcopy(cache.sol_intersection))
-        else
-            count_use_sol_union = 1
-            cost = cost_ub
-            inserted = Set{Any}(deepcopy(cache.sol_union))
-        end
-        # We eliminate candidates that are not built in any of the scenarios 
-        # considered
-        removed = Set{Any}(setdiff(cache.sol_union, inserted))
-    else
-        inserted = Set{Any}(keys(inst.K))
+    if !JuMP.has_values(lp.jump_model)
         update_lp!(inst, params, lp, inserted)
-        cost, _ = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
-        removed = Set{Any}(setdiff(keys(inst.K), inserted))
     end
-    num_ins_start = length(inserted)
-
-    start = nothing
-    time_start = time()
-
-    if is_heur_en
-        num_rm_start = length(removed)
-
-        # optimize!(lp.jump_model)
-
-        st = termination_status(lp.jump_model)
-        if params.debugging_level == 1 && st == MOI.OPTIMAL
-            @assert iseq(comp_s_viol(lp), 0.0)
-        end
-
-        cost = rm_and_repair(inst, params, scen, lp, is_ph, cache, 
-                             inserted, removed, cost, cost)
-    else
-        add_lines!(inst, params, lp, inserted, true)
-        f = get_values(lp.f)
-        g = get_values(lp.g)
-    end
-    # @warn length(removed), num_ins_start, inst.num_K
-    st = Status("rr", length(removed), num_ins_start, cost, cost, time_start)
-
-    @info log_status(st)
-
-    fix_s_vars!(inst, lp)
-
-    return cost, st, inserted, removed, 
-           count_use_sol_inter, count_use_sol_union, 
-           g_cost_lb, g_cost_ub
-end
-
-function rm_and_repair(inst::Instance, 
-                       params::Parameters, 
-                       scen::Int64, 
-                       lp::LPModel, 
-                       is_ph::Bool, 
-                       cache::Cache, 
-                       inserted::Set{Any}, 
-                       removed::Set{Any}, 
-                       init_cost::Float64, 
-                       best_cost::Float64)
-    # @info "Rm and repair"
-
-    time_start = time()
 
     if params.debugging_level == 1
         @assert isdisjoint(inserted, removed)
+        if termination_status(lp.jump_model) == MOI.OPTIMAL
+            @assert iseq(comp_s_viol(lp), 0.0)
+        end
     end
 
-    rnr_percent = params.heuristic.rnr_percent
+    best_cost = cost
+    init_cost = cost
+    rm_ratio = params.remove_repair.remove_ratio
+    num_ins_start = length(inserted)
+    # Binary search based
+    # rm_ratio = 0.5
+    # delta = 0.5
+
     f = get_values(lp.f)
     lines = comp_f_residuals(inst, lp, f, inserted)
+
     it = 1
     while true
-        num_itens = round(Int64, rnr_percent * length(lines))
+        num_itens = round(Int64, rm_ratio * length(lines))
         if num_itens == 0
-            # @info "Break: no lines to evaluate"
             break
-        elseif isg(time() - time_start, params.heuristic.rnr_time_limit)
-            # @info "Break: time limit reached"
+        elseif isg(time() - start_time, params.remove_repair.time_limit)
             break
         end
-        # @info "---------- It $it ----------"
-
-        # Remove the barrier callback inserted in the remaining neighs
-        # function empty_callback(cb_data, cb_where::Cint)
-        # end
-        # set_attribute(lp.jump_model, 
-        #               Gurobi.CallbackFunction(), 
-        #               empty_callback)
 
         rm = lines[1:min(num_itens, length(lines))]
         
@@ -134,9 +60,7 @@ function rm_and_repair(inst::Instance,
         setdiff!(inserted, rm_set)
         union!(removed, rm_set)
         
-        # st = termination_status(lp.jump_model)
-        # viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
-        viol = Inf64
+        viol = const_infinite
         if termination_status(lp.jump_model) == MOI.OPTIMAL
             viol = comp_viol(lp)
         end
@@ -145,12 +69,13 @@ function rm_and_repair(inst::Instance,
             # The following neigh changes both the removed and inserted sets
             viol = repair!(inst, params, scen, lp, 
                            rm_set, removed, inserted, 
-                           viol, viol, time_start)
+                           viol, start_time)
         end
 
         cost = 0.0
         if iseq(viol, 0.0)
-            cost, _ = comp_obj(inst, params, scen, lp, inserted, is_ph, cache)
+            cost, _ = 
+                    comp_penalized_cost(inst, params, scen, lp, cache, inserted)
         end
 
         if iseq(viol, 0.0) && isl(cost, best_cost)
@@ -158,39 +83,32 @@ function rm_and_repair(inst::Instance,
                 @assert length(inserted) + length(removed) == inst.num_K
             end
 
-            # log_neigh_run(inst, params, 
-            #               best_cost, cost, 
-            #               removed, time() - time_start)
-            
-            best_cost = cost
-                          
-            # @warn length(removed), inst.num_K
             st = Status("rr", length(removed), inst.num_K, 
-                        cost, init_cost, time_start)
-            @info log_status(st)
-            # if !has_values(lp.jump_model)
-            #     optimize!(lp.jump_model)
-            # end
+                        cost, init_cost, start_time)
+            @infov 2 log(st)
+
+            best_cost = cost
             f = get_values(lp.f)
-
             lines = comp_f_residuals(inst, lp, f, inserted)
-            rnr_percent = min(1.0, rnr_percent + params.heuristic.rnr_delta)
-
-            # TODO: To break when the first feasible sol is found
-            # if iseq(viol, 0.0)
-            #     break
-            # end
+            rm_ratio = min(1.0, rm_ratio + params.remove_repair.delta)
+            # rm_ratio += 0.5 * delta
         else
             # @info "Unable to improve"
             setdiff!(removed, rm_set)
             union!(inserted, rm_set)
             add_lines!(inst, params, lp, rm, false)
-            # rnr_percent = max(0.0, rnr_percent - params.heuristic.rnr_delta)
+            # rm_ratio = max(0.0, rm_ratio - params.heuristic.rnr_delta)
+            # rm_ratio -= 0.5 * delta
             break
         end
+        # delta /= 2.0
 
         it += 1
     end
+    
+    st = Status("rr", length(removed), inst.num_K, 
+                best_cost, init_cost, start_time)
+    @info log(st)
 
     return best_cost
 end
@@ -202,11 +120,10 @@ function repair!(inst::Instance,
                  removed::Set{Any}, 
                  removed_all::Set{Any}, 
                  inserted::Set{Any}, 
-                 init_viol::Float64, 
                  best_viol::Float64, 
-                 rnr_time_start::Float64)    
+                 start_time::Float64)    
     if iseq(best_viol, 0.0)
-        return best_viol
+        return 0.0
     end
 
     # Another option is to store the f values of the last successfull opt call
@@ -217,79 +134,44 @@ function repair!(inst::Instance,
         return best_viol
     end
 
-    # @info "Repair"
-
-    # function barrier_callback(cb_data, cb_where::Cint)
-    #     if cb_where == GRB_CB_BARRIER
-    #         dual_obj = Ref{Cdouble}()
-    #         GRBcbget(cb_data, cb_where, GRB_CB_BARRIER_DUALOBJ, dual_obj)
-    #         if isg(dual_obj[], best_viol)
-    #             @warn dual_obj, best_viol, "Terminate Gurobi"
-    #             # readline()
-    #             GRBterminate(backend(lp.jump_model).optimizer.model.inner)
-    #         end
-    #     end
-    # end
-    # set_attribute(lp.jump_model, Gurobi.CallbackFunction(), barrier_callback)
-
-    time_start = time()
-
     if params.debugging_level == 1
         @assert isdisjoint(removed, inserted)
     end
 
     model_slacks = get_values(lp.s)
-    lines = comp_viols(inst, params, model_slacks, inserted, removed)
+    insert = comp_viols(inst, params, model_slacks, inserted, removed)
 
-    lambda = params.heuristic.vf_lambda_start
     it = 1
     while true
-        num_itens = trunc(Int64, lambda * length(lines))
         if iseq(best_viol, 0.0)
-            # @info "All viol removed!"
             break
-        elseif num_itens == 0
-            # @info "Insufficient num of lines"
+        elseif length(insert) == 0
             break
-        elseif isg(time() - rnr_time_start, params.heuristic.rnr_time_limit)
-            # @info "Time limit reached"
+        elseif isg(time() - start_time, params.remove_repair.time_limit)
             break
         end
-
-        # @info "---------- RP it $it ----------"
-        
-        insert = lines[1:min(num_itens, length(lines))]
         
         add_lines!(inst, params, lp, insert)
 
-        # st = termination_status(lp.jump_model)
-        # viol = (st == MOI.OPTIMAL ? objective_value(lp.jump_model) : Inf64)
         viol = Inf64
         if termination_status(lp.jump_model) == MOI.OPTIMAL
             viol = comp_viol(lp)
         end
 
         if isl(viol, best_viol)
-            # log_neigh_run(inst, params, best_viol, viol, inserted, 
-            #               time() - rnr_time_start, "viol")
-            # Update data structures
             insert_set = Set(insert)
             setdiff!(removed, insert_set)
             setdiff!(removed_all, insert_set)
             union!(inserted, insert_set)
+
             best_viol = viol
             model_slacks = get_values(lp.s)
-            lines = comp_viols(inst, params, 
-                               model_slacks, 
-                               inserted, removed)
+            lines = comp_viols(inst, params, model_slacks, inserted, removed)
 
             if params.debugging_level == 1
                 @assert length(inserted) + length(removed_all) == inst.num_K
             end
         else
-            # @info "Decrease lambda and restart $lambda"
-            # lambda /= 2.0
-            # lambda = max(0.0, lambda - params.heuristic.vf_delta)
             # The inserted candidates make the solution worse
             rm_lines!(inst, params, lp, insert)
             break

@@ -1,24 +1,24 @@
 function build_mip(inst::Instance, 
                    params::Parameters, 
                    scen::Int64 = 1, 
-                   is_subproblem::Bool = false)
+                   is_build_obj_req::Bool = true)
     mip = MIPModel(params)
-    return build_model(inst, params, scen, is_subproblem, mip)
+    return build_model(inst, params, scen, is_build_obj_req, mip)
 end
 
 function build_lp(inst::Instance, 
                   params::Parameters, 
                   scen::Int64 = 1, 
-                  is_subproblem::Bool = false)
+                  is_build_obj_req::Bool = true)
     lp = LPModel(params)
-    return build_model(inst, params, scen, is_subproblem, lp)
+    return build_model(inst, params, scen, is_build_obj_req, lp)
 end
 
 """
     build_model(inst::Instance, 
                 params::Parameters, 
                 scen::Int64, 
-                is_subproblem::Bool, 
+                is_build_obj_req::Bool, 
                 tep::TEPModel)
 
 Build either a mixed-integer programming (MIP) model or a linear programming 
@@ -27,7 +27,7 @@ Build either a mixed-integer programming (MIP) model or a linear programming
 function build_model(inst::Instance, 
                      params::Parameters, 
                      scen::Int64, 
-                     is_subproblem::Bool, 
+                     is_build_obj_req::Bool, 
                      tep::TEPModel)
     config!(inst, params, scen, tep)
 
@@ -51,7 +51,7 @@ function build_model(inst::Instance,
 
     add_ref_bus_cons!(inst, tep)
 
-    set_obj!(inst, params, scen, is_subproblem, tep)
+    set_obj!(inst, params, scen, is_build_obj_req, tep)
 
     # write_to_file(tep.jump_model, "model.lp")
     # open("model.lp", "w") do f

@@ -6,7 +6,7 @@ const AffQuadExpr = Union{JuMP.AffExpr, JuMP.QuadExpr}
 
 # -------------------------- Heuristic data structures -------------------------
 struct Start
-    inserted::Set{Any}
+    inserted
     f::Dict{Any, Float64}
     g::Dict{Int, Float64}
     # theta::Vector{Float64}
@@ -26,10 +26,10 @@ struct Status
 
     function Status(name::String, 
                     num_inserted::Int64, num_start::Int64, 
-                    obj::Float64, obj_start::Float64, 
+                    cost::Float64, start_cost::Float64, 
                     start_time::Float64)
         rm_rat = num_inserted / num_start
-        impr_rat = 1.0 - obj / obj_start
+        impr_rat = 1.0 - cost / start_cost
 
         return Status(name, rm_rat, impr_rat, time() - start_time)
     end
@@ -220,29 +220,39 @@ mutable struct Cache
     best_it::Int64
     best_sol::Vector{Tuple{Tuple3I, Int64}}
     best_cost::Float64
+    hash_weights::Vector{Int64}
+    hash_values::Vector{Float64}
+    fixed_x_variables::Vector{Tuple{Tuple3I, Int64}}
+    count_cycle_it::Vector{Int64}
 
     Cache(inst::Instance, params::Parameters) = 
-                new(0, 
-                    [ScenarioCache(zeros(inst.num_K), 
-                        State(Vector{Float64}(), 
-                            Vector{Float64}())) for _ in 1:inst.num_scenarios],
-                    # [zeros(num_vars) for _ in 1:num_scenarios], 
-                    # Vector{Vector{Float64}}(undef, num_vars), 
-                    # Vector{Vector{Float64}}(undef, num_vars), 
-                    Vector{Float64}(), 
-                    Vector{Float64}(), 
-                    Vector{Tuple{Tuple3I, Int64}}(), 
-                    Vector{Tuple{Tuple3I, Int64}}(),
-                    0, 0, 
-                    Vector{Float64}(undef, inst.num_scenarios), 
-                    Vector{Float64}(undef, inst.num_scenarios), 
-                    [params.progressive_hedging.rho for _ in eachindex(inst.K)], 
-                    Vector{Float64}(), 
-                    Vector{Float64}(), 
-                    Vector{Float64}(undef, inst.num_scenarios), 
-                    const_infinite, const_infinite, 100.0, 0, 
-                    Vector{Tuple{Tuple3I, Int64}}(), 
-                    const_infinite)
+        new(0, 
+            [ScenarioCache(zeros(inst.num_K), 
+                State(Vector{Float64}(), 
+                    Vector{Float64}())) for _ in 1:inst.num_scenarios],
+            # [zeros(num_vars) for _ in 1:num_scenarios], 
+            # Vector{Vector{Float64}}(undef, num_vars), 
+            # Vector{Vector{Float64}}(undef, num_vars), 
+            Vector{Float64}(), 
+            Vector{Float64}(), 
+            Vector{Tuple{Tuple3I, Int64}}(), 
+            Vector{Tuple{Tuple3I, Int64}}(),
+            0, 0, 
+            Vector{Float64}(undef, inst.num_scenarios), 
+            Vector{Float64}(undef, inst.num_scenarios), 
+            [params.progressive_hedging.rho / 2.0 for _ in eachindex(inst.K)], 
+            Vector{Float64}(), 
+            Vector{Float64}(), 
+            Vector{Float64}(undef, inst.num_scenarios), 
+            const_infinite, const_infinite, 100.0, 0, 
+            Vector{Tuple{Tuple3I, Int64}}(), 
+            const_infinite, 
+            # Generate n numbers from 1:100 * n, randomly
+            sample(1:100 * inst.num_scenarios, 
+                    inst.num_scenarios, replace = false), 
+            Vector{Float64}(undef, inst.num_K), 
+            Vector{Tuple{Tuple3I, Int64}}(), 
+            zeros(Int64, inst.num_K)) 
 end
 
 mutable struct ControllerMessage

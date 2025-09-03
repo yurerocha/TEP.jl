@@ -50,7 +50,7 @@ function run_parallel_bs!(inst::Instance,
     scen = 1
     for bs_it in 1:params.beam_search.num_max_it
         update_lp!(inst, params, lp, inserted)
-        obj = comp_obj(inst, params, scen, lp, inserted)
+        obj = comp_penalized_cost(inst, params, scen, lp, inserted)
         # params.beam_search.num_candidates_per_batch = 
         #                                             num_candidates_per_batch
 
@@ -108,7 +108,7 @@ function run_parallel_bs!(inst::Instance,
                             # Log info
                             st = Status("bs", num_ins_start - num_ins, 
                                         inst.num_K, obj, obj_start, start_time)
-                            log_status(params, st)
+                            log(params, st)
                         end
                     end
                 end
@@ -228,7 +228,7 @@ function bs_workers_loop(inst::Instance, params::Parameters)
             f = msg.node.f
             # if JuMP.has_values(lp.jump_model)
             if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
-                obj = comp_obj(inst, params, scen, lp, ins_candidates)
+                obj = comp_penalized_cost(inst, params, scen, lp, ins_candidates)
                 f = get_values(lp.f)
                 is_feas = true
                 # viol = comp_viol(lp)
