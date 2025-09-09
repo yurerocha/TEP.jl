@@ -70,8 +70,12 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
         # Update SEP-rho parameters
         update_cache_sep_rho_x_min_max!(inst, cache)
-        if it == 1 && params.progressive_hedging.en_sep_rho
-            update_cache_sep_rho!(inst, cache)
+        if it == 1
+            if params.progressive_hedging.is_sep_rho_en
+                update_cache_sep_rho!(inst, cache)
+            else
+                update_cache_cost_proportional_rho!(inst, cache)
+            end
         end
         
         # Aggregation
@@ -182,29 +186,20 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                 end
 
                 # Cache is initially empty
-                params.progressive_hedging.is_active = msg.it > 1
+                params.progressive_hedging.is_en = msg.it > 1
                 if msg.is_last_it && msg.has_improved
-                    _, g_cost_lb = 
-                        update_lp!(inst, params, lp, msg.cache.sol_intersection)
-
-                    _, g_cost_ub = 
-                            update_lp!(inst, params, lp, msg.cache.sol_union)
+                    g_cost_lb, g_cost_ub = comp_g_costs_lb_ub!(inst, params, 
+                                                        msg.scen, lp, msg.cache)
                 else
                     # The cache data structure is incomplete in the first it
                     params.beam_search.time_limit = msg.time_limit
 
-                    # inserted, 
-                    # count_use_sol_lb, count_use_sol_ub, 
-                    # g_cost_lb, g_cost_ub = 
-                    #                     run_serial_bs!(inst, params, msg.scen, 
-                    #                                    lp, msg.cache)
-
-                    cost, in, rm, count_use_sol_lb, 
+                    cost, built, rm, count_use_sol_lb, 
                     count_use_sol_ub, g_cost_lb, g_cost_ub = 
                         build_start_sol(inst, params, msg.scen, lp, msg.cache)
 
                     inserted = run_serial_bs!(inst, params, msg.scen, lp, 
-                                                msg.cache, in, rm, cost)
+                                                msg.cache, built, rm, cost)
                     
                     tl = max(msg.time_limit - (time() - start_time), 0.0)
 

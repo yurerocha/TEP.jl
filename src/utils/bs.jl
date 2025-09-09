@@ -207,7 +207,7 @@ end
                         scen::Int64, 
                         lp::LPModel, 
                         cache::Cache, 
-                        build)
+                        built)
 
 Compute the objective function considering the inserted candidate lines and the 
 cache of the progressive hedging algorithm, if in the progressive hedging.
@@ -217,14 +217,14 @@ function comp_penalized_cost(inst::Instance,
                              scen::Int64, 
                              lp::LPModel, 
                              cache::Cache, 
-                             build)
+                             built)
     cost = const_infinite * comp_viol(lp)
     g_cost = comp_g_cost(inst, params, scen, lp)
 
-    if params.progressive_hedging.is_active
+    if params.progressive_hedging.is_en
         sq2norm = 0.0
         acc_omega = 0.0
-        for k in build
+        for k in built
             cost += inst.K[k].cost
             # Progressive hedging data
             i = inst.key_to_index[k]
@@ -237,16 +237,16 @@ function comp_penalized_cost(inst::Instance,
         #        (params.progressive_hedging.rho / 2.0) * sq2norm
         cost += acc_omega + sq2norm
     else
-        cost = comp_build_cost(inst, build)
+        cost = comp_build_cost(inst, built)
     end
 
     return cost + g_cost, g_cost
 end
 
-function comp_build_cost(inst::Instance, build)
+function comp_build_cost(inst::Instance, built)
     cost = 0.0
 
-    for k in build
+    for k in built
         cost += inst.K[k].cost
     end
 

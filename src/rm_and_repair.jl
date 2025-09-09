@@ -33,77 +33,70 @@ function rm_and_repair!(inst::Instance,
         end
     end
 
+    all_cands = params.debugging_level == 1 ? union(inserted, removed) : Set()
+
     best_cost = cost
     init_cost = cost
-    rm_ratio = params.remove_repair.remove_ratio
-    num_ins_start = length(inserted)
+    best_rm = Set()
     # Binary search based
-    # rm_ratio = 0.5
-    # delta = 0.5
+    rm_ratio = 0.5
+    delta = 0.5
 
-    f = get_values(lp.f)
-    lines = comp_f_residuals(inst, lp, f, inserted)
-
+    candidates = sort_by_residual_flows(inst, lp, get_values(lp.f), inserted)
+    rm_cands, in_cands = rm_in_candidates(candidates, rm_ratio)
     it = 1
-    while true
-        num_itens = round(Int64, rm_ratio * length(lines))
-        if num_itens == 0
-            break
-        elseif isg(time() - start_time, params.remove_repair.time_limit)
-            break
-        end
+    num_cands_prev_it = 0
+    num_cands = length(rm_cands)
+    while it <= params.remove_repair.max_it && num_cands != num_cands_prev_it && 
+            !isempty(rm_cands) && 
+            isl(time() - start_time, params.remove_repair.time_limit)
 
-        rm = lines[1:min(num_itens, length(lines))]
-        
-        rm_lines!(inst, params, lp, rm, true)
-        rm_set = Set{Any}(rm)
-        setdiff!(inserted, rm_set)
-        union!(removed, rm_set)
+        rm_lines!(inst, params, lp, rm_cands, true)
         
         viol = const_infinite
-        if termination_status(lp.jump_model) == MOI.OPTIMAL
+        if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
             viol = comp_viol(lp)
         end
 
         if isg(viol, 0.0)
-            # The following neigh changes both the removed and inserted sets
-            viol = repair!(inst, params, scen, lp, 
-                           rm_set, removed, inserted, 
-                           viol, start_time)
+            viol = repair!(inst, params, scen, lp, rm_cands, viol)
         end
 
         cost = 0.0
         if iseq(viol, 0.0)
             cost, _ = 
-                    comp_penalized_cost(inst, params, scen, lp, cache, inserted)
+                    comp_penalized_cost(inst, params, scen, lp, cache, in_cands)
         end
 
         if iseq(viol, 0.0) && isl(cost, best_cost)
-            if params.debugging_level == 1
-                @assert length(inserted) + length(removed) == inst.num_K
-            end
-
-            st = Status("rr", length(removed), inst.num_K, 
+            st = Status("rr", length(rm_cands), inst.num_K, 
                         cost, init_cost, start_time)
             @infov 2 log(st)
 
+            best_rm = rm_cands
             best_cost = cost
-            f = get_values(lp.f)
-            lines = comp_f_residuals(inst, lp, f, inserted)
-            rm_ratio = min(1.0, rm_ratio + params.remove_repair.delta)
-            # rm_ratio += 0.5 * delta
-        else
-            # @info "Unable to improve"
-            setdiff!(removed, rm_set)
-            union!(inserted, rm_set)
-            add_lines!(inst, params, lp, rm, false)
-            # rm_ratio = max(0.0, rm_ratio - params.heuristic.rnr_delta)
-            # rm_ratio -= 0.5 * delta
-            break
-        end
-        # delta /= 2.0
 
+            # @infov 2 "rm_ratio:$rm_ratio -> $(rm_ratio + 0.5 * delta) " * 
+            #             "num_cands:$num_cands"
+            rm_ratio += 0.5 * delta
+        else
+            # @infov 2 "rm_ratio:$rm_ratio -> $(rm_ratio - 0.5 * delta) " * 
+            #             "num_cands:$num_cands"
+            rm_ratio -= 0.5 * delta
+        end
+        delta /= 2.0
+
+        rm_cands, in_cands = rm_in_candidates(candidates, rm_ratio)
+        num_cands_prev_it = num_cands
+        num_cands = length(rm_cands)
         it += 1
+    end
+    setdiff!(inserted, best_rm)
+    union!(removed, best_rm)
+
+    if params.debugging_level == 1
+        @assert length(all_cands) == length(inserted) + length(removed)
+        @assert length(setdiff(all_cands, union(inserted, removed))) == 0
     end
     
     st = Status("rr", length(removed), inst.num_K, 
@@ -118,14 +111,7 @@ function repair!(inst::Instance,
                  scen::Int64, 
                  lp::LPModel, 
                  removed::Set{Any}, 
-                 removed_all::Set{Any}, 
-                 inserted::Set{Any}, 
-                 best_viol::Float64, 
-                 start_time::Float64)    
-    if iseq(best_viol, 0.0)
-        return 0.0
-    end
-
+                 best_viol::Float64)    
     # Another option is to store the f values of the last successfull opt call
     if !has_values(lp.jump_model)
         optimize!(lp.jump_model)
@@ -134,24 +120,13 @@ function repair!(inst::Instance,
         return best_viol
     end
 
-    if params.debugging_level == 1
-        @assert isdisjoint(removed, inserted)
-    end
-
-    model_slacks = get_values(lp.s)
-    insert = comp_viols(inst, params, model_slacks, inserted, removed)
+    s_vals = get_values(lp.s)
+    rein_cands = select_with_viol(inst, params, s_vals, removed)
 
     it = 1
-    while true
-        if iseq(best_viol, 0.0)
-            break
-        elseif length(insert) == 0
-            break
-        elseif isg(time() - start_time, params.remove_repair.time_limit)
-            break
-        end
+    while isg(best_viol, 0.0) && !isempty(rein_cands)
         
-        add_lines!(inst, params, lp, insert)
+        add_lines!(inst, params, lp, rein_cands, true)
 
         viol = Inf64
         if termination_status(lp.jump_model) == MOI.OPTIMAL
@@ -159,21 +134,14 @@ function repair!(inst::Instance,
         end
 
         if isl(viol, best_viol)
-            insert_set = Set(insert)
-            setdiff!(removed, insert_set)
-            setdiff!(removed_all, insert_set)
-            union!(inserted, insert_set)
+            setdiff!(removed, rein_cands)
 
             best_viol = viol
-            model_slacks = get_values(lp.s)
-            lines = comp_viols(inst, params, model_slacks, inserted, removed)
-
-            if params.debugging_level == 1
-                @assert length(inserted) + length(removed_all) == inst.num_K
-            end
+            s_vals = get_values(lp.s)
+            rein_cands = select_with_viol(inst, params, s_vals, removed)
         else
             # The inserted candidates make the solution worse
-            rm_lines!(inst, params, lp, insert)
+            rm_lines!(inst, params, lp, rein_cands, true)
             break
         end
         it += 1

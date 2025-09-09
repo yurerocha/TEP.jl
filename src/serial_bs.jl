@@ -32,7 +32,7 @@ function run_serial_bs!(inst::Instance,
         Q = [root]
         while true # Evaluate levels in the tree
             if isg(time() - start_time, remaining_time)
-                @info "bs time limit reached"
+                @info "bs time limit reached $(time() - start_time)"
                 break
             end
             UB = []

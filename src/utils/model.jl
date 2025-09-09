@@ -542,10 +542,20 @@ end
 """
     comp_viol(lp::LPModel)
 
-Compute violation as the sum of the slack variables.
+Compute violation as the sum of values of slack variables.
 """
 function comp_viol(lp::LPModel)
     return sum(JuMP.value(s) for s in values(lp.s))
+end
+
+"""
+    comp_viol_and_max(lp::LPModel)
+
+Compute violation as the sum of the slack variables, and the maximum violation.
+"""
+function comp_viol_and_max(lp::LPModel)
+    vals = [JuMP.value(s) for s in values(lp.s)]
+    return sum(vals), maximum(vals)
 end
 
 function check_sol(inst::Instance, tep::TEPModel, md)

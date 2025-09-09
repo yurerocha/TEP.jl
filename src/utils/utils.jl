@@ -286,7 +286,7 @@ end
 
 function log(st::Status)
     d = (st.rm_ratio, st.impr_ratio, st.time)
-    d = round.(d, digits = 5)
+    d = round.(d, digits = 2)
     return "$(st.name) rm:$(d[1]) impr:$(d[2]) t:$(d[3])"
 end
 
@@ -327,11 +327,11 @@ function log_neigh_run(inst::Instance,
 end
 
 """
-    comp_penalized_cost(inst::Instance, inserted::Set{Any})
+    comp_build_cost(inst::Instance, inserted::Set{Any})
 
 Compute the cost of the solution.
 """
-function comp_penalized_cost(inst::Instance, inserted::Set{Any})
+function comp_build_cost(inst::Instance, inserted::Set{Any})
     cost = 0.0
     for k in inserted
         cost += inst.K[k].cost
@@ -357,76 +357,55 @@ function comp_new_cost(inst::Instance,
 end
 
 """
-    comp_f_residuals(inst::Instance, 
-                     f::Dict{Any, Float64}, 
-                     inserted::Set{Any})
+    sort_by_residual_flows(inst::Instance, 
+                           lp::LPModel, 
+                           f::Dict{Any, Float64}, 
+                           inserted, 
+                           rev = true)
 
-Compute the residuals of the line flows.
+Sort the inserted lines in non-ascending order of residual flows.
 """
-function comp_f_residuals(inst::Instance, 
-                          lp, 
-                          f::Dict{Any, Float64}, 
-                          inserted, 
-                          rev = true)
-    f_residuals = Vector{Tuple{Any, Float64}}()
-    # for c in inserted
-    #     k = c[1][2]
-    #     l = c[1][3]
-    #     pi_k = dual(lp.fkl_cons[k])
-    #     pi_l = dual(lp.fkl_cons[l])
-    #     theta_k = value(lp.theta[k])
-    #     theta_l = value(lp.theta[l])
-    #     # pi_kl = (pi_l - pi_k) * (theta_k - theta_l) / inst.K[c].cost
-    #     pi_kl = (pi_l - pi_k) * (theta_k - theta_l)
-    #     push!(f_residuals, (c, pi_kl))
-    # end
+function sort_by_residual_flows(inst::Instance, 
+                                lp::LPModel, 
+                                f::Dict{Any, Float64}, 
+                                inserted, 
+                                rev = true)
+    res_flows = Vector{Tuple{Any, Float64}}()
 
     for k in inserted
-        # Shift to the existing lines
-        # j = map_to_existing_line(inst, k)
         delta = inst.K[k].f_bar - abs(f[k])
-        # if !isl(delta, 0.0) # diff >= 0.0
-        # r = delta * inst.K[k].cost / inst.K[k].f_bar
-        # r = (delta + inst.K[k].cost) / inst.K[k].f_bar
         r = delta / inst.K[k].f_bar
-        push!(f_residuals, (k, r))
-        # end
+        push!(res_flows, (k, r))
     end
 
-    # Sort lines in non-ascending order of residuals
-    # Rationale: to remove subutilized lines first
-    sort!(f_residuals, by = x->x[2], rev = rev)
-    # sort!(f_residuals, by = x->x[2], rev = false)
-    # @warn f_residuals[1:6]
-    # readline()
-    # idx = length(f_residuals)
-    # i = 1
-    # for f in f_residuals
-    #     if isg(f[2], 0.001)
-    #         idx = i
-    #         break
-    #     end
-    #     i += 1
-    # end
+    # Sort lines in non-ascending order of residual flows
+    sort!(res_flows, by = x->x[2], rev = rev)
 
-    # return [f_residuals[i][1] for i in 1:idx]
-    return [f_residuals[i][1] for i in 1:length(f_residuals)]
+    return [res_flows[i][1] for i in eachindex(res_flows)]
 end
 
 """
-    comp_viols(inst::Instance, 
-               params::Parameters, 
-               s::Dict{Any, Float64}, 
-               inserted::Set{Any}, 
-               candidates::Set{Any})
+    rm_in_candidates(candidates, rm_ratio::Float64)
 
-Compute the violations of the flow constraints in the existing lines.
+Select removal and insertion candidates.
 """
-function comp_viols(inst::Instance, 
-                    params::Parameters, 
-                    s::Dict{Any, Float64}, 
-                    inserted, 
-                    candidates)
+function rm_in_candidates(candidates, rm_ratio::Float64)
+    n = floor(Int64, rm_ratio * length(candidates))
+    return Set{Any}(candidates[1:n]), Set{Any}(candidates[n + 1:end])
+end
+
+"""
+    select_with_viol(inst::Instance, 
+                     params::Parameters, 
+                     s::Dict{Any, Float64}, 
+                     candidates::Set{Any})
+
+Select candidate lines whose associated existing line has capacity violation.
+"""
+function select_with_viol(inst::Instance, 
+                          params::Parameters, 
+                          s::Dict{Any, Float64}, 
+                          candidates)
     viols = Vector{Tuple{Any, Float64}}()
     for k in candidates
         j = k[1]
@@ -437,7 +416,6 @@ function comp_viols(inst::Instance,
         end
     end
     # Sort lines in non-ascending order of residuals
-    # Rationale: to build where is more violated first
     sort!(viols, by = x->x[2], rev = true)
 
     return [v[1] for v in viols]
@@ -689,11 +667,21 @@ end
 function update_lp!(inst::Instance, 
                     params::Parameters, 
                     lp::LPModel, 
-                    build)
+                    built)
     # log(params, "It update $it", true)
     rm_lines!(inst, params, lp, keys(inst.K), false)
-    add_lines!(inst, params, lp, build, true)
+    add_lines!(inst, params, lp, built, true)
 
     # return termination_status(lp.jump_model) == MOI.OPTIMAL
     return nothing
+end
+
+function rounded_percent(vec::Vector{Tuple{Tuple3I, Int64}}, 
+                         den::Int64, 
+                         digits::Int64 = 2)
+    return round(100.0 * length(vec) / den, digits = digits)
+end
+
+function rounded_percent(num::Int64, den::Int64, digits::Int64 = 2)
+    return round(100.0 * num / den, digits = digits)
 end

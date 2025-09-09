@@ -36,11 +36,16 @@ function update_cache_x_average!(inst::Instance,
                        if !iseq(cache.x_average[i], 0.0)]
 
     LoggingExtras.withlevel(Info; verbosity = params.log_level) do
-        @infov 1 "num_candidates start:$(inst.num_K) " * 
-                 "inter:$(length(cache.sol_intersection)) " * 
-                 "union:$(length(cache.sol_union))"
-        @infov 2 "count_init_sol inter:$(cache.count_use_sol_intersection) " * 
-                 "union:$(cache.count_use_sol_union)"
+        n = inst.num_K - length(cache.sol_union)
+        t = cache.count_use_sol_intersection + cache.count_use_sol_union
+        # Avoid NaN in init_sol(%) inter and union
+        t = max(1, t)
+        @infov 1 "candidates(%) discard:$(rounded_percent(n, inst.num_K)) " * 
+            "inter:$(rounded_percent(cache.sol_intersection, inst.num_K)) " * 
+            "union:$(rounded_percent(cache.sol_union, inst.num_K))"
+        @infov 2 "init_sol(%) " * 
+            "inter:$(rounded_percent(cache.count_use_sol_intersection, t)) " * 
+            "union:$(rounded_percent(cache.count_use_sol_union, t))"
     end
 
     return nothing
@@ -186,6 +191,24 @@ function update_cache_sep_rho!(inst::Instance, cache::Cache)
 end
 
 """
+    update_cache_cost_proportional_rho!(inst::Instance, 
+                                        cache::Cache, 
+                                        cost_multiplier::Float64 = 1.0)
+
+Set rho(k) equal to a multiplier of the candidate unit cost C^{inv}_k.
+"""
+function update_cache_cost_proportional_rho!(inst::Instance, 
+                                             cache::Cache, 
+                                             cost_multiplier::Float64 = 1.0)
+    for k in keys(inst.K)
+        i = inst.key_to_index[k]
+        cache.rho[i] = cost_multiplier * inst.K[k].cost
+    end
+
+    return nothing
+end
+
+"""
     comp_ph_obj(inst::Instance, params::Parameters, cache::Cache)
 
 Compute multi-scenario problem objective value.
@@ -300,55 +323,53 @@ function build_start_sol(inst::Instance,
 
     unfix_s_vars!(lp)
 
-    if params.progressive_hedging.is_active
-        # Solution ub costs and viol
-        update_lp!(inst, params, lp, cache.sol_union)
-        cost_ub, g_cost_ub = comp_penalized_cost(inst, params, scen, lp, cache,  
-                                                    cache.sol_union)
-        viol_ub = comp_viol(lp)
-
-        # Solution lb costs and viol
-        # If the lb is used more often, we save one optimizer run
-        update_lp!(inst, params, lp, cache.sol_intersection)
-        cost_lb, g_cost_lb = comp_penalized_cost(inst, params, scen, lp, cache,
-                                                 cache.sol_intersection)
-        viol_lb = comp_viol(lp)
-
-        viol = max(viol_lb, viol_ub)
+    if params.progressive_hedging.is_en
+        cost_ub, g_cost_ub, viol_ub, max_viol_ub = 
+                comp_sol_info!(inst, params, scen, lp, cache, cache.sol_union)
+        cost_lb, g_cost_lb, viol_lb, max_viol_lb = comp_sol_info!(inst, params, 
+                                        scen, lp, cache, cache.sol_intersection)
+        viol = min(viol_lb, viol_ub)
 
         # Compare penalized costs
         if isl(cost_lb, cost_ub)
             count_use_sol_lb = 1
             cost = cost_lb
             inserted = Set{Any}(deepcopy(cache.sol_intersection))
-            @info "lb"
+            @info "selected:lb"
         else
             count_use_sol_ub = 1
             cost = cost_ub
             inserted = Set{Any}(deepcopy(cache.sol_union))
-            @info "ub"
-            if iseq(viol, 0.0)
+            @info "selected:ub"
+            if iseq(viol_ub, 0.0)
                 update_lp!(inst, params, lp, cache.sol_union)
             end
         end
 
         # Try to repair the best solution, if infeasible
         if isg(viol, 0.0)
-            @info "viol: $viol"
-            removed = Set{Any}(setdiff(keys(inst.K), inserted))
-            removed_all = deepcopy(removed)
+            @info "lb viol:$viol_lb max:$max_viol_lb"
+            @info "ub viol:$viol_ub max:$max_viol_ub"
 
-            # TODO: Implement a method that insert new candidate lines
-            viol = repair!(inst, params, scen, lp, removed, 
-                            removed_all, inserted, viol, 0.0)
+            # TODO: Implement a method that inserts new candidate lines
+            # Algorithm 
+            # Ideia geral: reforçar linhas candidatas mais próximas às linhas 
+            # com violações na esperança de que, com o efeito de propagação, o 
+            # excesso do fluxo de potência seja aliviado.
+            # 1. Para cada linha com violação, calcular a distância de todas as 
+            # linhas candidatas ainda não adicionadas (Dijkstra's shortest path 
+            # algorithm).
+            # 2. Adicionar as linhas candidatas dentro de um dado raio de acordo
+            # com algum critério, e.g., adicionar todas, reforçar linhas 
+            # sobrecarregadas.
+            viol = repair!(inst, params, scen, lp, removed, viol)
 
-            @info "viol repair: $viol"
+            @info "repaired: $viol"
             if isg(viol, 0.0)
                 inserted = Set{Any}(keys(inst.K))
                 removed = Set{Any}()
-                @info "unable to repair initial sol"
             end
-            update_lp!(inst, params, lp, inserted)
+
             cost, _ = 
                     comp_penalized_cost(inst, params, scen, lp, cache, inserted)
         else
@@ -365,6 +386,36 @@ function build_start_sol(inst::Instance,
 
     return cost, inserted, removed, count_use_sol_lb, 
             count_use_sol_ub, g_cost_lb, g_cost_ub
+end
+
+function comp_sol_info!(inst::Instance, 
+                        params::Parameters, 
+                        scen::Int64, 
+                        lp::LPModel, 
+                        cache::Cache, 
+                        sol::Vector{Tuple{Tuple3I, Int64}})
+    update_lp!(inst, params, lp, sol)
+    cost, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, sol)
+
+    return (cost, g_cost, comp_viol_and_max(lp)...)
+end
+
+function comp_g_costs_lb_ub!(inst::Instance, 
+                             params::Parameters,
+                             scen::Int64, 
+                             lp::LPModel, 
+                             cache::Cache)
+    unfix_s_vars!(lp)
+
+    update_lp!(inst, params, lp, cache.sol_intersection)
+    _, g_cost_lb = comp_penalized_cost(inst, params, scen, lp, 
+                                        cache, cache.sol_intersection) 
+    
+    update_lp!(inst, params, lp, msg.cache.sol_union)
+    _, g_cost_ub = 
+            comp_penalized_cost(inst, params, scen, lp, cache, cache.sol_union)
+
+    return g_cost_lb, g_cost_ub
 end
 
 # --------------------------------- Parallel PH --------------------------------
