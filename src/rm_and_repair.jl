@@ -3,9 +3,9 @@
                    params::Parameters, 
                    scen::Int64, 
                    lp::LPModel, 
-                   cache::Cache, 
-                   inserted::Set{Any}, 
-                   removed::Set{Any}, 
+                   cache::WorkerCache, 
+                   inserted::Set{CandType}, 
+                   removed::Set{CandType}, 
                    cost::Float64)
 
 Remove and repair procedure for building feasible initial solutions.
@@ -14,9 +14,9 @@ function rm_and_repair!(inst::Instance,
                         params::Parameters, 
                         scen::Int64, 
                         lp::LPModel, 
-                        cache::Cache, 
-                        inserted::Set{Any}, 
-                        removed::Set{Any}, 
+                        cache::WorkerCache, 
+                        inserted::Set{CandType}, 
+                        removed::Set{CandType}, 
                         cost::Float64)
     start_time = time()
 
@@ -42,8 +42,8 @@ function rm_and_repair!(inst::Instance,
     rm_ratio = 0.5
     delta = 0.5
 
-    candidates = sort_by_residual_flows(inst, lp, get_values(lp.f), inserted)
-    rm_cands, in_cands = rm_in_candidates(candidates, rm_ratio)
+    lines = sort_by_residual_flows(inst, lp, get_values(lp.f), inserted)
+    rm_cands, in_cands = divide_rm_in(lines, rm_ratio)
     it = 1
     num_cands_prev_it = 0
     num_cands = length(rm_cands)
@@ -86,7 +86,7 @@ function rm_and_repair!(inst::Instance,
         end
         delta /= 2.0
 
-        rm_cands, in_cands = rm_in_candidates(candidates, rm_ratio)
+        rm_cands, in_cands = divide_rm_in(lines, rm_ratio)
         num_cands_prev_it = num_cands
         num_cands = length(rm_cands)
         it += 1
@@ -110,7 +110,7 @@ function repair!(inst::Instance,
                  params::Parameters, 
                  scen::Int64, 
                  lp::LPModel, 
-                 removed::Set{Any}, 
+                 removed::Set{CandType}, 
                  best_viol::Float64)    
     # Another option is to store the f values of the last successfull opt call
     if !has_values(lp.jump_model)

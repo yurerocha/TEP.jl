@@ -31,30 +31,28 @@ end
 
 Base.@kwdef mutable struct RemoveAndRepairParameters
     is_en::Bool = true
-    max_it::Int64 = 20
     time_limit::Float64 = 3600.0
-    remove_ratio::Float64 = 0.5
-    delta::Float64 = 0.2
+    max_it::Int64 = 20
 end
 
 Base.@kwdef mutable struct BeamSearchParameters
-    time_limit::Float64 = 50.0
+    time_limit::Float64 = 50.0 # TODO calibrar com apenas 5min mesmo
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
-    num_children_per_level_mult::Int64 = 2 # calibrá-lo: 2, 4, 8
-    candidates_per_batch_mult::Float64 = 1e-3
+    num_children_per_level_mult::Float64 = 0.5 # gamma
+    candidates_per_batch_mult::Float64 = 1e-3 # TODO Calibrar: 1e-4, 1e-3, 1e-2
     num_max_it::Int64 = 2
     num_max_it_wo_impr::Int64 = 10
     is_shuffle_en::Bool = true
-    restricted_list_ratio::Float64 = 0.5 # TODO: calibrar: 0.6, 0.7, 0.8
+    restricted_list_ratio::Float64 = 0.75 # TODO Calibrar. 0.25, 0.5, 0.75
 end
 
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     is_en::Bool = true
-    time_limit::Float64 = 3600.0
+    time_limit::Float64 = 300.0
     num_threads::Int64 = 64
     rho::Float64 = 1.0
-    is_sep_rho_en::Bool = false
+    is_sep_rho_en::Bool = false #TODO testar true e false
     max_it::Int64 = 1000000
     convergence_eps::Float64 = 1e-3
 end

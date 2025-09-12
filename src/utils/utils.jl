@@ -230,14 +230,14 @@ function init_results()
 end
 
 """
-    comp_bigM(inst, k::Tuple{Tuple3I, Int64})
+    comp_bigM(inst, k::CandType)
 
 Compute the big-M value for the model. 
 
 The big-M is computed as discussed in Ghita's thesis, as there is at least one
 existing line conecting every two buses.
 """
-function comp_bigM(inst::Instance, k::Tuple{Tuple3I, Int64})
+function comp_bigM(inst::Instance, k::CandType)
     bigM = const_infinite
     for j in keys(inst.J)
         if j[2] == k[1][2] && j[3] == k[1][3]
@@ -342,13 +342,13 @@ end
 """
     comp_new_cost(inst::Instance, 
                   old_cost::Float64, 
-                  removed::Vector{Tuple{Tuple3I, Int64}})
+                  removed::Vector{CandType})
 
 Compute the new cost after removing some candidate circuits.
 """
 function comp_new_cost(inst::Instance, 
                        old_cost::Float64, 
-                       removed::Vector{Tuple{Tuple3I, Int64}})
+                       removed::Vector{CandType})
     new_cost = old_cost
     for k in removed
         new_cost -= inst.K[k].cost
@@ -360,7 +360,7 @@ end
     sort_by_residual_flows(inst::Instance, 
                            lp::LPModel, 
                            f::Dict{Any, Float64}, 
-                           inserted, 
+                           inserted::Set{CandType}, 
                            rev = true)
 
 Sort the inserted lines in non-ascending order of residual flows.
@@ -368,9 +368,9 @@ Sort the inserted lines in non-ascending order of residual flows.
 function sort_by_residual_flows(inst::Instance, 
                                 lp::LPModel, 
                                 f::Dict{Any, Float64}, 
-                                inserted, 
+                                inserted::Set{CandType}, 
                                 rev = true)
-    res_flows = Vector{Tuple{Any, Float64}}()
+    res_flows = Vector{Tuple{CandType, Float64}}()
 
     for k in inserted
         delta = inst.K[k].f_bar - abs(f[k])
@@ -381,33 +381,33 @@ function sort_by_residual_flows(inst::Instance,
     # Sort lines in non-ascending order of residual flows
     sort!(res_flows, by = x->x[2], rev = rev)
 
-    return [res_flows[i][1] for i in eachindex(res_flows)]
+    return Vector{CandType}([res_flows[i][1] for i in eachindex(res_flows)])
 end
 
 """
-    rm_in_candidates(candidates, rm_ratio::Float64)
+    divide_rm_in(lines::Vector{CandType}, rm_ratio::Float64)
 
-Select removal and insertion candidates.
+Divide lines into removal and insertion sets based on the remove ratio.
 """
-function rm_in_candidates(candidates, rm_ratio::Float64)
-    n = floor(Int64, rm_ratio * length(candidates))
-    return Set{Any}(candidates[1:n]), Set{Any}(candidates[n + 1:end])
+function divide_rm_in(lines::Vector{CandType}, rm_ratio::Float64)
+    n = floor(Int64, rm_ratio * length(lines))
+    return Set{CandType}(lines[1:n]), Set{CandType}(lines[n + 1:end])
 end
 
 """
     select_with_viol(inst::Instance, 
                      params::Parameters, 
                      s::Dict{Any, Float64}, 
-                     candidates::Set{Any})
+                     lines::Set{CandType})
 
 Select candidate lines whose associated existing line has capacity violation.
 """
 function select_with_viol(inst::Instance, 
                           params::Parameters, 
                           s::Dict{Any, Float64}, 
-                          candidates)
+                          lines::Set{CandType})
     viols = Vector{Tuple{Any, Float64}}()
-    for k in candidates
+    for k in lines
         j = k[1]
         if isg(s[k], 0.0)
             push!(viols, (k, s[k]))
@@ -418,7 +418,7 @@ function select_with_viol(inst::Instance,
     # Sort lines in non-ascending order of residuals
     sort!(viols, by = x->x[2], rev = true)
 
-    return [v[1] for v in viols]
+    return Set{CandType}([v[1] for v in viols])
 end
 
 """
@@ -486,7 +486,7 @@ function fix_for_symmetry_contrs!(inst::Instance,
 end
 
 function set_state!(mip::MIPModel, 
-                    x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}, 
+                    x::Dict{CandType, JuMP.VariableRef}, 
                     y::Dict{Int64, JuMP.VariableRef})
     # In case the x is a single variable instead of a vector
     # if x isa JuMP.VariableRef
@@ -590,20 +590,17 @@ end
     rm_lines!(inst::Instance, 
               params::Parameters, 
               lp::LPModel,  
-              candidates::T, 
-              is_opt::Bool = false) where 
-                       T <: Union{Vector{Tuple{Tuple3I, Int64}}, Set{Any}}
+              lines::Set{CandType}, 
+              is_opt::Bool = false)
 
 Remove lines from the model by setting the susceptances to a small value.
 """
 function rm_lines!(inst::Instance, 
                    params::Parameters, 
                    lp::LPModel,  
-                   candidates, 
+                   lines::Set{CandType}, 
                    is_opt::Bool = false)
-    # log(params, "Rm $(length(candidates)) line(s)")
-
-    for k in candidates
+    for k in lines
         # if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
         if !is_fixed(lp.s[k])
             fix(lp.s[k], 0.0; force = true)
@@ -626,7 +623,7 @@ end
 """
     add_lines!(inst::Instance, 
                lp::LPModel, 
-               new_candidates::Vector{Tuple{Tuple{Int64, Int64, Int64}, Int64}}, 
+               lines::lines::Set{CandType}, 
                is_opt::Bool = true)
 
 Insert lines in the model by setting the diagonal terms of the susceptance.
@@ -634,11 +631,9 @@ Insert lines in the model by setting the diagonal terms of the susceptance.
 function add_lines!(inst::Instance, 
                     params::Parameters, 
                     lp::LPModel,
-                    new_candidates, 
+                    lines::Set{CandType}, 
                     is_opt::Bool = true)
-    # log(params, "Add $(length(new_candidates)) line(s)")
-
-    for k in new_candidates
+    for k in lines
         # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
         if is_fixed(lp.s[k])
             unfix(lp.s[k])
@@ -667,19 +662,19 @@ end
 function update_lp!(inst::Instance, 
                     params::Parameters, 
                     lp::LPModel, 
-                    built)
+                    inserted::Set{CandType})
     # log(params, "It update $it", true)
-    rm_lines!(inst, params, lp, keys(inst.K), false)
-    add_lines!(inst, params, lp, built, true)
+    rm_lines!(inst, params, lp, Set{CandType}(keys(inst.K)), false)
+    add_lines!(inst, params, lp, inserted, true)
 
     # return termination_status(lp.jump_model) == MOI.OPTIMAL
     return nothing
 end
 
-function rounded_percent(vec::Vector{Tuple{Tuple3I, Int64}}, 
+function rounded_percent(sol::Set{CandType}, 
                          den::Int64, 
                          digits::Int64 = 2)
-    return round(100.0 * length(vec) / den, digits = digits)
+    return round(100.0 * length(sol) / den, digits = digits)
 end
 
 function rounded_percent(num::Int64, den::Int64, digits::Int64 = 2)

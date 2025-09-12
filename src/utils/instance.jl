@@ -162,7 +162,7 @@ Build candidate circuits based on exsting lines.
 function build_candidate_circuits(params::Parameters, 
                                 J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo})
     # TODO: K and J with the same key format
-    K = Dict{Tuple{Tuple3I, Int64}, BranchInfo}()
+    K = Dict{CandType, BranchInfo}()
     for (j, v) in J
         # Candidate circuits are copies of the existing ones
         for l in 1:params.instance.num_candidates

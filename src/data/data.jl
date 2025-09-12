@@ -3,6 +3,8 @@ const FloatVarRef = Union{Float64, JuMP.VariableRef}
 # const VectorSet{T <: Number} = Union{Vector{T}, Set{T}}
 const VectorSet = Union{Vector{Int64}, Set{Int64}}
 const AffQuadExpr = Union{JuMP.AffExpr, JuMP.QuadExpr}
+const Tuple3I = Tuple{Int64, Int64, Int64}
+const CandType = Tuple{Tuple3I, Int64}
 
 # -------------------------- Heuristic data structures -------------------------
 struct Start
@@ -36,8 +38,6 @@ struct Status
 end
 
 # -------------------------- Instance data structures --------------------------
-const Tuple3I = Tuple{Int64, Int64, Int64}
-
 mutable struct GeneratorInfo
     bus::Int64
     lower_bound::Float64
@@ -69,8 +69,8 @@ mutable struct Instance
     name::String
     I::Set{Int64} # Buses
     J::Dict{Tuple3I, BranchInfo} # Existing lines
-    K::Dict{Tuple{Tuple3I, Int64}, BranchInfo} # Candidates
-    key_to_index::Dict{Tuple{Tuple3I, Int64}, Int64}
+    K::Dict{CandType, BranchInfo} # Candidates
+    key_to_index::Dict{CandType, Int64}
     costs::Vector{Float64}
     # f_bar::Vector{Float64} # Capacity of circuits
     # gamma::Vector{Float64} # Susceptance of circuits
@@ -91,7 +91,7 @@ abstract type TEPModel end
 struct MIPModel <: TEPModel
     jump_model::JuMP.Model
     obj::AffQuadExpr
-    x::Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}
+    x::Dict{CandType, JuMP.VariableRef}
     f::Dict{Any, JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
     g_bus::Dict{Int64, JuMP.AffExpr} # Sum of g for the same bus
@@ -103,7 +103,7 @@ struct MIPModel <: TEPModel
                 new(# direct_model(Gurobi.Optimizer()), 
                     JuMP.Model(params.model.optimizer), 
                     params.model.is_dcp_power_model_en ? QuadExpr() : AffExpr(), 
-                    Dict{Tuple{Tuple3I, Int64}, JuMP.VariableRef}(), 
+                    Dict{CandType, JuMP.VariableRef}(), 
                     Dict{Any, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.AffExpr}(), 
@@ -203,8 +203,8 @@ mutable struct Cache
     scenarios::Vector{ScenarioCache}
     x_hat::Vector{Float64}
     x_average::Vector{Float64}
-    sol_intersection::Vector{Tuple{Tuple3I, Int64}}
-    sol_union::Vector{Tuple{Tuple3I, Int64}}
+    sol_intersection::Set{CandType}
+    sol_union::Set{CandType}
     count_use_sol_intersection::Int64
     count_use_sol_union::Int64
     g_costs_sol_intersection::Vector{Float64}
@@ -218,11 +218,11 @@ mutable struct Cache
     t_deviation::Float64
     quality_deviation::Float64
     best_it::Int64
-    best_sol::Vector{Tuple{Tuple3I, Int64}}
+    best_sol::Set{CandType}
     best_cost::Float64
     hash_weights::Vector{Int64}
     hash_values::Vector{Float64}
-    fixed_x_variables::Vector{Tuple{Tuple3I, Int64}}
+    fixed_x_variables::Set{CandType}
     count_cycle_it::Vector{Int64}
 
     Cache(inst::Instance, params::Parameters) = 
@@ -235,8 +235,8 @@ mutable struct Cache
             # Vector{Vector{Float64}}(undef, num_vars), 
             Vector{Float64}(), 
             Vector{Float64}(), 
-            Vector{Tuple{Tuple3I, Int64}}(), 
-            Vector{Tuple{Tuple3I, Int64}}(),
+            Set{CandType}(), 
+            Set{CandType}(),
             0, 0, 
             Vector{Float64}(undef, inst.num_scenarios), 
             Vector{Float64}(undef, inst.num_scenarios), 
@@ -245,18 +245,31 @@ mutable struct Cache
             Vector{Float64}(), 
             Vector{Float64}(undef, inst.num_scenarios), 
             const_infinite, const_infinite, 100.0, 0, 
-            Vector{Tuple{Tuple3I, Int64}}(), 
+            Set{CandType}(), 
             const_infinite, 
             # Generate n numbers from 1:100 * n, randomly
             sample(1:100 * inst.num_scenarios, 
                     inst.num_scenarios, replace = false), 
             Vector{Float64}(undef, inst.num_K), 
-            Vector{Tuple{Tuple3I, Int64}}(), 
+            Set{CandType}(), 
             zeros(Int64, inst.num_K)) 
 end
 
+mutable struct WorkerCache
+    scenarios::Vector{ScenarioCache}
+    x_hat::Vector{Float64}
+    sol_intersection::Set{CandType}
+    sol_union::Set{CandType}
+    rho::Vector{Float64}
+    fixed_x_variables::Set{CandType}
+
+    WorkerCache(cache::Cache) = new(cache.scenarios, cache.x_hat, 
+                                    cache.sol_intersection, cache.sol_union, 
+                                    cache.rho, cache.fixed_x_variables) 
+end
+
 mutable struct ControllerMessage
-    cache::Cache
+    cache::WorkerCache
     it::Int64
     scen::Int64
     time_limit::Float64
@@ -274,37 +287,28 @@ mutable struct WorkerMessage
     g_cost_union::Float64
 end
 
-mutable struct WorkerCache
-    mip::MIPModel
-    scen::Int64
-end
-
 # ------------------------- Beam Search data structures ------------------------
 mutable struct Node # {T <: AbstractFloat}
-    obj::Float64 # Build + generation
-    f # m x 1 vec of line flows
+    cost::Float64 # Build + generation
     viol::Float64
-    # beta::Matrix{T}
-    # bus_inj::Vector{T}
-    inserted::Vector{Any}
-    candidates::Vector{Any}
-    ignore::Vector{Any} # Candidate lines whose removal lead to infeasibls sols
+    inserted::Set{CandType}
+    removed::Set{CandType}
+    ignore::Set{CandType} # Cand lines whose removal leads to infeasibls sols
 end
 
 mutable struct BSControllerMessage
     it::Int64
     node_idx::Int64
     node::Node
-    best_obj::Float64 # Build + generation
+    best_cost::Float64 # Build + generation
     k::Vector{Any}
     num_threads::Int64
 end
 
 mutable struct BSWorkerMessage
     node_idx::Int64
-    k::Vector{Any}
+    lines::Set{CandType}
     is_feas::Bool
-    obj::Float64 # Build + generation
-    f # m x 1 vec of line flows
+    cost::Float64 # Build + generation
     viol::Float64
 end

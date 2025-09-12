@@ -2,20 +2,17 @@ function run_serial_bs!(inst::Instance,
                         params::Parameters, 
                         scen::Int64, 
                         lp::LPModel, 
-                        cache::Cache, 
-                        inserted::Set{Any}, 
-                        removed::Set{Any}, 
-                        cost::Float64)
-    start_time = time()
-
+                        cache::WorkerCache, 
+                        inserted::Set{CandType}, 
+                        removed::Set{CandType}, 
+                        cost::Float64, 
+                        start_time::Float64)
     cost = 
         rm_and_repair!(inst, params, scen, lp, cache, inserted, removed, cost)
 
     fix_s_vars!(lp)
 
     remaining_time = params.beam_search.time_limit - (time() - start_time)
-
-    K = collect(removed)
 
     num_ins_start = length(inserted)
     num_ins = length(inserted)
@@ -28,38 +25,37 @@ function run_serial_bs!(inst::Instance,
 
         num_it_wo_impr = 0
 
-        root = Node(cost, get_values(lp.f), 0.0, collect(inserted), K, [])
+        root = Node(cost, 0.0, inserted, removed, Set{CandType}())
         Q = [root]
         while true # Evaluate levels in the tree
             if isg(time() - start_time, remaining_time)
-                @info "bs time limit reached $(time() - start_time)"
+                @info "bs time limit reached " * 
+                        "$(round(time() - start_time, digits = 2))"
                 break
             end
-            UB = []
+            UB = Vector{Node}()
 
             has_impr = false
             for (i, node) in enumerate(Q) # Evaluate nodes in the tree
-                lines = select_lines(inst, params, lp, node, node.inserted)
-                for k in lines
-                    ins_candidates = setdiff(node.inserted, k)
-                    update_lp!(inst, params, lp, ins_candidates)
+                batches = select_batches!(inst, params, lp, node)
+                for lines in batches
+                    in_cands = setdiff(node.inserted, lines)
+                    update_lp!(inst, params, lp, in_cands)
 
                     cost = const_infinite
                     is_feas = false
                     viol = 0.0
                     # The flow values for the parent node
-                    f = node.f
                     if JuMP.has_values(lp.jump_model)
                         cost, _ = comp_penalized_cost(inst, params, scen, lp, 
-                                                      cache, ins_candidates)
-                        f = get_values(lp.f)
+                                                      cache, in_cands)
                         is_feas = true
                         viol = comp_viol(lp)
                     end
 
-                    msg = BSWorkerMessage(i, k, is_feas, cost, f, viol)
+                    msg = BSWorkerMessage(i, lines, is_feas, cost, viol)
 
-                    add_node!(params, UB, best_cost, msg, node)
+                    add_node!(params, UB, msg, node)
 
                     if is_feas && isl(cost, best_cost)
                         # log(params, "Inserted update", true)
@@ -99,7 +95,7 @@ function run_serial_bs!(inst::Instance,
                 @info "no new nodes to investigate"
                 break
             end
-            Q = select!(params, UB, K)
+            Q = select!(params, UB)
             
             it += 1
         end

@@ -31,12 +31,13 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
     is_last_it = false
     has_impr = false
-    ph_obj = const_infinite
+    ph_cost = const_infinite
     for it in 1:params.progressive_hedging.max_it
         for scen in 1:inst.num_scenarios
             tl = comp_bs_time_limit(params, time() - start)
             
-            msg = ControllerMessage(cache, it, scen, tl, is_last_it, has_impr)
+            wcache = WorkerCache(cache)
+            msg = ControllerMessage(wcache, it, scen, tl, is_last_it, has_impr)
             JQM.add_job_to_queue!(controller, msg)
         end
         while !has_finished_all_jobs(controller)
@@ -55,9 +56,10 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             end
         end
         if has_impr
-            cost = comp_ph_obj(inst, cache)
-            if isl(cost, ph_obj)
-                ph_obj = cost
+            cost, sol = comp_ph_cost(inst, cache)
+            if isl(cost, ph_cost)
+                ph_cost = cost
+                cache.best_sol = sol
             end
         end
         flush(io)
@@ -118,18 +120,18 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     JQM.mpi_finalize()
 
     el = time() - start
-    # ph_obj = comp_ph_obj(inst, params, cache)
-    @info "obj:$ph_obj elapsed_time:$el"
+    # ph_cost = comp_ph_cost(inst, params, cache)
+    @info "obj:$ph_cost elapsed_time:$el"
     if params.debugging_level == 1
         mip, subproblems = build_deterministic(inst, params)
         @info "fix the start of the model"
         det_obj = fix_start!(inst, mip, subproblems, cache.sol_union)
-        @info "$ph_obj $det_obj"
-        @assert iseq(ph_obj, det_obj)
+        @info "$ph_cost $det_obj"
+        @assert iseq(ph_cost, det_obj)
     end
     close(io)
 
-    return el, ph_obj
+    return el, ph_cost
 end
 
 function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
@@ -199,7 +201,8 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                         build_start_sol(inst, params, msg.scen, lp, msg.cache)
 
                     inserted = run_serial_bs!(inst, params, msg.scen, lp, 
-                                                msg.cache, built, rm, cost)
+                                                msg.cache, built, rm, cost, 
+                                                    start_time)
                     
                     tl = max(msg.time_limit - (time() - start_time), 0.0)
 

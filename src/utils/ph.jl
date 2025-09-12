@@ -30,10 +30,12 @@ function update_cache_x_average!(inst::Instance,
                           for scen in 1:inst.num_scenarios) / 
                     sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
 
-    cache.sol_intersection = [k for (i, k) in enumerate(keys(inst.K)) 
-                              if isg(cache.x_average[i], 0.25)]
-    cache.sol_union = [k for (i, k) in enumerate(keys(inst.K)) 
-                       if !iseq(cache.x_average[i], 0.0)]
+    
+    cache.sol_intersection = 
+                        Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
+                                        if isg(cache.x_average[i], 0.25)])
+    cache.sol_union = Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
+                                        if !iseq(cache.x_average[i], 0.0)])
 
     LoggingExtras.withlevel(Info; verbosity = params.log_level) do
         n = inst.num_K - length(cache.sol_union)
@@ -95,7 +97,7 @@ function update_cache_best_convergence_delta!(inst::Instance,
     if isl(cache.t_deviation, cache.best_convergence_delta)
         cache.best_convergence_delta = cache.t_deviation
         cache.best_it = it
-        cache.best_sol = cache.sol_union
+        # cache.best_sol = cache.sol_union
 
         return true
     end
@@ -209,11 +211,11 @@ function update_cache_cost_proportional_rho!(inst::Instance,
 end
 
 """
-    comp_ph_obj(inst::Instance, params::Parameters, cache::Cache)
+    comp_ph_cost(inst::Instance, params::Parameters, cache::Cache)
 
 Compute multi-scenario problem objective value.
 """
-function comp_ph_obj(inst::Instance, params::Parameters, cache::Cache)
+function comp_ph_cost(inst::Instance, params::Parameters, cache::Cache)
     build = cache.sol_union
     obj = comp_build_cost(inst, build)
 
@@ -226,19 +228,26 @@ function comp_ph_obj(inst::Instance, params::Parameters, cache::Cache)
     return obj
 end
 
-function comp_ph_obj(inst::Instance, cache::Cache)
-    obj_inter = comp_build_cost(inst, cache.sol_intersection)
-    obj_union = comp_build_cost(inst, cache.sol_union)
+function comp_ph_cost(inst::Instance, cache::Cache)
+    cost_inter = comp_build_cost(inst, cache.sol_intersection)
+    cost_union = comp_build_cost(inst, cache.sol_union)
 
-    cost_inter = obj_inter + sum(inst.scenarios[scen].p * 
+    cost_inter = cost_inter + sum(inst.scenarios[scen].p * 
         cache.g_costs_sol_intersection[scen] for scen in 1:inst.num_scenarios)
-    cost_union = obj_union + sum(inst.scenarios[scen].p * 
+    cost_union = cost_union + sum(inst.scenarios[scen].p * 
         cache.g_costs_sol_union[scen] for scen in 1:inst.num_scenarios)
 
     @warn "costs inter:$(round(cost_inter, digits = 2)) " * 
           "union:$(round(cost_union, digits = 2))"
 
-    return isl(cost_inter, cost_union) ? cost_inter : cost_union
+    best_cost = cost_inter
+    best_sol = cache.sol_intersection
+    if isl(cost_union, cost_inter)
+        best_cost = cost_union
+        best_sol = cache.sol_union
+    end
+
+    return best_cost, best_sol
 end
 
 """
@@ -300,7 +309,7 @@ end
     build_start_sol(inst::Instance, 
                     params::Parameters, 
                     scen::Int64, 
-                    cache::Cache)
+                    cache::WorkerCache)
 
 Build the best starting solution considering both lower and upper bound 
 solutions.
@@ -312,10 +321,10 @@ function build_start_sol(inst::Instance,
                          params::Parameters, 
                          scen::Int64, 
                          lp::LPModel, 
-                         cache::Cache)
+                         cache::WorkerCache)
     cost = 0.0
-    inserted = Set{Any}()
-    removed = Set{Any}()
+    inserted = Set{CandType}()
+    removed = Set{CandType}()
     count_use_sol_lb = 0
     count_use_sol_ub = 0
     g_cost_lb = 0.0
@@ -334,12 +343,12 @@ function build_start_sol(inst::Instance,
         if isl(cost_lb, cost_ub)
             count_use_sol_lb = 1
             cost = cost_lb
-            inserted = Set{Any}(deepcopy(cache.sol_intersection))
+            inserted = copy(cache.sol_intersection)
             @info "selected:lb"
         else
             count_use_sol_ub = 1
             cost = cost_ub
-            inserted = Set{Any}(deepcopy(cache.sol_union))
+            inserted = copy(cache.sol_union)
             @info "selected:ub"
             if iseq(viol_ub, 0.0)
                 update_lp!(inst, params, lp, cache.sol_union)
@@ -366,8 +375,8 @@ function build_start_sol(inst::Instance,
 
             @info "repaired: $viol"
             if isg(viol, 0.0)
-                inserted = Set{Any}(keys(inst.K))
-                removed = Set{Any}()
+                inserted = Set{CandType}(keys(inst.K))
+                removed = Set{CandType}()
             end
 
             cost, _ = 
@@ -375,11 +384,11 @@ function build_start_sol(inst::Instance,
         else
             # We eliminate candidates that are not built in any of the scenarios 
             # considered
-            removed = Set{Any}(setdiff(cache.sol_union, inserted))
+            removed = setdiff(cache.sol_union, inserted)
         end
     else
-        inserted = Set{Any}(keys(inst.K))
-        removed = Set{Any}(setdiff(keys(inst.K), inserted))
+        inserted = Set{CandType}(keys(inst.K))
+        removed = Set{CandType}(setdiff(keys(inst.K), inserted))
         update_lp!(inst, params, lp, inserted)
         cost, _ = comp_penalized_cost(inst, params, scen, lp, cache, inserted)
     end
@@ -388,30 +397,50 @@ function build_start_sol(inst::Instance,
             count_use_sol_ub, g_cost_lb, g_cost_ub
 end
 
+"""
+    comp_sol_info!(inst::Instance, 
+                   params::Parameters, 
+                   scen::Int64, 
+                   lp::LPModel, 
+                   cache::WorkerCache, 
+                   sol::Set{CandType})
+
+Compute costs (total and generation costs) and violations (total and maximum) of 
+a solution.
+"""
 function comp_sol_info!(inst::Instance, 
                         params::Parameters, 
                         scen::Int64, 
                         lp::LPModel, 
-                        cache::Cache, 
-                        sol::Vector{Tuple{Tuple3I, Int64}})
+                        cache::WorkerCache, 
+                        sol::Set{CandType})
     update_lp!(inst, params, lp, sol)
     cost, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, sol)
 
     return (cost, g_cost, comp_viol_and_max(lp)...)
 end
 
+"""
+    comp_g_costs_lb_ub!(inst::Instance, 
+                        params::Parameters,
+                        scen::Int64, 
+                        lp::LPModel, 
+                        cache::WorkerCache)
+
+Compute generation costs of both lower and upper bound solutions.
+"""
 function comp_g_costs_lb_ub!(inst::Instance, 
                              params::Parameters,
                              scen::Int64, 
                              lp::LPModel, 
-                             cache::Cache)
+                             cache::WorkerCache)
     unfix_s_vars!(lp)
 
     update_lp!(inst, params, lp, cache.sol_intersection)
     _, g_cost_lb = comp_penalized_cost(inst, params, scen, lp, 
                                         cache, cache.sol_intersection) 
     
-    update_lp!(inst, params, lp, msg.cache.sol_union)
+    update_lp!(inst, params, lp, cache.sol_union)
     _, g_cost_ub = 
             comp_penalized_cost(inst, params, scen, lp, cache, cache.sol_union)
 

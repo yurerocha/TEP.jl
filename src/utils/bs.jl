@@ -40,26 +40,23 @@ function get_g_bus_values(inst::Instance,
 end
 
 """
-    select_lines(inst::Instance, 
-                 params::Parameters, 
-                 # ptdf::PTDFSystem, 
-                 lp, 
-                 node::Node,
-                 K)
+    select_batches!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel, 
+                    node::Node)
 
 Compute the residuals of the line flows.
 """
-function select_lines(inst::Instance, 
-                      params::Parameters, 
-                      # ptdf::PTDFSystem, 
-                      lp, 
-                      node::Node,
-                      K)
+function select_batches!(inst::Instance, 
+                         params::Parameters, 
+                         lp::LPModel, 
+                         node::Node)
     # Disregard nodes that lead to an infeasible solution
-    setdiff!(K, node.ignore)
+    setdiff!(node.inserted, node.ignore)
+    K = collect(node.inserted)
 
     # Disregard lines with the largest reactances
-    sort!(K, by = k -> inst.K[k].x, rev = true)
+    sort(K, by = k -> inst.K[k].x, rev = true)
     K = K[1:round(Int64, params.beam_search.restricted_list_ratio * end)]
 
     w = params.beam_search.num_children_per_parent
@@ -73,22 +70,22 @@ end
 
 
 """
-    disjoint_samples(params::Parameters, lines::Vector, b::Int)
+    disjoint_samples(params::Parameters, lines::Vector{CandType}, b::Int)
 
 Divide the lines into b disjoint samples.
 """
-function disjoint_samples(params::Parameters, lines::Vector, b::Int)
+function disjoint_samples(params::Parameters, lines::Vector{CandType}, b::Int)
     # Shuffle the indices, if required
     is_en = params.beam_search.is_shuffle_en
     indices = is_en ? randperm(length(lines)) : 1:length(lines)
     selected = lines[indices]
 
     # Divide the elements into batches
-    samples = Vector{Vector{Any}}()
+    samples = Vector{Set{CandType}}()
     n = trunc(Int64, length(selected) / b)
     for i in 1:b:length(selected)
         j = i + b - 1
-        push!(samples, selected[i:min(j, end)])
+        push!(samples, Set{CandType}(selected[i:min(j, end)]))
     end
 
     return samples
@@ -102,7 +99,7 @@ end
 Select the w samples whose elements sum the largest costs.
 """
 function select_best_child_nodes!(inst::Instance, 
-                                  samples::Vector{Vector{Any}}, 
+                                  samples::Vector{Set{CandType}}, 
                                   w::Int64)
     sort!(samples, by = x -> sum([inst.K[k].cost for k in x]), rev = true)
 
@@ -132,22 +129,16 @@ function comp_viol(inst::Instance,
 end
 
 
-function select!(params::Parameters, UB, K)
-    sort!(UB, by = x -> x.obj)
+function select!(params::Parameters, UB)
+    sort!(UB, by = x -> x.cost)
     # Select N the l best upper bound solutions 
     N = params.beam_search.num_children_per_level
-    l = floor(Int64, params.beam_search.num_children_per_level_mult * N)
+    l = floor(Int64, (1.0 + params.beam_search.num_children_per_level_mult) * N)
     l = min(l, length(UB))
     N = min(N, length(UB))
     if l > N
         UB = Random.shuffle(UB[1:l])
     end
-    # Select the best l UBs
-    # for node in UB
-    #     for k in node.latest_candidate
-    #         delete_value!(K, k)
-    #     end
-    # end
     # Return, randomly, N samples among the best l UBs
     return UB[1:N]
 end
@@ -162,31 +153,32 @@ function delete_value!(vec::Vector, val)
     return false
 end
 
-function add_node!(params::Parameters, UB, best_obj, msg, node)
-    # inserted = vcat(node.inserted, latest)
-    # candidates = setdiff(node.candidates, latest)
-    inserted = deepcopy(node.inserted)
-    candidates = deepcopy(node.candidates)
-    ignore = deepcopy(node.ignore)
-    # TODO: Se o obj for menor do que o obj anterior para o mesmo nó, remover.
-    # Só remover quando melhorar o best obj, pode fazer com que um mesmo batch
-    # seja reavaliado multiplas vezes
+function add_node!(params::Parameters, 
+                   UB::Vector{Node}, 
+                   msg::BSWorkerMessage, 
+                   node::Node)
+    inserted = Set{CandType}()
+    removed = Set{CandType}()
+    ignore = copy(node.ignore)
+    # TODO: Se o custo for menor do que o custo anterior para o mesmo nó, 
+    # remover. Só remover quando melhorar o best obj, pode fazer com que um 
+    # mesmo batch seja reavaliado múltiplas vezes
     # TODO: Se não melhorar e !params.beam_search.is_shuffle_en, colocar na
     # lista de ignore. Fazer testes apenas com essa alteração. Em seguida, fazer
     # testes trocando os ifs a seguir.
-    if isl(msg.obj, node.obj)
-    # if isl(msg.obj, node.obj)
-        inserted = setdiff(node.inserted, msg.k)
-        candidates = vcat(node.candidates, msg.k)
-    # elseif !msg.is_feas
+    if isl(msg.cost, node.cost)
+        inserted = setdiff(node.inserted, msg.lines)
+        removed = union(node.removed, msg.lines)
     else
+        inserted = copy(node.inserted)
+        removed = copy(node.removed)
         # msg.obj = node.obj # Parent's obj
         if !params.beam_search.is_shuffle_en
             # If infeasible, place the lines in the ignore list
-            ignore = vcat(node.ignore, msg.k)
+            ignore = union(node.ignore, msg.lines)
         end
     end
-    push!(UB, Node(msg.obj, msg.f, msg.viol, inserted, candidates, ignore))
+    push!(UB, Node(msg.cost, msg.viol, inserted, removed, ignore))
 
     return nothing
 end
@@ -206,8 +198,8 @@ end
                         params::Parameters, 
                         scen::Int64, 
                         lp::LPModel, 
-                        cache::Cache, 
-                        built)
+                        cache::WorkerCache, 
+                        inserted::Set{CandType})
 
 Compute the objective function considering the inserted candidate lines and the 
 cache of the progressive hedging algorithm, if in the progressive hedging.
@@ -216,15 +208,15 @@ function comp_penalized_cost(inst::Instance,
                              params::Parameters, 
                              scen::Int64, 
                              lp::LPModel, 
-                             cache::Cache, 
-                             built)
+                             cache::WorkerCache, 
+                             inserted::Set{CandType})
     cost = const_infinite * comp_viol(lp)
     g_cost = comp_g_cost(inst, params, scen, lp)
 
     if params.progressive_hedging.is_en
         sq2norm = 0.0
         acc_omega = 0.0
-        for k in built
+        for k in inserted
             cost += inst.K[k].cost
             # Progressive hedging data
             i = inst.key_to_index[k]
@@ -237,16 +229,16 @@ function comp_penalized_cost(inst::Instance,
         #        (params.progressive_hedging.rho / 2.0) * sq2norm
         cost += acc_omega + sq2norm
     else
-        cost = comp_build_cost(inst, built)
+        cost = comp_build_cost(inst, inserted)
     end
 
     return cost + g_cost, g_cost
 end
 
-function comp_build_cost(inst::Instance, built)
+function comp_build_cost(inst::Instance, inserted::Set{CandType})
     cost = 0.0
 
-    for k in built
+    for k in inserted
         cost += inst.K[k].cost
     end
 
