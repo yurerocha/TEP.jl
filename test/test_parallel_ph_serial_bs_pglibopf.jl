@@ -9,7 +9,7 @@ end_file = 1 # 61
 log_dir = "test/ph"
 log_file = "$log_dir/log.md"
 dir = "input_bin/"
-num_threads = 11
+num_threads = params.progressive_hedging.num_threads
 
 try
     TEP.rm_dir(log_dir)
@@ -36,6 +36,10 @@ for (i, file) in enumerate(files[start_file:end_file])
         TEP.log(params, "Skipping instance $file")
         continue
     end
+
+    # Dir for logging files for each instance
+    TEP.rm_dir("$log_dir/$(TEP.get_inst_name(file))")
+
     TEP.log(params, "Test $file num $(start_file + i - 1)", true)
 
     mpiexec(exe -> run(`$exe -n $num_threads $(Base.julia_cmd()) \

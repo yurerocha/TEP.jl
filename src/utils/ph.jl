@@ -30,7 +30,12 @@ function update_cache_x_average!(inst::Instance,
                           for scen in 1:inst.num_scenarios) / 
                     sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
 
-    
+    return nothing
+end
+
+function update_cache_sols!(inst::Instance, 
+                            params::Parameters, 
+                            cache::Cache)
     cache.sol_intersection = 
                         Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
                                         if isg(cache.x_average[i], 0.25)])
@@ -49,8 +54,6 @@ function update_cache_x_average!(inst::Instance,
             "inter:$(rounded_percent(cache.count_use_sol_intersection, t)) " * 
             "union:$(rounded_percent(cache.count_use_sol_union, t))"
     end
-
-    return nothing
 end
 
 function update_cache_sol_costs!(cache::Cache, msg::WorkerMessage)
@@ -217,15 +220,15 @@ Compute multi-scenario problem objective value.
 """
 function comp_ph_cost(inst::Instance, params::Parameters, cache::Cache)
     build = cache.sol_union
-    obj = comp_build_cost(inst, build)
+    cost = comp_build_cost(inst, build)
 
     for scen in 1:inst.num_scenarios
         lp = build_lp(inst, params, scen)
         update_lp!(inst, params, lp, build)
-        obj += inst.scenarios[scen].p * comp_g_cost(inst, params, scen, lp)
+        cost += inst.scenarios[scen].p * comp_g_cost(inst, params, scen, lp)
     end
 
-    return obj
+    return cost
 end
 
 function comp_ph_cost(inst::Instance, cache::Cache)
@@ -247,7 +250,7 @@ function comp_ph_cost(inst::Instance, cache::Cache)
         best_sol = cache.sol_union
     end
 
-    return best_cost, best_sol
+    return best_cost, copy(best_sol)
 end
 
 """
@@ -434,7 +437,7 @@ function comp_g_costs_lb_ub!(inst::Instance,
                              scen::Int64, 
                              lp::LPModel, 
                              cache::WorkerCache)
-    unfix_s_vars!(lp)
+    fix_s_vars!(lp)
 
     update_lp!(inst, params, lp, cache.sol_intersection)
     _, g_cost_lb = comp_penalized_cost(inst, params, scen, lp, 

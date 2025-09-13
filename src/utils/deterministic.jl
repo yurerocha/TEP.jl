@@ -176,7 +176,7 @@ end
     fix_start!(inst::Instance, 
                mip::MIPModel, 
                subproblems::Vector{MIPModel}, 
-               build)
+               inserted::Set{CandType})
 
 Fix the x variables according to a list and return the corresponding objective 
 value.
@@ -184,7 +184,7 @@ value.
 function fix_start!(inst::Instance, 
                     mip::MIPModel, 
                     subproblems::Vector{MIPModel}, 
-                    build)
+                    inserted::Set{CandType})
     if !in(:var_in_md, keys(subproblems[1].jump_model.ext))
         return nothing
     end
@@ -193,7 +193,7 @@ function fix_start!(inst::Instance,
     for k in keys(inst.K)
         JuMP.fix(var_in_md[subproblems[1].x[k]], 0.0; force = true)
     end
-    for k in build
+    for k in inserted
         JuMP.fix(var_in_md[subproblems[1].x[k]], 1.0; force = true)
     end
 
@@ -202,7 +202,7 @@ function fix_start!(inst::Instance,
                        1)
 
     optimize!(mip.jump_model)
-    obj = JuMP.result_count(mip.jump_model) > 0 ? 
+    cost = JuMP.result_count(mip.jump_model) > 0 ? 
                                 JuMP.objective_value(mip.jump_model) : nothing
 
     JuMP.set_attribute(mip.jump_model, 
@@ -213,5 +213,5 @@ function fix_start!(inst::Instance,
         JuMP.unfix(var_in_md[subproblems[1].x[k]])
     end
 
-    return obj
+    return cost
 end

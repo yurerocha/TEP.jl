@@ -3,8 +3,8 @@
 
 Compute if a is less than b.
 """
-function isl(a::Float64, b::Float64)
-    return a < b - const_eps
+function isl(a::Float64, b::Float64, eps::Float64 = const_eps)
+    return a < b - eps
 end
 
 """
@@ -12,8 +12,8 @@ end
 
 Compute if a is greater than b.
 """
-function isg(a::Float64, b::Float64)
-    return a > b + const_eps
+function isg(a::Float64, b::Float64, eps::Float64 = const_eps)
+    return a > b + eps
 end
 
 """
@@ -21,8 +21,8 @@ end
 
 Compute if a is equal to b.
 """
-function iseq(a::Float64, b::Float64)
-    return abs(a - b) < const_eps
+function iseq(a::Float64, b::Float64, eps::Float64 = const_eps)
+    return abs(a - b) < eps
 end
 
 """
@@ -30,9 +30,9 @@ end
 
 Return true if matrices A and B are equal.
 """
-function iseq(A::Matrix{T}, B::Matrix{S}) where {T <: AbstractFloat, 
-                                                 S <: AbstractFloat}
-    return norm(A - B) < const_eps
+function iseq(A::Matrix{T}, B::Matrix{S}, eps::Float64 = const_eps) where 
+                                        {T <: AbstractFloat, S <: AbstractFloat}
+    return norm(A - B) < eps
 end
 
 function get_num(s::Vector{String}, i::Int64)
@@ -327,11 +327,11 @@ function log_neigh_run(inst::Instance,
 end
 
 """
-    comp_build_cost(inst::Instance, inserted::Set{Any})
+    comp_build_cost(inst::Instance, inserted::Set{CandType})
 
 Compute the cost of the solution.
 """
-function comp_build_cost(inst::Instance, inserted::Set{Any})
+function comp_build_cost(inst::Instance, inserted::Set{CandType})
     cost = 0.0
     for k in inserted
         cost += inst.K[k].cost
@@ -582,7 +582,7 @@ end
 Get the name of the log file.
 """
 function get_log_filename(inst::Instance, params::Parameters, scen::Int64)
-    return "$(params.log_dir)/$(inst.name)#$scen.log"
+    return "$(params.log_dir)/$(inst.name)/#$scen.log"
 end
 
 # ------------------------- Rm and add lines functions -------------------------

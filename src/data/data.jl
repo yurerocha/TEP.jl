@@ -274,7 +274,6 @@ mutable struct ControllerMessage
     scen::Int64
     time_limit::Float64
     is_last_it::Bool
-    has_improved::Bool
 end
 
 mutable struct WorkerMessage

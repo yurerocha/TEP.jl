@@ -30,14 +30,13 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     Logging.global_logger(ConsoleLogger(io))
 
     is_last_it = false
-    has_impr = false
     ph_cost = const_infinite
     for it in 1:params.progressive_hedging.max_it
         for scen in 1:inst.num_scenarios
             tl = comp_bs_time_limit(params, time() - start)
             
             wcache = WorkerCache(cache)
-            msg = ControllerMessage(wcache, it, scen, tl, is_last_it, has_impr)
+            msg = ControllerMessage(wcache, it, scen, tl, is_last_it)
             JQM.add_job_to_queue!(controller, msg)
         end
         while !has_finished_all_jobs(controller)
@@ -49,17 +48,17 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
                 if !isnothing(job_answer)
                     msg = JQM.get_message(job_answer)
                     update_cache_incumbent!(cache, msg)
-                    if has_impr
-                        update_cache_sol_costs!(cache, msg)
-                    end
+                    update_cache_sol_costs!(cache, msg)
                 end
             end
         end
-        if has_impr
+        if it > 1
+            # Update both best cost and sol considering data from last it
             cost, sol = comp_ph_cost(inst, cache)
             if isl(cost, ph_cost)
                 ph_cost = cost
                 cache.best_sol = sol
+                @warn length(cache.best_sol)
             end
         end
         flush(io)
@@ -89,7 +88,9 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         # Termination criterion
         update_cache_x_average!(inst, params, cache)
 
-        has_impr = update_cache_best_convergence_delta!(inst, params, cache, it)
+        update_cache_sols!(inst, params, cache)
+
+        update_cache_best_convergence_delta!(inst, params, cache, it)
 
         if isl(cache.best_convergence_delta, 
                params.progressive_hedging.convergence_eps)
@@ -97,13 +98,8 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             is_last_it = true
             # break
         elseif isg(time() - start, params.progressive_hedging.time_limit)
-            @info "ph time limit reached"
+            @info "ph time limit reached $(round(time() - start, digits = 2))"
             is_last_it = true
-        end
-
-        # If the incumbent sol is improved, the cost is updated in the next it
-        if is_last_it && !has_impr
-            break
         end
 
         # update_cache_detect_cycles!(inst, cache)
@@ -125,9 +121,9 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     if params.debugging_level == 1
         mip, subproblems = build_deterministic(inst, params)
         @info "fix the start of the model"
-        det_obj = fix_start!(inst, mip, subproblems, cache.sol_union)
-        @info "$ph_cost $det_obj"
-        @assert iseq(ph_cost, det_obj)
+        det_cost = fix_start!(inst, mip, subproblems, cache.best_sol)
+        @info "$ph_cost $det_cost"
+        @assert iseq(ph_cost, det_cost, 1e-3)
     end
     close(io)
 
@@ -189,7 +185,9 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
 
                 # Cache is initially empty
                 params.progressive_hedging.is_en = msg.it > 1
-                if msg.is_last_it && msg.has_improved
+                if msg.is_last_it
+                    # In the last run, workers are executed only to compute 
+                    # generation costs 
                     g_cost_lb, g_cost_ub = comp_g_costs_lb_ub!(inst, params, 
                                                         msg.scen, lp, msg.cache)
                 else
@@ -210,11 +208,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                     if isg(tl, 0.0)
                         # flush(io[msg.scen])
 
-                        start = Start(inserted, 
-                                      Dict{Any, Float64}(), 
-                                      Dict{Any, Float64}())
-
-                        fix_start!(inst, params, mip, start, msg.scen)
+                        fix_start!(inst, params, msg.scen, mip, inserted)
 
                         set_attribute(mip.jump_model, 
                                     MOI.RawOptimizerAttribute("SolutionLimit"), 

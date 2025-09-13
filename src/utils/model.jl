@@ -11,6 +11,12 @@ function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
     # set_attribute(tep.jump_model, 
     #               MOI.RawOptimizerAttribute("DualReductions"), 
     #               0)
+    # set_attribute(tep.jump_model, 
+    #               MOI.RawOptimizerAttribute("Method"), 
+    #               6)
+    # set_attribute(tep.jump_model, 
+    #               MOI.RawOptimizerAttribute("GURO_PAR_PDHGGPU"), 
+    #               1)
     if params.model.optimizer == Gurobi.Optimizer
         if params.solver.log_level == 0 || tep isa LPModel
             JuMP.set_silent(tep.jump_model)
@@ -665,9 +671,9 @@ Fix start the model with the lines, generation, and flows of the start struct.
 """
 function fix_start!(inst::Instance, 
                     params::Parameters, 
+                    scen::Int64, 
                     mip::MIPModel, 
-                    start::Start, 
-                    scen::Int64 = 1)
+                    inserted::Set{CandType})
     JuMP.set_attribute(mip.jump_model, 
                        MOI.RawOptimizerAttribute("SolutionLimit"), 
                        1)
@@ -682,7 +688,7 @@ function fix_start!(inst::Instance,
     for k in keys(inst.K)
         JuMP.fix(mip.x[k], 0.0; force = true)
     end
-    for k in start.inserted
+    for k in inserted
         JuMP.fix(mip.x[k], 1.0; force = true)
     end
     # all_keys = vcat(collect(keys(inst.J)), collect(keys(inst.K)))
@@ -701,10 +707,10 @@ function fix_start!(inst::Instance,
 
     model = mip.jump_model
     status = JuMP.termination_status(model)
-    obj = const_infinite
+    cost = const_infinite
     is_feas = true
     if status == MOI.OPTIMAL
-        obj = JuMP.objective_value(model)
+        cost = JuMP.objective_value(model)
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
         @info "Infeasible model"
         if params.log_level >= 1
@@ -740,7 +746,7 @@ function fix_start!(inst::Instance,
     #     # unfix(md.theta[i])
     # end
 
-    return obj
+    return cost
 end
 
 function solve!(inst::Instance, params::Parameters, mip::MIPModel)

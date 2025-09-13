@@ -20,12 +20,11 @@ inst = open(filepath, "r") do io
 end
 
 # try
-    
     results = TEP.init_results()
-    
-    el, obj = TEP.run_parallel_ph_serial_bs!(inst, params)
+
+    el, cost = TEP.run_parallel_ph_serial_bs!(inst, params)
     results["ph_time"] = el
-    results["ub"] = obj
+    results["ub"] = cost
     
     TEP.log_instance(log_file, file, inst, results)
 # catch e

@@ -235,16 +235,6 @@ function comp_penalized_cost(inst::Instance,
     return cost + g_cost, g_cost
 end
 
-function comp_build_cost(inst::Instance, inserted::Set{CandType})
-    cost = 0.0
-
-    for k in inserted
-        cost += inst.K[k].cost
-    end
-
-    return cost
-end
-
 function comp_g_cost(inst::Instance, 
                      params::Parameters, 
                      scen::Int64, 
