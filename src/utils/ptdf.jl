@@ -277,8 +277,8 @@ function set_obj!(inst::Instance,
     # Generation costs
     obj = AffExpr()
     for k in keys(g)
-        c = reverse(inst.scenarios[scen].G[k].costs)
-        add_to_expression!(obj, comp_g_cost(params, g[k], c))
+        add_to_expression!(obj, 
+                    comp_g_cost(params, g[k], inst.scenarios[scen].G[k].costs))
     end
     add_to_expression!(obj, sum([params.model.penalty * x for x in s]))
     # Violation costs

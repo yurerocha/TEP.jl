@@ -19,9 +19,11 @@ function run_serial_bs!(inst::Instance,
     best_cost = cost
     start_cost = cost
 
+    cache_in, cache_rm = init_cache_in_rm(inst)
+
     it = 1
     for bs_it in 1:params.beam_search.num_max_it
-        update_lp!(inst, params, lp, inserted)
+        update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
 
         num_it_wo_impr = 0
 
@@ -40,7 +42,7 @@ function run_serial_bs!(inst::Instance,
                 batches = select_batches!(inst, params, lp, node)
                 for lines in batches
                     in_cands = setdiff(node.inserted, lines)
-                    update_lp!(inst, params, lp, in_cands)
+                    update_lp!(inst, params, lp, cache_in, cache_rm, in_cands)
 
                     cost = const_infinite
                     is_feas = false
@@ -50,7 +52,9 @@ function run_serial_bs!(inst::Instance,
                         cost, _ = comp_penalized_cost(inst, params, scen, lp, 
                                                       cache, in_cands)
                         is_feas = true
-                        viol = comp_viol(lp)
+                        # The model is either feasible or infeasible as s
+                        # variables are fixed at zero
+                        # viol = comp_viol(lp)
                     end
 
                     msg = BSWorkerMessage(i, lines, is_feas, cost, viol)
@@ -109,7 +113,7 @@ function run_serial_bs!(inst::Instance,
         end
     end
     union!(inserted, Set(cache.fixed_x_variables))
-    update_lp!(inst, params, lp, inserted)
+    update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
 
     return inserted
 end

@@ -43,14 +43,15 @@ function rm_and_repair!(inst::Instance,
     delta = 0.5
 
     lines = sort_by_residual_flows(inst, lp, get_values(lp.f), inserted)
-    rm_cands, in_cands = divide_rm_in(lines, rm_ratio)
+    rm_cands, in_cands = divide_into_rm_in(lines, rm_ratio)
     it = 1
+    it_wo_impr = 0
     num_cands_prev_it = 0
     num_cands = length(rm_cands)
-    while it <= params.remove_repair.max_it && num_cands != num_cands_prev_it && 
-            !isempty(rm_cands) && 
-            isl(time() - start_time, params.remove_repair.time_limit)
-
+    while it <= params.remove_repair.max_it && 
+            it_wo_impr < params.remove_repair.num_max_it_wo_impr && 
+                num_cands != num_cands_prev_it && !isempty(rm_cands) && 
+                    isl(time() - start_time, params.remove_repair.time_limit)
         rm_lines!(inst, params, lp, rm_cands, true)
         
         viol = const_infinite
@@ -68,7 +69,9 @@ function rm_and_repair!(inst::Instance,
                     comp_penalized_cost(inst, params, scen, lp, cache, in_cands)
         end
 
+        has_impr = false
         if iseq(viol, 0.0) && isl(cost, best_cost)
+            has_impr = true
             st = Status("rr", length(rm_cands), inst.num_K, 
                         cost, init_cost, start_time)
             @infov 2 log(st)
@@ -86,10 +89,15 @@ function rm_and_repair!(inst::Instance,
         end
         delta /= 2.0
 
-        rm_cands, in_cands = divide_rm_in(lines, rm_ratio)
+        rm_cands, in_cands = divide_into_rm_in(lines, rm_ratio)
         num_cands_prev_it = num_cands
         num_cands = length(rm_cands)
         it += 1
+        if has_impr
+            it_wo_impr = 0
+        else
+            it_wo_impr += 1
+        end
     end
     setdiff!(inserted, best_rm)
     union!(removed, best_rm)

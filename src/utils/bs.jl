@@ -56,8 +56,9 @@ function select_batches!(inst::Instance,
     K = collect(node.inserted)
 
     # Disregard lines with the largest reactances
-    sort(K, by = k -> inst.K[k].x, rev = true)
-    K = K[1:round(Int64, params.beam_search.restricted_list_ratio * end)]
+    l = round(Int64, params.beam_search.restricted_list_ratio * length(K))
+    partialsort!(K, 1:l, by = k -> inst.K[k].x, rev = true)
+    K = K[1:l]
 
     w = params.beam_search.num_children_per_parent
     b = params.beam_search.candidates_per_batch_mult * length(K)
@@ -201,8 +202,8 @@ end
                         cache::WorkerCache, 
                         inserted::Set{CandType})
 
-Compute the objective function considering the inserted candidate lines and the 
-cache of the progressive hedging algorithm, if in the progressive hedging.
+Compute the penalized cost considering inserted candidate lines and the cache 
+memory of the progressive hedging algorithm, if in the progressive hedging.
 """
 function comp_penalized_cost(inst::Instance, 
                              params::Parameters, 
@@ -235,6 +236,15 @@ function comp_penalized_cost(inst::Instance,
     return cost + g_cost, g_cost
 end
 
+"""
+    comp_build_cost(inst::Instance, inserted::Set{CandType})
+
+Compute the cost of the solution.
+"""
+function comp_build_cost(inst::Instance, inserted::Set{CandType})
+    return sum(inst.K[k].cost for k in inserted)
+end
+
 function comp_g_cost(inst::Instance, 
                      params::Parameters, 
                      scen::Int64, 
@@ -242,12 +252,18 @@ function comp_g_cost(inst::Instance,
     if JuMP.result_count(tep.jump_model) == 0
         return const_infinite
     end
-    cost = 0.0
 
+    g = JuMP.value.(values(tep.g))
+    cost = 0.0
+    i = 1
     for k in keys(tep.g)
-        c = reverse(inst.scenarios[scen].G[k].costs)
-        cost += comp_g_obj(params, value(tep.g[k]), c)
+        cost += comp_g_obj(params, g[i], inst.scenarios[scen].G[k].costs)
+        i += 1
     end
 
     return cost
+    # return sum(comp_g_obj(params, g[i], 
+    #     inst.scenarios[scen].G[k].costs) for (i, k) in enumerate(keys(tep.g)))
+    # return sum(comp_g_obj(params, JuMP.value(tep.g[k]), 
+    #                     inst.scenarios[scen].G[k].costs) for k in keys(tep.g))
 end

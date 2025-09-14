@@ -194,12 +194,12 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                     # The cache data structure is incomplete in the first it
                     params.beam_search.time_limit = msg.time_limit
 
-                    cost, built, rm, count_use_sol_lb, 
+                    cost, inserted, rm, count_use_sol_lb, 
                     count_use_sol_ub, g_cost_lb, g_cost_ub = 
                         build_start_sol(inst, params, msg.scen, lp, msg.cache)
 
                     inserted = run_serial_bs!(inst, params, msg.scen, lp, 
-                                                msg.cache, built, rm, cost, 
+                                                msg.cache, inserted, rm, cost, 
                                                     start_time)
                     
                     tl = max(msg.time_limit - (time() - start_time), 0.0)

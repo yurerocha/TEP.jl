@@ -286,7 +286,7 @@ end
 
 function log(st::Status)
     d = (st.rm_ratio, st.impr_ratio, st.time)
-    d = round.(d, digits = 2)
+    d = round.(d, digits = 5)
     return "$(st.name) rm:$(d[1]) impr:$(d[2]) t:$(d[3])"
 end
 
@@ -324,19 +324,6 @@ function log_neigh_run(inst::Instance,
                                             inst.num_K, digits = 2)) * 
                 " runtime:" * string(round(runtime, digits = 2)))
     return nothing
-end
-
-"""
-    comp_build_cost(inst::Instance, inserted::Set{CandType})
-
-Compute the cost of the solution.
-"""
-function comp_build_cost(inst::Instance, inserted::Set{CandType})
-    cost = 0.0
-    for k in inserted
-        cost += inst.K[k].cost
-    end
-    return cost
 end
 
 """
@@ -385,11 +372,11 @@ function sort_by_residual_flows(inst::Instance,
 end
 
 """
-    divide_rm_in(lines::Vector{CandType}, rm_ratio::Float64)
+    divide_into_rm_in(lines::Vector{CandType}, rm_ratio::Float64)
 
 Divide lines into removal and insertion sets based on the remove ratio.
 """
-function divide_rm_in(lines::Vector{CandType}, rm_ratio::Float64)
+function divide_into_rm_in(lines::Vector{CandType}, rm_ratio::Float64)
     n = floor(Int64, rm_ratio * length(lines))
     return Set{CandType}(lines[1:n]), Set{CandType}(lines[n + 1:end])
 end
@@ -602,15 +589,17 @@ function rm_lines!(inst::Instance,
                    is_opt::Bool = false)
     for k in lines
         # if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
-        if !is_fixed(lp.s[k])
-            fix(lp.s[k], 0.0; force = true)
-        end
+        # if !is_fixed(lp.s[k])
+        #     fix(lp.s[k], 0.0; force = true)
+        # end
 
         # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
         #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
         #                            [0, 0])
+        # if !iseq(normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]]), 0)
         set_normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]], 0)
-        fix(lp.f[k], 0.0; force = true)
+        # end
+        # fix(lp.f[k], 0.0; force = true)
     end
 
     if is_opt
@@ -635,21 +624,27 @@ function add_lines!(inst::Instance,
                     is_opt::Bool = true)
     for k in lines
         # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
-        if is_fixed(lp.s[k])
-            unfix(lp.s[k])
-            set_lower_bound(lp.s[k], 0.0)
-        end
+        # Attention! Beam search requires the s variables to be always fixed at 
+        # zero
+        # if is_fixed(lp.s[k])
+        #     unfix(lp.s[k])
+        #     set_lower_bound(lp.s[k], 0.0)
+        # end
 
-        if is_fixed(lp.f[k])
-            unfix(lp.f[k])
-        end
+        # if is_fixed(lp.f[k])
+        #     unfix(lp.f[k])
+        # end
 
         # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
         #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
         #                            [-inst.K[k].gamma, inst.K[k].gamma])
+        # if iseq(normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]]), 
+        #         -inst.K[k].gamma)
         set_normalized_coefficient(lp.f_cons[k], 
                                    lp.Dtheta[k[1][2:3]], 
                                    -inst.K[k].gamma)
+        # end
+        # unfix(lp.f[k])
     end
 
     if is_opt
@@ -659,6 +654,14 @@ function add_lines!(inst::Instance,
     return nothing
 end
 
+"""
+    update_lp!(inst::Instance, 
+               params::Parameters, 
+               lp::LPModel, 
+               inserted::Set{CandType})
+    
+Remove all candidate lines, next insert candidates from a set and reoptimize.
+"""
 function update_lp!(inst::Instance, 
                     params::Parameters, 
                     lp::LPModel, 
@@ -669,6 +672,49 @@ function update_lp!(inst::Instance,
 
     # return termination_status(lp.jump_model) == MOI.OPTIMAL
     return nothing
+end
+
+"""
+    update_lp!(inst::Instance, 
+               params::Parameters, 
+               lp::LPModel, 
+               cache_rm::Set{CandType}, 
+               insert::Set{CandType})
+    
+Remove all candidate lines, next insert candidates from a set and reoptimize.
+
+For multiple iterations, it can be more efficient by storing previously removed 
+candidates lines in an initially empty set.
+"""
+function update_lp!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel, 
+                    cache_in::Set{CandType}, 
+                    cache_rm::Set{CandType}, 
+                    insert::Set{CandType})
+    # Remove inserted lines out of the new insert set
+    rm = setdiff(cache_in, insert)
+    rm_lines!(inst, params, lp, rm, false)
+
+    # Insert lines not previously inserted
+    ins = setdiff(insert, cache_in)
+    add_lines!(inst, params, lp, ins, true)
+
+    # Update the set of removed lines
+    empty!(cache_in)
+    union!(cache_in, insert)
+    union!(cache_rm, rm)
+    setdiff!(cache_rm, ins)
+
+    if params.debugging_level == 1
+        @assert length(cache_in) + length(cache_rm) == inst.num_K
+    end
+
+    return nothing
+end
+
+function init_cache_in_rm(inst::Instance)
+    return Set{CandType}(keys(inst.K)), Set{CandType}()
 end
 
 function rounded_percent(sol::Set{CandType}, 

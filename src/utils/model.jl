@@ -386,8 +386,8 @@ function set_obj!(inst::Instance,
     end
     # Generation costs
     for k in keys(tep.g)
-        c = reverse(inst.scenarios[scen].G[k].costs)
-        add_to_expression!(tep.obj, comp_g_obj(params, tep.g[k], c))
+        add_to_expression!(tep.obj, 
+                comp_g_obj(params, tep.g[k], inst.scenarios[scen].G[k].costs))
     end
 
     @objective(tep.jump_model, Min, tep.obj)
@@ -412,8 +412,7 @@ function set_obj!(inst::Instance,
     # TODO: remover os custos de operação quadráticos do cálculo da penalidade
     pen = 0.0
     for k in keys(lp.g)
-        c = reverse(inst.scenarios[scen].G[k].costs)
-        # TODO: Add generation costs?
+        c = inst.scenarios[scen].G[k].costs
         add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
         # pen = max(pen, comp_largest_g(params, c, 
         #                               inst.scenarios[scen].G[k].upper_bound))

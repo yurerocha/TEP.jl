@@ -106,7 +106,8 @@ function build_gens(params::Parameters, gen::Dict{String, Any})
         end
         lb = params.instance.load_gen_mult * dt["pmin"]
         ub = params.instance.load_gen_mult * dt["pmax"]
-        G[dt["index"]] = GeneratorInfo(dt["gen_bus"], lb, ub, dt["cost"])
+        G[dt["index"]] = 
+                    GeneratorInfo(dt["gen_bus"], lb, ub, reverse(dt["cost"]))
     end
 
     return G
