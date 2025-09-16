@@ -32,8 +32,8 @@ end
 Base.@kwdef mutable struct RemoveAndRepairParameters
     is_en::Bool = true
     time_limit::Float64 = 3600.0
-    max_it::Int64 = 20 # TODO 1.Calibrar 10, 15, 20
-    num_max_it_wo_impr::Int64 = 3 # TODO 1.Calibrar 3, 5
+    max_it::Int64 = 15 # TODO 1.Calibrar 10, 15, 20
+    num_max_it_wo_impr::Int64 = 1 # TODO 1.Calibrar 1, 3, 5
 end
 
 Base.@kwdef mutable struct BeamSearchParameters
@@ -41,11 +41,11 @@ Base.@kwdef mutable struct BeamSearchParameters
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
     num_children_per_level_mult::Float64 = 0.5 # gamma
-    candidates_per_batch_mult::Float64 = 1e-3 # TODO 2.Calibrar 1e-4, 1e-3, 1e-2
+    candidates_per_batch_mult::Float64 = 1e-3 # TODO 1.Calibrar 1e-4, 1e-3, 1e-2
     num_max_it::Int64 = 2
-    num_max_it_wo_impr::Int64 = 10 # TODO 1.Calibrar 5, 10, 15
+    num_max_it_wo_impr::Int64 = 10 # TODO 2.Calibrar 5, 10, 15
     is_shuffle_en::Bool = true
-    restricted_list_ratio::Float64 = 0.75 # TODO 2.Calibrar 0.5, 0.75, 1.0
+    restricted_list_ratio::Float64 = 1.0 # TODO 1.Calibrar 0.5, 0.75, 1.0
 end
 
 Base.@kwdef mutable struct ProgressiveHedgingParameters

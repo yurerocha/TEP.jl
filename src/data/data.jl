@@ -248,8 +248,8 @@ mutable struct Cache
             Set{CandType}(), 
             const_infinite, 
             # Generate n numbers from 1:100 * n, randomly
-            sample(1:100 * inst.num_scenarios, 
-                    inst.num_scenarios, replace = false), 
+            Distributions.sample(1:100 * inst.num_scenarios, 
+                                    inst.num_scenarios, replace = false), 
             Vector{Float64}(undef, inst.num_K), 
             Set{CandType}(), 
             zeros(Int64, inst.num_K)) 

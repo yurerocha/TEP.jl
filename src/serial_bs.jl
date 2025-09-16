@@ -20,10 +20,16 @@ function run_serial_bs!(inst::Instance,
     start_cost = cost
 
     cache_in, cache_rm = init_cache_in_rm(inst)
+    # Set the inserted lines according to cache_in and cache_rm
+    update_lp!(inst, params, lp, cache_in, false)
+
+    params.beam_search.candidates_per_batch_mult = 
+                        comp_candidates_per_batch_mult(inst, params, inserted)
+    @warn params.beam_search.candidates_per_batch_mult
 
     it = 1
     for bs_it in 1:params.beam_search.num_max_it
-        update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
+        # update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
 
         num_it_wo_impr = 0
 
@@ -38,10 +44,13 @@ function run_serial_bs!(inst::Instance,
             UB = Vector{Node}()
 
             has_impr = false
-            for (i, node) in enumerate(Q) # Evaluate nodes in the tree
+            for (i, node) in enumerate(Q) # Evaluate nodes in the same level
                 batches = select_batches!(inst, params, lp, node)
                 for lines in batches
                     in_cands = setdiff(node.inserted, lines)
+                    set_attribute(lp.jump_model, 
+                                  MOI.RawOptimizerAttribute("TimeLimit"), 
+                                  min(time() - start_time, remaining_time))
                     update_lp!(inst, params, lp, cache_in, cache_rm, in_cands)
 
                     cost = const_infinite
@@ -112,8 +121,9 @@ function run_serial_bs!(inst::Instance,
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
+    el = time() - start_time
     union!(inserted, Set(cache.fixed_x_variables))
     update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
 
-    return inserted
+    return inserted, el
 end

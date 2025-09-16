@@ -175,8 +175,8 @@ end
 function log_header(outputfile::String)
     outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
              "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
-             "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNR (s) " * 
-             "| RNR rm | RNR impr | BS (s) | Start UB | PH (s) | \n"
+             "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNRBS (s) " * 
+             "| RNRBS rm | RNRBS impr | BS (s) | Start UB | PH (s) | \n"
     outstr *= "|:---"^21 * "| \n"
     log(outputfile, outstr)
 
@@ -658,17 +658,19 @@ end
     update_lp!(inst::Instance, 
                params::Parameters, 
                lp::LPModel, 
-               inserted::Set{CandType})
+               inserted::Set{CandType}, 
+               is_opt::Bool = true)
     
 Remove all candidate lines, next insert candidates from a set and reoptimize.
 """
 function update_lp!(inst::Instance, 
                     params::Parameters, 
                     lp::LPModel, 
-                    inserted::Set{CandType})
+                    inserted::Set{CandType}, 
+                    is_opt::Bool = true)
     # log(params, "It update $it", true)
     rm_lines!(inst, params, lp, Set{CandType}(keys(inst.K)), false)
-    add_lines!(inst, params, lp, inserted, true)
+    add_lines!(inst, params, lp, inserted, is_opt)
 
     # return termination_status(lp.jump_model) == MOI.OPTIMAL
     return nothing

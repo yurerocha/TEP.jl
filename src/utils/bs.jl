@@ -55,9 +55,9 @@ function select_batches!(inst::Instance,
     setdiff!(node.inserted, node.ignore)
     K = collect(node.inserted)
 
-    # Disregard lines with the largest reactances
+    # Disregard lines with the largest costs
     l = round(Int64, params.beam_search.restricted_list_ratio * length(K))
-    partialsort!(K, 1:l, by = k -> inst.K[k].x, rev = true)
+    partialsort!(K, 1:l, by = k -> inst.K[k].cost, rev = true)
     K = K[1:l]
 
     w = params.beam_search.num_children_per_parent
@@ -266,4 +266,15 @@ function comp_g_cost(inst::Instance,
     #     inst.scenarios[scen].G[k].costs) for (i, k) in enumerate(keys(tep.g)))
     # return sum(comp_g_obj(params, JuMP.value(tep.g[k]), 
     #                     inst.scenarios[scen].G[k].costs) for k in keys(tep.g))
+end
+
+function comp_candidates_per_batch_mult(inst::Instance, 
+                                        params::Parameters, 
+                                        inserted::Set{CandType})
+    n1 = length(inserted) / inst.num_K
+    n2 = inst.num_I / 1000.0
+    @warn params.beam_search.candidates_per_batch_mult * n2, n1, 
+            params.beam_search.candidates_per_batch_mult * n2 * n1
+    # return params.beam_search.candidates_per_batch_mult * log10(1.0 / n)
+    return params.beam_search.candidates_per_batch_mult * n2 * n1
 end
