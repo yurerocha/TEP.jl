@@ -242,7 +242,7 @@ end
 Compute the cost of the solution.
 """
 function comp_build_cost(inst::Instance, inserted::Set{CandType})
-    return sum(inst.K[k].cost for k in inserted)
+    return sum(inst.K[k].cost for k in inserted; init = 0.0)
 end
 
 function comp_g_cost(inst::Instance, 
@@ -273,8 +273,5 @@ function comp_candidates_per_batch_mult(inst::Instance,
                                         inserted::Set{CandType})
     n1 = length(inserted) / inst.num_K
     n2 = inst.num_I / 1000.0
-    @warn params.beam_search.candidates_per_batch_mult * n2, n1, 
-            params.beam_search.candidates_per_batch_mult * n2 * n1
-    # return params.beam_search.candidates_per_batch_mult * log10(1.0 / n)
     return params.beam_search.candidates_per_batch_mult * n2 * n1
 end

@@ -1,5 +1,5 @@
 """
-    rm_and_repair!(inst::Instance, 
+    binary_search!(inst::Instance, 
                    params::Parameters, 
                    scen::Int64, 
                    lp::LPModel, 
@@ -10,7 +10,7 @@
 
 Remove and repair procedure for building feasible initial solutions.
 """
-function rm_and_repair!(inst::Instance, 
+function binary_search!(inst::Instance, 
                         params::Parameters, 
                         scen::Int64, 
                         lp::LPModel, 
@@ -46,12 +46,10 @@ function rm_and_repair!(inst::Instance,
     rm_cands, in_cands = divide_into_rm_in(lines, rm_ratio)
     it = 1
     it_wo_impr = 0
-    num_cands_prev_it = 0
+    num_prev_cands = 0
     num_cands = length(rm_cands)
-    while it <= params.remove_repair.max_it && 
-            it_wo_impr < params.remove_repair.num_max_it_wo_impr && 
-                num_cands != num_cands_prev_it && !isempty(rm_cands) && 
-                    isl(time() - start_time, params.remove_repair.time_limit)
+    while !has_reached_stop(params, it, it_wo_impr, 
+                            num_prev_cands, rm_cands, start_time)
         rm_lines!(inst, params, lp, rm_cands, true)
         
         viol = const_infinite
@@ -72,7 +70,7 @@ function rm_and_repair!(inst::Instance,
         has_impr = false
         if iseq(viol, 0.0) && isl(cost, best_cost)
             has_impr = true
-            st = Status("rr", length(rm_cands), inst.num_K, 
+            st = Status("bin", length(rm_cands), inst.num_K, 
                         cost, init_cost, start_time)
             @infov 2 log(st)
 
@@ -90,7 +88,7 @@ function rm_and_repair!(inst::Instance,
         delta /= 2.0
 
         rm_cands, in_cands = divide_into_rm_in(lines, rm_ratio)
-        num_cands_prev_it = num_cands
+        num_prev_cands = num_cands
         num_cands = length(rm_cands)
         it += 1
         if has_impr
@@ -107,7 +105,7 @@ function rm_and_repair!(inst::Instance,
         @assert length(setdiff(all_cands, union(inserted, removed))) == 0
     end
     
-    st = Status("rr", length(removed), inst.num_K, 
+    st = Status("bin", length(removed), inst.num_K, 
                 best_cost, init_cost, start_time)
     @info log(st)
 

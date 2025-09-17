@@ -127,7 +127,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     end
     close(io)
 
-    return el, ph_cost
+    return el, cache.best_sol, ph_cost
 end
 
 function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)

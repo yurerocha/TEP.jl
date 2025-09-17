@@ -76,7 +76,7 @@ function run(logname::String = "log.md")
             # TODO: Add parameter to indicate if an initial solution will be 
             # used
             log(params, "Build heuristic solution", true)
-            (start, status) = rm_and_repair(inst, params, is_heur_en)
+            (start, status) = binary_search(inst, params, is_heur_en)
 
             log(params, "Fix the start of the model", true)
             start_time = 
