@@ -724,7 +724,7 @@ function fix_start!(inst::Instance,
         is_feas = false
     end
     if params.debugging_level == 1
-        @assert is_feas
+        @assert is_feas "scen#$scen infeasible sol"
     end
 
     for k in keys(inst.K)

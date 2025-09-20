@@ -31,6 +31,10 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
     is_last_it = false
     ph_cost = const_infinite
+    lb_best_cost = const_infinite
+    ub_best_cost = const_infinite
+    found_feas_sol = false
+    elapsed_time = time() - start
     for it in 1:params.progressive_hedging.max_it
         for scen in 1:inst.num_scenarios
             tl = comp_bs_time_limit(params, time() - start)
@@ -48,26 +52,43 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
                 if !isnothing(job_answer)
                     msg = JQM.get_message(job_answer)
                     update_cache_incumbent!(cache, msg)
-                    update_cache_sol_costs!(cache, msg)
+                    update_cache_sol_costs_and_viols!(cache, msg)
                 end
             end
         end
         if it > 1
-            # Update both best cost and sol considering data from last it
-            cost, sol = comp_ph_cost(inst, cache)
-            if isl(cost, ph_cost)
-                ph_cost = cost
-                cache.best_sol = sol
-                @warn length(cache.best_sol)
+            # For each node in the current iteration, the best solution between 
+            # both lb and ub solutions was used as a warm start. To select the 
+            # best, the costs and violations associated with each solution have 
+            # to be computed in the workers. To avoid also computing them in the 
+            # previous iteration in order to compute global costs in the 
+            # controller, we compute them once and use information from two 
+            # iterations to update costs. 
+            # Data from previous it: lb and ub solutions. They get updated again 
+            # with the new solutions found at this iteration later by function 
+            # update_cache_sols.
+            # Data from the current it: costs and violations associated with 
+            # both lb and ub solutions from the previous it.
+            # At the last iteration, is_last_it is assigned true ant the main ph
+            # loop is partially executed once more to compute the regarding the
+            # last lb and ub solutions.
+            ph_cost, lb_best_cost, ub_best_cost, is_feas = 
+                            update_cache_best_sol!(inst, cache, ph_cost, 
+                                                    lb_best_cost, ub_best_cost)
+
+            if is_feas
+                found_feas_sol = true
+                update_cache_sol_ub_feas!(inst, cache)
             end
         end
         flush(io)
 
-        @info "-------------------- it $it --------------------"
-
         if is_last_it
+            elapsed_time = time() - start
             break
         end
+
+        @info "-------------------- it $it --------------------"
 
         # Update SEP-rho parameters
         update_cache_sep_rho_x_min_max!(inst, cache)
@@ -115,19 +136,19 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     JQM.send_termination_message()
     JQM.mpi_finalize()
 
-    el = time() - start
     # ph_cost = comp_ph_cost(inst, params, cache)
-    @info "obj:$ph_cost elapsed_time:$el"
+    @info "obj:$ph_cost elapsed_time:$elapsed_time"
     if params.debugging_level == 1
         mip, subproblems = build_deterministic(inst, params)
         @info "fix the start of the model"
         det_cost = fix_start!(inst, mip, subproblems, cache.best_sol)
         @info "$ph_cost $det_cost"
-        @assert iseq(ph_cost, det_cost, 1e-3)
+        @assert iseq(ph_cost, det_cost, 1e-3) "ph diff costs $ph_cost $det_cost"
     end
     close(io)
 
-    return el, cache.best_sol, ph_cost
+    return elapsed_time, ph_cost, lb_best_cost, 
+            ub_best_cost, found_feas_sol, cache.best_sol 
 end
 
 function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
@@ -163,10 +184,8 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             end
 
             state_values = State(Vector{Float64}(), Vector{Float64}())
-            count_use_sol_lb = 0
-            count_use_sol_ub = 0
-            g_cost_lb = 0.0
-            g_cost_ub = 0.0
+            sol_info_lb = nothing
+            sol_info_ub = nothing
             start_time = time()
 
             io = open(get_log_filename(inst, params, msg.scen), "a")
@@ -188,14 +207,13 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                 if msg.is_last_it
                     # In the last run, workers are executed only to compute 
                     # generation costs 
-                    g_cost_lb, g_cost_ub = comp_g_costs_lb_ub!(inst, params, 
+                    sol_info_lb, sol_info_ub = comp_g_costs_lb_ub!(inst, params, 
                                                         msg.scen, lp, msg.cache)
                 else
                     # The cache data structure is incomplete in the first it
                     params.beam_search.time_limit = msg.time_limit
 
-                    cost, inserted, rm, count_use_sol_lb, 
-                    count_use_sol_ub, g_cost_lb, g_cost_ub = 
+                    cost, inserted, rm, sol_info_lb, sol_info_ub = 
                         build_start_sol(inst, params, msg.scen, lp, msg.cache)
 
                     inserted = run_serial_bs!(inst, params, msg.scen, lp, 
@@ -235,8 +253,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             close(io)
 
             ret_msg = WorkerMessage(state_values, msg.it, msg.scen, 
-                                    count_use_sol_lb, count_use_sol_ub, 
-                                    g_cost_lb, g_cost_ub)
+                                    sol_info_lb, sol_info_ub)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end

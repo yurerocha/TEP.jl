@@ -173,21 +173,24 @@ function log(file::String, msg::String)
 end
 
 function log_header(outputfile::String)
-    outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
-             "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
-             "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNRBS (s) " * 
-             "| Rm | RNRBS impr | BS (s) | Start UB | PH (s) | \n"
-    outstr *= "|:---"^21 * "| \n"
-    log(outputfile, outstr)
+    # outstr = "| Instance | L | N | L/N | Build/Obj (%) | Build (s) " *
+    #          "| Incumbent (s) | Solve (s) | Status | Rt best bound " *
+    #          "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNRBS (s) " * 
+    #          "| Rm | RNRBS impr | BS (s) | Start UB | PH (s) | \n"
+    # outstr *= "|:---"^21 * "| \n"
+    s = "| Instance | L | N | L/N | Best | LB | UB | Rm  | Time | Feas | \n"
+    s *= "|:---"^10 * "| \n"
+    log(outputfile, s)
 
     return nothing
 end
 
 function get_keys_results()
-    return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
-            "status", "root_best_bound", "root_time", "lb", "ub", "gap", 
-            "fix_start_time", "rnr_time", "rm_rat", "rnr_impr_rat", 
-            "bs_time", "start_ub", "ph_time"]
+    # return ["build_obj_rat", "build_time", "incumbent_time", "solve_time", 
+    #         "status", "root_best_bound", "root_time", "lb", "ub", "gap", 
+    #         "fix_start_time", "rnr_time", "rm_rat", "rnr_impr_rat", 
+    #         "bs_time", "start_ub", "ph_time"]
+    return ["best", "lb", "ub", "rm_rat", "time", "is_feas"]
 end
 
 """
@@ -472,16 +475,6 @@ Compute the sparsity of a matrix.
 """
 function comp_sparsity(A)
     return 1.0 - count(!iszero, A) / length(A)
-end
-
-"""
-    comp_s_viol(lp::LPModel)
-
-Compute flow violation in LP model.
-"""
-function comp_s_viol(lp::LPModel)
-    s = get_values(lp.s)
-    return sum(values(s))
 end
 
 """

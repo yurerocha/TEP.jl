@@ -198,17 +198,27 @@ mutable struct ScenarioCache
     state::State{Float64}
 end
 
+mutable struct Solution
+    insert::Set{CandType}
+    feas_insert::Set{CandType}
+    count_use::Int64
+    g_costs::Vector{Float64}
+    viols::Vector{Float64}
+
+    Solution(inst::Instance) = new(Set{CandType}(keys(inst.K)), 
+                                   Set{CandType}(keys(inst.K)), 
+                                   0, 
+                                   Vector{Float64}(undef, inst.num_scenarios), 
+                                   Vector{Float64}(undef, inst.num_scenarios))
+end
+
 mutable struct Cache
     it::Int64
     scenarios::Vector{ScenarioCache}
     x_hat::Vector{Float64}
     x_average::Vector{Float64}
-    sol_intersection::Set{CandType}
-    sol_union::Set{CandType}
-    count_use_sol_intersection::Int64
-    count_use_sol_union::Int64
-    g_costs_sol_intersection::Vector{Float64}
-    g_costs_sol_union::Vector{Float64}
+    sol_lb::Solution
+    sol_ub::Solution
     # SEP rho heuristic by https://doi.org/10.1007/s10287-010-0125-4
     rho::Vector{Float64}
     sep_rho_x_min::Vector{Float64}
@@ -235,11 +245,12 @@ mutable struct Cache
             # Vector{Vector{Float64}}(undef, num_vars), 
             Vector{Float64}(), 
             Vector{Float64}(), 
-            Set{CandType}(), 
-            Set{CandType}(),
-            0, 0, 
-            Vector{Float64}(undef, inst.num_scenarios), 
-            Vector{Float64}(undef, inst.num_scenarios), 
+            # Set{CandType}(), 
+            # Set{CandType}(),
+            # 0, 0, 
+            # Vector{Float64}(undef, inst.num_scenarios), 
+            # Vector{Float64}(undef, inst.num_scenarios), 
+            Solution(inst), Solution(inst), 
             [params.progressive_hedging.rho / 2.0 for _ in eachindex(inst.K)], 
             Vector{Float64}(), 
             Vector{Float64}(), 
@@ -258,13 +269,18 @@ end
 mutable struct WorkerCache
     scenarios::Vector{ScenarioCache}
     x_hat::Vector{Float64}
-    sol_intersection::Set{CandType}
-    sol_union::Set{CandType}
+    sol_lb::Set{CandType}
+    sol_lb_feas::Set{CandType}
+    sol_ub::Set{CandType}
+    sol_ub_feas::Set{CandType}
     rho::Vector{Float64}
     fixed_x_variables::Set{CandType}
 
     WorkerCache(cache::Cache) = new(cache.scenarios, cache.x_hat, 
-                                    cache.sol_intersection, cache.sol_union, 
+                                    cache.sol_lb.insert, 
+                                    cache.sol_lb.feas_insert, 
+                                    cache.sol_ub.insert, 
+                                    cache.sol_ub.feas_insert, 
                                     cache.rho, cache.fixed_x_variables) 
 end
 
@@ -276,14 +292,20 @@ mutable struct ControllerMessage
     is_last_it::Bool
 end
 
+mutable struct SolutionInfo
+    count_use::Int64
+    g_cost::Float64
+    viol::Float64
+
+    SolutionInfo(count_use, g_cost, viol) = new(count_use, g_cost, viol)
+end
+
 mutable struct WorkerMessage
     state_values::State{Float64}
     it::Int64
     scen::Int64
-    count_use_sol_intersection::Int64
-    count_use_sol_union::Int64
-    g_cost_intersection::Float64
-    g_cost_union::Float64
+    sol_info_lb::SolutionInfo
+    sol_info_ub::SolutionInfo
 end
 
 # ------------------------- Beam Search data structures ------------------------

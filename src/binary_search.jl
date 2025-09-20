@@ -28,8 +28,10 @@ function binary_search!(inst::Instance,
 
     if params.debugging_level == 1
         @assert isdisjoint(inserted, removed)
+    elseif params.debugging_level == 2
         if termination_status(lp.jump_model) == MOI.OPTIMAL
-            @assert iseq(comp_s_viol(lp), 0.0)
+            v = comp_viol(lp)
+            @assert iseq(v, 0.0) "scen#$scen viol $v at start of bin != 0.0"
         end
     end
 

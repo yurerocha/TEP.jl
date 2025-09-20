@@ -17,7 +17,7 @@ function select_ren!(pglib_mpc::Dict{String, Any},
             sum(g["pmax"] for (_, g) in pglib_mpc["gen"] if g["gen_status"] > 0)
     ren_cap = 0.0
     ren_index = Set{String}()
-    while isl(ren_cap / gen_cap, cats_ren_ratio) && length(candidates) > 0
+    while !isempty(candidates) && isl(ren_cap / gen_cap, cats_ren_ratio)
         k = select_cand(pglib_mpc, cats_ren_avg, candidates)
         pop!(candidates, k)
         # Machine in service
@@ -71,7 +71,17 @@ function scale_ren_gen!(params::Parameters,
                      pglib_mpc["baseMVA"], 
                      pglib_mpc["gen"][k]["pmax"], 
                      cats_ren_cap)
-        G[k]["pmax"] = round(g, digits = params.stochastic_inst_round_digits)
+
+        if isg(G[k]["pmin"], g) || iseq(G[k]["pmin"], g)
+            delete!(G, k)
+        else
+        #     if params.debugging_level == 1
+        #         @assert isl(G[k]["pmin"], g) "wrong bounds $(G[k]["pmin"]) $g"
+        #     end
+
+            G[k]["pmax"] = 
+                        round(g, digits = params.stochastic_inst_round_digits)
+        end
     end
     return nothing
 end

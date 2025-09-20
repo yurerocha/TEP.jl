@@ -29,14 +29,15 @@ function run_serial_bs!(inst::Instance,
     params.beam_search.candidates_per_batch_mult = 
                         comp_candidates_per_batch_mult(inst, params, inserted)
 
-    it = 1
     has_reached_tl = false
     for bs_it in 1:params.beam_search.num_max_it
 
+        it = 1
         num_it_wo_impr = 0
         root = Node(cost, 0.0, inserted, removed, Set{CandType}())
         Q = [root]
         while true # Evaluate levels in the tree
+            # println("bs level $it") 
 
             UB = Vector{Node}()
             has_impr = false

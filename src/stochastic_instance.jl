@@ -50,10 +50,10 @@ function build_stochastic_instance(params::Parameters,
 
     pglib_mpc = PowerModels.parse_file(filepath)
     candidates = Set(keys(pglib_mpc["gen"]))
-    solar_gen_indices = select_ren!(pglib_mpc, solar_cap / gen_cap, 
-                                    solar_avg, candidates)
-    wind_gen_indices = select_ren!(pglib_mpc, wind_cap / gen_cap, 
-                                   wind_avg, candidates)
+    solar_gen_indices = select_ren!(pglib_mpc, solar_avg, 
+                                    solar_cap / gen_cap, candidates)
+    wind_gen_indices = select_ren!(pglib_mpc, wind_avg, 
+                                   wind_cap / gen_cap, candidates)
 
     # ------------------------ Build multiple scenarios ------------------------
     inst = build_instance(params, filepath)
@@ -94,13 +94,18 @@ function build_stochastic_instance(params::Parameters,
         end
 
         push!(inst.scenarios, Scenario(prob, D, G))
+
         # mip = build_mip(inst, params, i)
+        # _, is_feas = 
+        #         fix_start!(inst, params, i, mip, Set{CandType}(keys(inst.K)))
+        # if !is_feas
+        #     @warn "scen#$i infeasible build all"
+        # end
         # solve!(inst, params, mip)
         # if JuMP.has_values(mip.jump_model)
         #     x = get_values(mip.x)
         #     @warn "$(round(Int64, sum([v for (_, v) in x])))/$(length(x))"
         # end
-        # readline()
     end
     
     return inst

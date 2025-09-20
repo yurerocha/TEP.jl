@@ -36,29 +36,37 @@ end
 function update_cache_sols!(inst::Instance, 
                             params::Parameters, 
                             cache::Cache)
-    cache.sol_intersection = 
-                        Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
-                                        if isg(cache.x_average[i], 0.25)])
-    cache.sol_union = Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
-                                        if !iseq(cache.x_average[i], 0.0)])
+    th = params.progressive_hedging.lb_threshold
+    cache.sol_lb.insert = Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
+                                            if isg(cache.x_average[i], th)])
+    cache.sol_ub.insert = Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
+                                            if !iseq(cache.x_average[i], 0.0)])
 
     LoggingExtras.withlevel(Info; verbosity = params.log_level) do
-        n = inst.num_K - length(cache.sol_union)
-        t = cache.count_use_sol_intersection + cache.count_use_sol_union
+        n = inst.num_K - length(cache.sol_ub.insert)
+        t = cache.sol_lb.count_use + cache.sol_ub.count_use
         # Avoid NaN in init_sol(%) inter and union
         t = max(1, t)
         @infov 1 "candidates(%) discard:$(rounded_percent(n, inst.num_K)) " * 
-            "inter:$(rounded_percent(cache.sol_intersection, inst.num_K)) " * 
-            "union:$(rounded_percent(cache.sol_union, inst.num_K))"
+            "lb:$(rounded_percent(cache.sol_lb.insert, inst.num_K)) " * 
+            "ub:$(rounded_percent(cache.sol_ub.insert, inst.num_K))"
         @infov 2 "init_sol(%) " * 
-            "inter:$(rounded_percent(cache.count_use_sol_intersection, t)) " * 
-            "union:$(rounded_percent(cache.count_use_sol_union, t))"
+            "lb:$(rounded_percent(cache.sol_lb.count_use, t)) " * 
+            "ub:$(rounded_percent(cache.sol_ub.count_use, t))"
     end
 end
 
-function update_cache_sol_costs!(cache::Cache, msg::WorkerMessage)
-    cache.g_costs_sol_intersection[msg.scen] = msg.g_cost_intersection
-    cache.g_costs_sol_union[msg.scen] = msg.g_cost_union
+function update_cache_sol_costs_and_viols!(cache::Cache, msg::WorkerMessage)
+    cache.sol_lb.g_costs[msg.scen] = msg.sol_info_lb.g_cost
+    cache.sol_ub.g_costs[msg.scen] = msg.sol_info_ub.g_cost
+
+    if msg.it == 1 && 
+        (isg(msg.sol_info_lb.viol, 0.0) || isg(msg.sol_info_ub.viol, 0.0))
+        @warn "something went wrong $(msg.sol_info_lb.viol) $(msg.sol_info_ub.viol)"
+    end
+
+    cache.sol_lb.viols[msg.scen] = msg.sol_info_lb.viol
+    cache.sol_ub.viols[msg.scen] = msg.sol_info_ub.viol
 
     return nothing
 end
@@ -83,7 +91,7 @@ function update_cache_best_convergence_delta!(inst::Instance,
         # cache.deltas[scen] = maximum(abs, x - cache.x_average)
         cache.deltas[scen] = 
             sum(abs(x[i] - x_avg[i]) / x_avg[i] for i in 1:inst.num_K 
-                                                if isg(x_avg[i], 0.0)) 
+                                            if isg(x_avg[i], 0.0); init = 0.0) 
     end
     # cache.t_deviation = maximum(cache.deltas)
     # Compute the average per-scenario deviation from the average solution
@@ -100,7 +108,7 @@ function update_cache_best_convergence_delta!(inst::Instance,
     if isl(cache.t_deviation, cache.best_convergence_delta)
         cache.best_convergence_delta = cache.t_deviation
         cache.best_it = it
-        # cache.best_sol = cache.sol_union
+        # cache.best_sol = cache.sol_ub.insert
 
         return true
     end
@@ -219,7 +227,7 @@ end
 Compute multi-scenario problem objective value.
 """
 function comp_ph_cost(inst::Instance, params::Parameters, cache::Cache)
-    build = cache.sol_union
+    build = cache.sol_ub.insert
     cost = comp_build_cost(inst, build)
 
     for scen in 1:inst.num_scenarios
@@ -231,26 +239,75 @@ function comp_ph_cost(inst::Instance, params::Parameters, cache::Cache)
     return cost
 end
 
-function comp_ph_cost(inst::Instance, cache::Cache)
-    cost_inter = comp_build_cost(inst, cache.sol_intersection)
-    cost_union = comp_build_cost(inst, cache.sol_union)
+function comp_ph_penalized_cost(inst::Instance, cache::Cache)
+    lb_cost = comp_build_cost(inst, cache.sol_lb.insert)
+    ub_cost = comp_build_cost(inst, cache.sol_ub.insert)
 
-    cost_inter = cost_inter + sum(inst.scenarios[scen].p * 
-        cache.g_costs_sol_intersection[scen] for scen in 1:inst.num_scenarios)
-    cost_union = cost_union + sum(inst.scenarios[scen].p * 
-        cache.g_costs_sol_union[scen] for scen in 1:inst.num_scenarios)
+    lb_viol = 0.0
+    ub_viol = 0.0
 
-    @warn "costs inter:$(round(cost_inter, digits = 2)) " * 
-          "union:$(round(cost_union, digits = 2))"
+    @info "build costs lb:$(round(lb_cost, digits = 2)) " * 
+          "ub:$(round(ub_cost, digits = 2))"
+    for scen in eachindex(inst.scenarios)
+        lb_cost += inst.scenarios[scen].p * cache.sol_lb.g_costs[scen]
+        ub_cost += inst.scenarios[scen].p * cache.sol_ub.g_costs[scen]
 
-    best_cost = cost_inter
-    best_sol = cache.sol_intersection
-    if isl(cost_union, cost_inter)
-        best_cost = cost_union
-        best_sol = cache.sol_union
+        lb_viol += cache.sol_lb.viols[scen]
+        ub_viol += cache.sol_ub.viols[scen]
+    end
+    @info "costs lb:$(round(lb_cost, digits = 2)) " * 
+          "ub:$(round(ub_cost, digits = 2))"
+
+    lb_cost += const_infinite * lb_viol
+    ub_cost += const_infinite * ub_viol
+
+    @info "viols lb:$(round(lb_viol, digits = 2)) " * 
+          "ub:$(round(ub_viol, digits = 2))"
+
+    @warn "pcosts lb:$(round(lb_cost, digits = 2)) " * 
+          "ub:$(round(ub_cost, digits = 2))"
+
+    best_cost = lb_cost
+    is_feas = iseq(lb_viol, 0.0)
+    best_sol = cache.sol_lb.insert
+    if isl(ub_cost, lb_cost)
+        best_cost = ub_cost
+        is_feas = iseq(ub_viol, 0.0)
+        best_sol = cache.sol_ub.insert
     end
 
-    return best_cost, copy(best_sol)
+    return best_cost, lb_cost, ub_cost, is_feas, best_sol
+end
+
+"""
+    update_cache_best_sol!(inst::Instance, cache::Cache, 
+                           best_cost::Float64, lb_best_cost::Float64, 
+                           ub_best_cost::Float64)
+
+Update the cache best solution and return the new costs.
+"""
+function update_cache_best_sol!(inst::Instance, cache::Cache, 
+                                best_cost::Float64, lb_best_cost::Float64, 
+                                ub_best_cost::Float64)
+    cost, lb_cost, ub_cost, is_feas, sol = comp_ph_penalized_cost(inst, cache)
+
+    if isl(cost, best_cost)
+        best_cost = cost
+        cache.best_sol = copy(sol)
+    end
+    if isl(lb_cost, lb_best_cost)
+        lb_best_cost = lb_cost
+    end
+    if isl(ub_cost, ub_best_cost)
+        ub_best_cost = ub_cost
+    end
+
+    return best_cost, lb_best_cost, ub_best_cost, is_feas
+end
+
+function update_cache_sol_ub_feas!(inst::Instance, cache::Cache)
+    cache.sol_ub.feas_insert = cache.sol_ub.insert
+    return nothing
 end
 
 """
@@ -275,7 +332,7 @@ end
 
 function comp_hash_values(inst::Instance, cache::Cache)
     hash = Vector{Float64}(undef, inst.num_K)
-    for k in cache.sol_union
+    for k in cache.sol_ub.insert
         i = inst.key_to_index[k]
         hash[i] = sum(cache.hash_weights[scen] * cache.scenarios[scen].omega[i] 
                         for scen in eachindex(inst.scenarios))
@@ -286,7 +343,7 @@ end
 
 function update_cache_detect_cycles!(inst::Instance, cache::Cache)
     hash_values = comp_hash_values(inst, cache)
-    for k in cache.sol_union
+    for k in cache.sol_ub.insert
         i = inst.key_to_index[k]
         # TODO: Modificar tipo de cache.fixed_x_variables para Set
         if iseq(cache.hash_values[i], hash_values[i]) 
@@ -328,76 +385,131 @@ function build_start_sol(inst::Instance,
     cost = 0.0
     inserted = Set{CandType}()
     removed = Set{CandType}()
-    count_use_sol_lb = 0
-    count_use_sol_ub = 0
-    g_cost_lb = 0.0
-    g_cost_ub = 0.0
+    lb_count_use = 0.0
+    lb_g_cost = 0.0
+    lb_viol = 0.0
+    ub_count_use = 0.0
+    ub_g_cost = 0.0
+    ub_viol = 0.0
 
     unfix_s_vars!(lp)
 
     if params.progressive_hedging.is_en
-        cost_ub, g_cost_ub, viol_ub, max_viol_ub = 
-                comp_sol_info!(inst, params, scen, lp, cache, cache.sol_union)
-        cost_lb, g_cost_lb, viol_lb, max_viol_lb = comp_sol_info!(inst, params, 
-                                        scen, lp, cache, cache.sol_intersection)
-        viol = min(viol_lb, viol_ub)
+        ub_cost, ub_g_cost, ub_viol, ub_max_viol = 
+                    comp_sol_info!(inst, params, scen, lp, cache, cache.sol_ub)
+        lb_cost, lb_g_cost, lb_viol, lb_max_viol = 
+                    comp_sol_info!(inst, params, scen, lp, cache, cache.sol_lb)
+            
+        cost, inserted, viol, lb_sol_use, ub_sol_use = 
+                    select_best_warm_start!(inst, params, cache, lp, 
+                                            lb_cost, lb_viol, ub_cost, ub_viol)
 
-        # Compare penalized costs
-        if isl(cost_lb, cost_ub)
-            count_use_sol_lb = 1
-            cost = cost_lb
-            inserted = copy(cache.sol_intersection)
-            @info "selected:lb"
-        else
-            count_use_sol_ub = 1
-            cost = cost_ub
-            inserted = copy(cache.sol_union)
-            @info "selected:ub"
-            if iseq(viol_ub, 0.0)
-                update_lp!(inst, params, lp, cache.sol_union)
-            end
-        end
-
-        # Try to repair the best solution, if infeasible
-        if isg(viol, 0.0)
-            @info "lb viol:$viol_lb max:$max_viol_lb"
-            @info "ub viol:$viol_ub max:$max_viol_ub"
-
-            # TODO: Implement a method that inserts new candidate lines
-            # Algorithm 
-            # Ideia geral: reforçar linhas candidatas mais próximas às linhas 
-            # com violações na esperança de que, com o efeito de propagação, o 
-            # excesso do fluxo de potência seja aliviado.
-            # 1. Para cada linha com violação, calcular a distância de todas as 
-            # linhas candidatas ainda não adicionadas (Dijkstra's shortest path 
-            # algorithm).
-            # 2. Adicionar as linhas candidatas dentro de um dado raio de acordo
-            # com algum critério, e.g., adicionar todas, reforçar linhas 
-            # sobrecarregadas.
-            viol = repair!(inst, params, scen, lp, removed, viol)
-
-            @info "repaired: $viol"
-            if isg(viol, 0.0)
-                inserted = Set{CandType}(keys(inst.K))
-                removed = Set{CandType}()
-            end
-
-            cost, _ = 
-                    comp_penalized_cost(inst, params, scen, lp, cache, inserted)
+        if !iseq(viol, 0.0)
+            # Try to repair the best solution, if infeasible
+            cost, inserted = 
+                        repair!(inst, params, cache, scen, lp, inserted, viol)
         else
             # We eliminate candidates that are not built in any of the scenarios 
             # considered
-            removed = setdiff(cache.sol_union, inserted)
+            removed = setdiff(cache.sol_ub, inserted)
         end
     else
-        inserted = Set{CandType}(keys(inst.K))
-        removed = Set{CandType}(setdiff(keys(inst.K), inserted))
-        update_lp!(inst, params, lp, inserted)
-        cost, _ = comp_penalized_cost(inst, params, scen, lp, cache, inserted)
+        inserted = cache.sol_ub
+        removed = Set{CandType}()
+
+        cost, g_cost, viol, _ = 
+                        comp_sol_info!(inst, params, scen, lp, cache, inserted)
+
+        if params.debugging_level == 1
+            @assert iseq(viol, 0.0) "scen#$scen viol $viol at first ph it != 0"
+        end
+
+        lb_g_cost = g_cost
+        lb_viol = viol
+        ub_g_cost = g_cost 
+        ub_viol = viol
     end
 
-    return cost, inserted, removed, count_use_sol_lb, 
-            count_use_sol_ub, g_cost_lb, g_cost_ub
+    return cost, inserted, removed, 
+           SolutionInfo(lb_count_use, lb_g_cost, lb_viol), 
+           SolutionInfo(ub_count_use, ub_g_cost, ub_viol)
+end
+
+"""
+select_best_warm_start!(inst::Instance, params::Parameters, 
+                        cache::WorkerCache, lp::LPModel, 
+                        lb_cost::Float64, lb_viol::Float64, 
+                        ub_cost::Float64, ub_viol::Float64)
+
+Select the best between the lower bound and upper bound solutions based on their
+associated costs and violations.
+"""
+function select_best_warm_start!(inst::Instance, params::Parameters, 
+                                 cache::WorkerCache, lp::LPModel, 
+                                 lb_cost::Float64, lb_viol::Float64, 
+                                 ub_cost::Float64, ub_viol::Float64)
+    cost = const_infinite
+    inserted =  Set{CandType}()
+    viol = 0.0
+    lb_count_use = 0
+    ub_count_use = 0
+
+    # 0 0 smallest cost sol
+    # 0 1 ub sol
+    # 1 0 lb sol
+    # 1 1 smallest cost sol
+    lb_is_feas = iseq(lb_viol, 0.0)
+    ub_is_feas = iseq(ub_viol, 0.0)
+    if (lb_is_feas && !ub_is_feas) || 
+            (lb_is_feas == ub_is_feas && isl(lb_cost, ub_cost))
+        cost = lb_cost
+        inserted = copy(cache.sol_lb)
+        viol = lb_viol
+        lb_count_use = 1
+        @info "selected:lb"
+    else
+        cost = ub_cost
+        inserted = copy(cache.sol_ub)
+        viol = ub_viol
+        ub_count_use = 1
+        @info "selected:ub"
+        if iseq(ub_viol, 0.0)
+            update_lp!(inst, params, lp, cache.sol_ub)
+        end
+    end
+
+    return cost, inserted, viol, lb_count_use, ub_count_use
+end
+
+"""
+    repair!(inst::Instance, params::Parameters, cache::WorkerCache, 
+            scen::Int64, lp::LPModel, inserted::Set{CandType}, viol::Float64)
+
+Repair a solution with the repair operator, if possible, and return the new 
+cost; otherwise, get the last feasible upper bound solution.
+"""
+function repair!(inst::Instance, params::Parameters, cache::WorkerCache, 
+            scen::Int64, lp::LPModel, inserted::Set{CandType}, viol::Float64)
+    rm = setdiff(Set{CandType}(keys(inst.K)), inserted)
+    rm_cands = copy(rm)
+    viol = repair!(inst, params, scen, lp, rm_cands, viol)
+
+    @info "repaired: $viol"
+    if iseq(viol, 0.0)
+        union!(inserted, setdiff(rm, rm_cands))
+        # removed = rm_cands
+        # TODO Update repair so that the inserted set can be computed 
+        # faster
+    else
+        # If still infeasible, get the last feasible ub solution
+        inserted = copy(cache.sol_ub_feas)
+        update_lp!(inst, params, lp, inserted)
+    end
+
+    cost, _ = 
+            comp_penalized_cost(inst, params, scen, lp, cache, inserted)
+    
+    return cost, inserted
 end
 
 """
@@ -437,17 +549,19 @@ function comp_g_costs_lb_ub!(inst::Instance,
                              scen::Int64, 
                              lp::LPModel, 
                              cache::WorkerCache)
-    fix_s_vars!(lp)
+    unfix_s_vars!(lp)
 
-    update_lp!(inst, params, lp, cache.sol_intersection)
-    _, g_cost_lb = comp_penalized_cost(inst, params, scen, lp, 
-                                        cache, cache.sol_intersection) 
+    update_lp!(inst, params, lp, cache.sol_lb)
+    _, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, cache.sol_lb)
+    viol = comp_viol(lp)
+    sol_info_lb = SolutionInfo(0, g_cost, viol)
     
-    update_lp!(inst, params, lp, cache.sol_union)
-    _, g_cost_ub = 
-            comp_penalized_cost(inst, params, scen, lp, cache, cache.sol_union)
+    update_lp!(inst, params, lp, cache.sol_ub)
+    _, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, cache.sol_ub)
+    viol = comp_viol(lp)
+    sol_info_ub = SolutionInfo(0, g_cost, viol)
 
-    return g_cost_lb, g_cost_ub
+    return sol_info_lb, sol_info_ub
 end
 
 # --------------------------------- Parallel PH --------------------------------
@@ -458,8 +572,8 @@ end
 
 function update_cache_incumbent!(cache::Cache, msg::WorkerMessage)
     cache.scenarios[msg.scen].state = msg.state_values
-    cache.count_use_sol_intersection += msg.count_use_sol_intersection
-    cache.count_use_sol_union += msg.count_use_sol_union
+    cache.sol_lb.count_use += msg.sol_info_lb.count_use
+    cache.sol_ub.count_use += msg.sol_info_ub.count_use
 
     return nothing
 end

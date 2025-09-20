@@ -32,8 +32,8 @@ end
 Base.@kwdef mutable struct BinarySearchParameters
     is_en::Bool = true
     time_limit::Float64 = 300.0
-    max_it::Int64 = 10 # TODO 1.Calibrar 5, 10, 15
-    num_max_it_wo_impr::Int64 = 1 # TODO 1.Calibrar 1, 3, 5
+    max_it::Int64 = 5 # 1.Calibrar 5, 10, 15: 10
+    num_max_it_wo_impr::Int64 = 1 # 1.Calibrar 1, 3, 5: 1
 end
 
 Base.@kwdef mutable struct BeamSearchParameters
@@ -41,11 +41,11 @@ Base.@kwdef mutable struct BeamSearchParameters
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
     num_children_per_level_mult::Float64 = 0.5 # gamma
-    candidates_per_batch_mult::Float64 = 5e-3 # TODO 1.Calibrar 1e-4, 1e-3, 1e-2
+    candidates_per_batch_mult::Float64 = 1e-2 # 1.Cal. 0.25e-3, 5e-3, 1e-2: 5e-3
     num_max_it::Int64 = 2
-    num_max_it_wo_impr::Int64 = 10 # TODO 2.Calibrar 5, 10, 15
+    num_max_it_wo_impr::Int64 = 10 # 2.Calibrar 5, 10, 15
     is_shuffle_en::Bool = true
-    restricted_list_ratio::Float64 = 1.0 # TODO 1.Calibrar 0.5, 0.75, 1.0
+    restricted_list_ratio::Float64 = 1.0 # 1.Calibrar 0.5, 0.75, 1.0: 1.0
 end
 
 Base.@kwdef mutable struct ProgressiveHedgingParameters
@@ -53,9 +53,10 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
     time_limit::Float64 = 3600.0
     num_threads::Int64 = 49
     rho::Float64 = 1.0
-    is_sep_rho_en::Bool = false # TODO testar true e false
+    is_sep_rho_en::Bool = true # Calibrar true, false
     max_it::Int64 = 1000000
     convergence_eps::Float64 = 1e-3
+    lb_threshold::Float64 = 0.25
 end
 
 Base.@kwdef mutable struct SolverParameters
