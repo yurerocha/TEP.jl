@@ -118,17 +118,17 @@ end
 
 """
     update_model_obj!(params::Parameters, 
-                      cache::Cache, 
+                      cache::T, 
                       scen::Int64, 
-                      tep::TEPModel)
+                      tep::TEPModel) where T <: Union{Cache, WorkerCache}
 
 Update the model objective function according to the progressive hedging 
 algorithm.
 """
 function update_model_obj!(params::Parameters, 
-                           cache::Cache, 
+                           cache::T, 
                            scen::Int64, 
-                           tep::TEPModel)
+                           tep::TEPModel) where T <: Union{Cache, WorkerCache}
     delta_obj = comp_delta_obj(params, cache, scen, tep)
     @objective(tep.jump_model, Min, tep.obj + delta_obj)
     return nothing
@@ -136,17 +136,17 @@ end
 
 """
     comp_delta_obj(params::Parameters, 
-                   cache::Cache, 
+                   cache::T, 
                    scen::Int64, 
-                   tep::TEPModel)
+                   tep::TEPModel) where T <: Union{Cache, WorkerCache}
 
 Compute the delta objective associated with the last progressive hedging 
 iteration to incorporate in the new objective function.
 """
 function comp_delta_obj(params::Parameters, 
-                        cache::Cache, 
+                        cache::T, 
                         scen::Int64, 
-                        tep::TEPModel)
+                        tep::TEPModel) where T <: Union{Cache, WorkerCache}
     x = tep.jump_model.ext[:state].x
     x_hat = cache.x_hat 
     # Piece-wise linear function for the squared two-norm:
@@ -239,7 +239,9 @@ function comp_ph_cost(inst::Instance, params::Parameters, cache::Cache)
     return cost
 end
 
-function comp_ph_penalized_cost(inst::Instance, cache::Cache)
+function comp_ph_penalized_cost(inst::Instance, 
+                                params::Parameters, 
+                                cache::Cache)
     lb_cost = comp_build_cost(inst, cache.sol_lb.insert)
     ub_cost = comp_build_cost(inst, cache.sol_ub.insert)
 
@@ -258,8 +260,9 @@ function comp_ph_penalized_cost(inst::Instance, cache::Cache)
     @info "costs lb:$(round(lb_cost, digits = 2)) " * 
           "ub:$(round(ub_cost, digits = 2))"
 
-    lb_cost += const_infinite * lb_viol
-    ub_cost += const_infinite * ub_viol
+    pen = params.progressive_hedging.penalty_mult
+    lb_cost += pen * lb_viol
+    ub_cost += pen * ub_viol
 
     @info "viols lb:$(round(lb_viol, digits = 2)) " * 
           "ub:$(round(ub_viol, digits = 2))"
@@ -280,16 +283,17 @@ function comp_ph_penalized_cost(inst::Instance, cache::Cache)
 end
 
 """
-    update_cache_best_sol!(inst::Instance, cache::Cache, 
-                           best_cost::Float64, lb_best_cost::Float64, 
-                           ub_best_cost::Float64)
+    update_cache_best_sol!(inst::Instance, params::Parameters, 
+                           cache::Cache, best_cost::Float64, 
+                           lb_best_cost::Float64, ub_best_cost::Float64)
 
 Update the cache best solution and return the new costs.
 """
-function update_cache_best_sol!(inst::Instance, cache::Cache, 
-                                best_cost::Float64, lb_best_cost::Float64, 
-                                ub_best_cost::Float64)
-    cost, lb_cost, ub_cost, is_feas, sol = comp_ph_penalized_cost(inst, cache)
+function update_cache_best_sol!(inst::Instance, params::Parameters, 
+                                cache::Cache, best_cost::Float64, 
+                                lb_best_cost::Float64, ub_best_cost::Float64)
+    cost, lb_cost, ub_cost, is_feas, sol = 
+                                    comp_ph_penalized_cost(inst, params, cache)
 
     if isl(cost, best_cost)
         best_cost = cost
@@ -400,7 +404,7 @@ function build_start_sol(inst::Instance,
         lb_cost, lb_g_cost, lb_viol, lb_max_viol = 
                     comp_sol_info!(inst, params, scen, lp, cache, cache.sol_lb)
             
-        cost, inserted, viol, lb_sol_use, ub_sol_use = 
+        cost, inserted, viol, lb_count_use, ub_count_use = 
                     select_best_warm_start!(inst, params, cache, lp, 
                                             lb_cost, lb_viol, ub_cost, ub_viol)
 

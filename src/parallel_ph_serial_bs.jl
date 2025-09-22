@@ -35,7 +35,8 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     ub_best_cost = const_infinite
     found_feas_sol = false
     elapsed_time = time() - start
-    for it in 1:params.progressive_hedging.max_it
+    it = 1
+    while true
         for scen in 1:inst.num_scenarios
             tl = comp_bs_time_limit(params, time() - start)
             
@@ -73,7 +74,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             # loop is partially executed once more to compute the regarding the
             # last lb and ub solutions.
             ph_cost, lb_best_cost, ub_best_cost, is_feas = 
-                            update_cache_best_sol!(inst, cache, ph_cost, 
+                            update_cache_best_sol!(inst, params, cache, ph_cost, 
                                                     lb_best_cost, ub_best_cost)
 
             if is_feas
@@ -121,10 +122,14 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         elseif isg(time() - start, params.progressive_hedging.time_limit)
             @info "ph time limit reached $(round(time() - start, digits = 2))"
             is_last_it = true
+        elseif it == params.progressive_hedging.max_it
+            @info "max num it reached"
+            is_last_it = true
         end
 
         # update_cache_detect_cycles!(inst, cache)
 
+        it += 1
         flush(io)
     end
 
@@ -195,10 +200,8 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
 
                 # Update the model according to the current scenario
                 if msg.scen != current_model_scen
-                    
-                    update_model!(inst, params, msg.scen, mip)
-                    update_model!(inst, params, msg.scen, lp)
-                    
+                    # update_model!(inst, params, msg.scen, mip)
+                    update_model!(inst, params, msg.cache, msg.scen, lp)
                     current_model_scen = msg.scen
                 end
 
@@ -224,6 +227,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
 
                     has_mip_state_vals = false
                     if isg(tl, 0.0)
+                        update_model!(inst, params, msg.cache, msg.scen, mip)
                         # flush(io[msg.scen])
 
                         fix_start!(inst, params, msg.scen, mip, inserted)

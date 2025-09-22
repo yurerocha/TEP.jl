@@ -484,6 +484,7 @@ end
 """
     update_model!(inst::Instance, 
                   params::Parameters, 
+                  cache::WorkerCache, 
                   scen::Int64, 
                   tep::TEPModel)
 
@@ -492,6 +493,7 @@ Kirchhoff law constraints, according to scenario.
 """
 function update_model!(inst::Instance, 
                        params::Parameters, 
+                       cache::WorkerCache, 
                        scen::Int64, 
                        tep::TEPModel)
     update_g_vars!(inst, scen, tep)
@@ -502,6 +504,10 @@ function update_model!(inst::Instance,
         set_attribute(tep.jump_model, 
                       MOI.RawOptimizerAttribute("LogFile"), 
                       get_log_filename(inst, params, scen))
+    end
+
+    if params.progressive_hedging.is_en && tep isa MIPModel
+        update_model_obj!(params, cache, scen, tep)
     end
 
     return nothing
