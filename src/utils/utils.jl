@@ -178,7 +178,7 @@ function log_header(outputfile::String)
     #          "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNRBS (s) " * 
     #          "| Rm | RNRBS impr | BS (s) | Start UB | PH (s) | \n"
     # outstr *= "|:---"^21 * "| \n"
-    s = "| Instance | L | N | L/N | Best | LB | UB | Rm  | Time | Feas | \n"
+    s = "| Instance | L | N | L/N | Best | LB | UB | Add  | Time | Feas | \n"
     s *= "|:---"^10 * "| \n"
     log(outputfile, s)
 
@@ -190,7 +190,7 @@ function get_keys_results()
     #         "status", "root_best_bound", "root_time", "lb", "ub", "gap", 
     #         "fix_start_time", "rnr_time", "rm_rat", "rnr_impr_rat", 
     #         "bs_time", "start_ub", "ph_time"]
-    return ["best", "lb", "ub", "rm_rat", "time", "is_feas"]
+    return ["best", "lb", "ub", "add_rat", "time", "is_feas"]
 end
 
 """
@@ -504,12 +504,10 @@ function init_cache_in_rm(inst::Instance)
     return Set{CandType}(keys(inst.K)), Set{CandType}()
 end
 
-function rounded_percent(sol::Set{CandType}, 
-                         den::Int64, 
-                         digits::Int64 = 2)
+function roundp(sol::Set{CandType}, den::Int64, digits::Int64 = 2)
     return round(100.0 * length(sol) / den, digits = digits)
 end
 
-function rounded_percent(num::Int64, den::Int64, digits::Int64 = 2)
+function roundp(num, den, digits::Int64 = 2)
     return round(100.0 * num / den, digits = digits)
 end

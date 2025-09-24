@@ -47,12 +47,12 @@ function update_cache_sols!(inst::Instance,
         t = cache.sol_lb.count_use + cache.sol_ub.count_use
         # Avoid NaN in init_sol(%) inter and union
         t = max(1, t)
-        @infov 1 "candidates(%) discard:$(rounded_percent(n, inst.num_K)) " * 
-            "lb:$(rounded_percent(cache.sol_lb.insert, inst.num_K)) " * 
-            "ub:$(rounded_percent(cache.sol_ub.insert, inst.num_K))"
+        @infov 1 "candidates(%) discard:$(roundp(n, inst.num_K)) " * 
+                 "lb:$(roundp(cache.sol_lb.insert, inst.num_K)) " * 
+                 "ub:$(roundp(cache.sol_ub.insert, inst.num_K))"
         @infov 2 "init_sol(%) " * 
-            "lb:$(rounded_percent(cache.sol_lb.count_use, t)) " * 
-            "ub:$(rounded_percent(cache.sol_ub.count_use, t))"
+                 "lb:$(roundp(cache.sol_lb.count_use, t)) " * 
+                 "ub:$(roundp(cache.sol_ub.count_use, t))"
     end
 end
 
@@ -67,6 +67,57 @@ function update_cache_sol_costs_and_viols!(cache::Cache, msg::WorkerMessage)
 
     cache.sol_lb.viols[msg.scen] = msg.sol_info_lb.viol
     cache.sol_ub.viols[msg.scen] = msg.sol_info_ub.viol
+
+    return nothing
+end
+
+function update_cache_status!(cache::Cache, msg::WorkerMessage)
+    cache.status[msg.scen] = msg.status
+    return nothing
+end
+
+function log_status(inst::Instance, cache::Cache)
+    bs_avg_rt = 0.0
+    solver_avg_rt = 0.0
+    bin_avg_rm_rat = 0.0
+    bin_min_rm_rat = 1.0
+    bin_min_rm_scen = 0
+    bs_avg_rm_rat = 0.0
+    bs_min_rm_rat = 1.0
+    bs_min_rm_scen = 0
+
+    for scen in eachindex(inst.scenarios)
+        bs_avg_rt += cache.status[scen].beam_search_runtime
+        solver_avg_rt += cache.status[scen].solver_runtime
+
+        bin_avg_rm_rat += cache.status[scen].bin_search_rm_ratio
+        if isl(cache.status[scen].bin_search_rm_ratio, bin_min_rm_rat)
+            bin_min_rm_rat = cache.status[scen].bin_search_rm_ratio
+            bin_min_rm_scen = scen
+        end
+
+        bs_avg_rm_rat += cache.status[scen].beam_search_rm_ratio
+        if isl(cache.status[scen].beam_search_rm_ratio, bs_min_rm_rat)
+            bs_min_rm_rat = cache.status[scen].beam_search_rm_ratio
+            bs_min_rm_scen = scen
+        end
+    end
+
+    bs_avg_rt /= inst.num_scenarios
+    solver_avg_rt /= inst.num_scenarios
+    total_avg_rt = bs_avg_rt + solver_avg_rt
+
+    @info "avg runtime(%) bs:$(roundp(bs_avg_rt, total_avg_rt))" *
+            " solver:$(roundp(solver_avg_rt, total_avg_rt))"
+
+    bin_avg_rm_rat = roundp(bin_avg_rm_rat / inst.num_scenarios, 1.0)
+    bin_min_rm_scen = round(bin_min_rm_scen, digits = 2)
+    bs_avg_rm_rat = roundp(bs_avg_rm_rat / inst.num_scenarios, 1.0)
+    bs_min_rm_scen = round(bs_min_rm_scen, digits = 2)
+
+    @info "avg rm rat(%) bin:$bin_avg_rm_rat bs:$bs_avg_rm_rat"
+    @info "min rm rat(%) bin:$bin_min_rm_rat(scen#$bin_min_rm_scen) " * 
+            "bs:$bs_min_rm_rat(#scen$bs_min_rm_scen)"
 
     return nothing
 end
@@ -242,14 +293,14 @@ end
 function comp_ph_penalized_cost(inst::Instance, 
                                 params::Parameters, 
                                 cache::Cache)
-    lb_cost = comp_build_cost(inst, cache.sol_lb.insert)
-    ub_cost = comp_build_cost(inst, cache.sol_ub.insert)
+    lb_build = comp_build_cost(inst, cache.sol_lb.insert)
+    ub_build = comp_build_cost(inst, cache.sol_ub.insert)
 
+    lb_cost = lb_build
+    ub_cost = ub_build
     lb_viol = 0.0
     ub_viol = 0.0
 
-    @info "build costs lb:$(round(lb_cost, digits = 2)) " * 
-          "ub:$(round(ub_cost, digits = 2))"
     for scen in eachindex(inst.scenarios)
         lb_cost += inst.scenarios[scen].p * cache.sol_lb.g_costs[scen]
         ub_cost += inst.scenarios[scen].p * cache.sol_ub.g_costs[scen]
@@ -259,6 +310,9 @@ function comp_ph_penalized_cost(inst::Instance,
     end
     @info "costs lb:$(round(lb_cost, digits = 2)) " * 
           "ub:$(round(ub_cost, digits = 2))"
+
+    @info "build(%) lb:$(roundp(lb_build, lb_cost)) " * 
+          "ub:$(roundp(ub_build, ub_cost))"
 
     pen = params.progressive_hedging.penalty_mult
     lb_cost += pen * lb_viol
@@ -270,32 +324,56 @@ function comp_ph_penalized_cost(inst::Instance,
     @warn "pcosts lb:$(round(lb_cost, digits = 2)) " * 
           "ub:$(round(ub_cost, digits = 2))"
 
+    lb_is_feas = iseq(lb_viol, 0.0)
+    ub_is_feas = iseq(ub_viol, 0.0)
+
     best_cost = lb_cost
-    is_feas = iseq(lb_viol, 0.0)
+    is_feas = lb_is_feas || ub_is_feas
     best_sol = cache.sol_lb.insert
-    if isl(ub_cost, lb_cost)
+
+    if lb_is_feas == ub_is_feas # both feasible or infeasible
+        if isl(ub_cost, lb_cost)
+            best_cost = ub_cost
+            best_sol = cache.sol_ub.insert
+        end
+    elseif lb_is_feas
+        best_cost = lb_cost
+        best_sol = cache.sol_lb.insert
+    elseif ub_is_feas
         best_cost = ub_cost
-        is_feas = iseq(ub_viol, 0.0)
         best_sol = cache.sol_ub.insert
     end
 
-    return best_cost, lb_cost, ub_cost, is_feas, best_sol
+    return best_cost, is_feas, lb_cost, ub_cost, best_sol
 end
 
 """
     update_cache_best_sol!(inst::Instance, params::Parameters, 
                            cache::Cache, best_cost::Float64, 
+                           is_global_feas::Bool, 
                            lb_best_cost::Float64, ub_best_cost::Float64)
 
 Update the cache best solution and return the new costs.
 """
 function update_cache_best_sol!(inst::Instance, params::Parameters, 
                                 cache::Cache, best_cost::Float64, 
+                                is_global_feas::Bool, 
                                 lb_best_cost::Float64, ub_best_cost::Float64)
-    cost, lb_cost, ub_cost, is_feas, sol = 
+    cost, is_feas, lb_cost, ub_cost, sol = 
                                     comp_ph_penalized_cost(inst, params, cache)
 
-    if isl(cost, best_cost)
+    # TODO Fix bug: pode ser que a solução de menor custo computada com 
+    # comp_ph_penalized_cost seja inviável, apesar da outra ser viável. Neste 
+    # caso, is_feas seria true e a lógica a seguir não functionaria 
+    # corretamente. Depois, commitar e continuar implementar o repair sugerido
+    # por JDG.
+
+    # 0 0 && isl
+    # 0 1 true
+    # 1 0 false
+    # 1 1 && isl
+    if !is_global_feas && is_feas || 
+        (is_global_feas == is_feas && isl(cost, best_cost))
         best_cost = cost
         cache.best_sol = copy(sol)
     end
@@ -306,7 +384,7 @@ function update_cache_best_sol!(inst::Instance, params::Parameters,
         ub_best_cost = ub_cost
     end
 
-    return best_cost, lb_best_cost, ub_best_cost, is_feas
+    return best_cost, is_feas, lb_best_cost, ub_best_cost
 end
 
 function update_cache_sol_ub_feas!(inst::Instance, cache::Cache)

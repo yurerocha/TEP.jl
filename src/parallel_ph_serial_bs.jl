@@ -33,7 +33,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     ph_cost = const_infinite
     lb_best_cost = const_infinite
     ub_best_cost = const_infinite
-    found_feas_sol = false
+    is_global_feas = false
     elapsed_time = time() - start
     it = 1
     while true
@@ -54,6 +54,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
                     msg = JQM.get_message(job_answer)
                     update_cache_incumbent!(cache, msg)
                     update_cache_sol_costs_and_viols!(cache, msg)
+                    update_cache_status!(cache, msg)
                 end
             end
         end
@@ -73,23 +74,29 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
             # At the last iteration, is_last_it is assigned true ant the main ph
             # loop is partially executed once more to compute the regarding the
             # last lb and ub solutions.
-            ph_cost, lb_best_cost, ub_best_cost, is_feas = 
+
+            # TODO Colocar a função a seguir (update_cache_best_sol) e a pŕoima 
+            # (update_cache_sol_ub_feas) como uma só.
+            ph_cost, is_feas, lb_best_cost, ub_best_cost = 
                             update_cache_best_sol!(inst, params, cache, ph_cost, 
-                                                    lb_best_cost, ub_best_cost)
+                                    is_global_feas, lb_best_cost, ub_best_cost)
 
             if is_feas
-                found_feas_sol = true
+                is_global_feas = true
                 update_cache_sol_ub_feas!(inst, cache)
             end
+
+            @info "ph time(s):$elapsed_time"
         end
         flush(io)
 
         if is_last_it
-            elapsed_time = time() - start
             break
         end
 
         @info "-------------------- it $it --------------------"
+
+        log_status(inst, cache)
 
         # Update SEP-rho parameters
         update_cache_sep_rho_x_min_max!(inst, cache)
@@ -114,6 +121,13 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
         update_cache_best_convergence_delta!(inst, params, cache, it)
 
+        # TODO Implementar método que, ao final da iteração, já calcula os 
+        # custos e as violações das soluções lb e ub. Caso sejam inviáveis, 
+        # também já repara as soluções. Para isso, utilizar os workers.
+        # Implementar tudo como um único método. Dessa forma, não será mais 
+        # preciso duas iterações para calcular os custos. Na próxima it, já 
+        # passar os dados da melhor solução para utilizar como mipstart.
+
         if isl(cache.best_convergence_delta, 
                params.progressive_hedging.convergence_eps)
             @info "convergence reached: $(cache.best_convergence_delta)"
@@ -130,6 +144,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         # update_cache_detect_cycles!(inst, cache)
 
         it += 1
+        elapsed_time = time() - start
         flush(io)
     end
 
@@ -152,8 +167,8 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     end
     close(io)
 
-    return elapsed_time, ph_cost, lb_best_cost, 
-            ub_best_cost, found_feas_sol, cache.best_sol 
+    return elapsed_time, ph_cost, is_global_feas, 
+            lb_best_cost, ub_best_cost, cache.best_sol 
 end
 
 function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
@@ -192,6 +207,10 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             sol_info_lb = nothing
             sol_info_ub = nothing
             start_time = time()
+            bs_runtime = 0.0
+            solver_runtime = 0.0
+            bin_rm_rat = 0.0
+            bs_rm_rat = 0.0
 
             io = open(get_log_filename(inst, params, msg.scen), "a")
             # Logging.with_logger(ConsoleLogger(io[msg.scen])) do
@@ -219,9 +238,13 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                     cost, inserted, rm, sol_info_lb, sol_info_ub = 
                         build_start_sol(inst, params, msg.scen, lp, msg.cache)
 
-                    inserted = run_serial_bs!(inst, params, msg.scen, lp, 
-                                                msg.cache, inserted, rm, cost, 
-                                                    start_time)
+                    bs_start_time = time()
+                    inserted, bin_rm_rat, bs_rm_rat = 
+                        run_serial_bs!(inst, params, msg.scen, lp, 
+                                    msg.cache, inserted, rm, cost, start_time)
+
+                    bs_runtime = time() - bs_start_time
+                    solver_runtime = 0.0
                     
                     tl = max(msg.time_limit - (time() - start_time), 0.0)
 
@@ -232,14 +255,12 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
 
                         fix_start!(inst, params, msg.scen, mip, inserted)
 
-                        set_attribute(mip.jump_model, 
-                                    MOI.RawOptimizerAttribute("SolutionLimit"), 
-                                    MAXINT)
-                        set_attribute(mip.jump_model, 
-                                      MOI.RawOptimizerAttribute("TimeLimit"), 
-                                      tl)
+                        tl = max(msg.time_limit - (time() - start_time), 0.0)
 
-                        JuMP.optimize!(mip.jump_model)
+                        set_attribute(mip.jump_model, "SolutionLimit", MAXINT)
+                        set_attribute(mip.jump_model, "TimeLimit", tl)
+
+                        solver_runtime = @elapsed JuMP.optimize!(mip.jump_model)
 
                         has_mip_state_vals = 
                                         JuMP.result_count(mip.jump_model) > 0
@@ -256,8 +277,10 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             end
             close(io)
 
-            ret_msg = WorkerMessage(state_values, msg.it, msg.scen, 
-                                    sol_info_lb, sol_info_ub)
+            status = ScenarioStatus(bs_runtime, solver_runtime, 
+                                    bin_rm_rat, bs_rm_rat)
+            ret_msg = WorkerMessage(state_values, msg.it, msg.scen, sol_info_lb, 
+                                    sol_info_ub, status)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end

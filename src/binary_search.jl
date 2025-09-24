@@ -37,6 +37,7 @@ function binary_search!(inst::Instance,
 
     all_cands = params.debugging_level == 1 ? union(inserted, removed) : Set()
 
+    num_ins_start = length(inserted)
     best_cost = cost
     init_cost = cost
     best_rm = Set()
@@ -107,7 +108,7 @@ function binary_search!(inst::Instance,
         @assert length(setdiff(all_cands, union(inserted, removed))) == 0
     end
     
-    st = Status("bin", length(removed), inst.num_K, 
+    st = Status("bin", num_ins_start - length(inserted), inst.num_K, 
                 best_cost, init_cost, start_time)
     @info log(st)
 

@@ -212,6 +212,13 @@ mutable struct Solution
                                    Vector{Float64}(undef, inst.num_scenarios))
 end
 
+mutable struct ScenarioStatus
+    beam_search_runtime::Float64
+    solver_runtime::Float64
+    bin_search_rm_ratio::Float64
+    beam_search_rm_ratio::Float64
+end
+
 mutable struct Cache
     it::Int64
     scenarios::Vector{ScenarioCache}
@@ -234,6 +241,7 @@ mutable struct Cache
     hash_values::Vector{Float64}
     fixed_x_variables::Set{CandType}
     count_cycle_it::Vector{Int64}
+    status::Vector{ScenarioStatus}
 
     Cache(inst::Instance, params::Parameters) = 
         new(0, 
@@ -263,7 +271,9 @@ mutable struct Cache
                                     inst.num_scenarios, replace = false), 
             Vector{Float64}(undef, inst.num_K), 
             Set{CandType}(), 
-            zeros(Int64, inst.num_K)) 
+            zeros(Int64, inst.num_K), 
+            [ScenarioStatus(0.0, 0.0, 0.0, 0.0) for _ 
+                                                in eachindex(inst.scenarios)]) 
 end
 
 mutable struct WorkerCache
@@ -306,6 +316,7 @@ mutable struct WorkerMessage
     scen::Int64
     sol_info_lb::SolutionInfo
     sol_info_ub::SolutionInfo
+    status::ScenarioStatus
 end
 
 # ------------------------- Beam Search data structures ------------------------

@@ -43,14 +43,16 @@ end
     select_batches!(inst::Instance, 
                     params::Parameters, 
                     lp::LPModel, 
-                    node::Node)
+                    node::Node, 
+                    candidates_per_batch_mult::Float64)
 
 Compute the residuals of the line flows.
 """
 function select_batches!(inst::Instance, 
                          params::Parameters, 
                          lp::LPModel, 
-                         node::Node)
+                         node::Node, 
+                         candidates_per_batch_mult::Float64)
     # Disregard nodes that lead to an infeasible solution
     setdiff!(node.inserted, node.ignore)
     K = collect(node.inserted)
@@ -61,7 +63,7 @@ function select_batches!(inst::Instance,
     K = K[1:l]
 
     w = params.beam_search.num_children_per_parent
-    b = params.beam_search.candidates_per_batch_mult * length(K)
+    b = candidates_per_batch_mult * length(K)
     b = max(floor(Int64, b), 1)
 
     samples = disjoint_samples(params, K, b)

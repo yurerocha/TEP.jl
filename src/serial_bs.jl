@@ -9,9 +9,11 @@ function run_serial_bs!(inst::Instance,
                         start_time::Float64)
     params.binary_search.time_limit = 
                         params.beam_search.time_limit - (time() - start_time)
+    num_ins_start = length(inserted)
     cost = 
         binary_search!(inst, params, scen, lp, cache, inserted, removed, cost)
-
+    bin_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
+    
     # Update time limit
     time_limit = params.beam_search.time_limit - (time() - start_time)
 
@@ -26,8 +28,7 @@ function run_serial_bs!(inst::Instance,
     # Set the inserted lines according to cache_in and cache_rm
     update_lp!(inst, params, lp, cache_in, false)
 
-    params.beam_search.candidates_per_batch_mult = 
-                        comp_candidates_per_batch_mult(inst, params, inserted)
+    cands_per_batch_m = comp_candidates_per_batch_mult(inst, params, inserted)
 
     has_reached_tl = false
     for bs_it in 1:params.beam_search.num_max_it
@@ -42,7 +43,8 @@ function run_serial_bs!(inst::Instance,
             UB = Vector{Node}()
             has_impr = false
             for (i, node) in enumerate(Q) # Evaluate nodes in the same level
-                batches = select_batches!(inst, params, lp, node)
+                batches = 
+                    select_batches!(inst, params, lp, node, cands_per_batch_m)
                 for lines in batches
                     el = time() - start_time
                     if isg(el, time_limit)
@@ -124,8 +126,8 @@ function run_serial_bs!(inst::Instance,
     union!(inserted, Set(cache.fixed_x_variables))
     update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
 
-    return inserted
+    
+    bs_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
 
-    # el = time() - start_time
-    # return el, inserted
+    return inserted, bin_rm_rat, bs_rm_rat 
 end
