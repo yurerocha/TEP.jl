@@ -111,13 +111,13 @@ function log_status(inst::Instance, cache::Cache)
             " solver:$(roundp(solver_avg_rt, total_avg_rt))"
 
     bin_avg_rm_rat = roundp(bin_avg_rm_rat / inst.num_scenarios, 1.0)
-    bin_min_rm_scen = round(bin_min_rm_scen, digits = 2)
+    bin_min_rm_rat = roundp(bin_min_rm_rat, 1.0)
     bs_avg_rm_rat = roundp(bs_avg_rm_rat / inst.num_scenarios, 1.0)
-    bs_min_rm_scen = round(bs_min_rm_scen, digits = 2)
+    bs_min_rm_rat = roundp(bs_min_rm_rat, 1.0)
 
     @info "avg rm rat(%) bin:$bin_avg_rm_rat bs:$bs_avg_rm_rat"
     @info "min rm rat(%) bin:$bin_min_rm_rat(scen#$bin_min_rm_scen) " * 
-            "bs:$bs_min_rm_rat(#scen$bs_min_rm_scen)"
+            "bs:$bs_min_rm_rat(scen#$bs_min_rm_scen)"
 
     return nothing
 end
@@ -567,8 +567,8 @@ end
     repair!(inst::Instance, params::Parameters, cache::WorkerCache, 
             scen::Int64, lp::LPModel, inserted::Set{CandType}, viol::Float64)
 
-Repair a solution with the repair operator, if possible, and return the new 
-cost; otherwise, get the last feasible upper bound solution.
+Repair a solution with the binary search repair operator, if possible, and 
+return the new cost; otherwise, get the last feasible upper bound solution.
 """
 function repair!(inst::Instance, params::Parameters, cache::WorkerCache, 
             scen::Int64, lp::LPModel, inserted::Set{CandType}, viol::Float64)
