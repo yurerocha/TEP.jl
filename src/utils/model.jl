@@ -555,8 +555,22 @@ end
 
 Compute violation as the sum of values of slack variables.
 """
-function comp_viol(lp::LPModel)
-    return sum(JuMP.value(s) for s in values(lp.s))
+function comp_viol(lp::LPModel, is_count_infeas::Bool = false)
+    if is_count_infeas
+        count = 0
+        viol = 0.0
+        for s in values(lp.s)
+            v = JuMP.value(s)
+            if isg(v, 0.0)
+                count += 1
+            end
+            viol += v
+        end
+        @info "count:$count"
+        return viol
+    else
+        return sum(JuMP.value(s) for s in values(lp.s))
+    end
 end
 
 """

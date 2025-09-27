@@ -67,7 +67,7 @@ function binary_search!(inst::Instance,
         cost = 0.0
         if iseq(viol, 0.0)
             cost, _ = 
-                    comp_penalized_cost(inst, params, scen, lp, cache, in_cands)
+                    comp_cost(inst, params, scen, lp, cache, in_cands)
         end
 
         has_impr = false

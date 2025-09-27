@@ -71,17 +71,8 @@ function scale_ren_gen!(params::Parameters,
                      pglib_mpc["baseMVA"], 
                      pglib_mpc["gen"][k]["pmax"], 
                      cats_ren_cap)
-
-        if isg(G[k]["pmin"], g) || iseq(G[k]["pmin"], g)
-            delete!(G, k)
-        else
-        #     if params.debugging_level == 1
-        #         @assert isl(G[k]["pmin"], g) "wrong bounds $(G[k]["pmin"]) $g"
-        #     end
-
-            G[k]["pmax"] = 
-                        round(g, digits = params.stochastic_inst_round_digits)
-        end
+        G[k]["pmax"] = 
+                    round(g, digits = params.stochastic_inst_round_digits)
     end
     return nothing
 end

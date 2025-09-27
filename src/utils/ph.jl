@@ -57,13 +57,11 @@ function update_cache_sols!(inst::Instance,
 end
 
 function update_cache_sol_costs_and_viols!(cache::Cache, msg::WorkerMessage)
+    cache.sol_lb.costs[msg.scen] = msg.sol_info_lb.cost
+    cache.sol_ub.costs[msg.scen] = msg.sol_info_ub.cost
+
     cache.sol_lb.g_costs[msg.scen] = msg.sol_info_lb.g_cost
     cache.sol_ub.g_costs[msg.scen] = msg.sol_info_ub.g_cost
-
-    if msg.it == 1 && 
-        (isg(msg.sol_info_lb.viol, 0.0) || isg(msg.sol_info_ub.viol, 0.0))
-        @warn "something went wrong $(msg.sol_info_lb.viol) $(msg.sol_info_ub.viol)"
-    end
 
     cache.sol_lb.viols[msg.scen] = msg.sol_info_lb.viol
     cache.sol_ub.viols[msg.scen] = msg.sol_info_ub.viol
@@ -85,6 +83,8 @@ function log_status(inst::Instance, cache::Cache)
     bs_avg_rm_rat = 0.0
     bs_min_rm_rat = 1.0
     bs_min_rm_scen = 0
+    count_use_repair = 0
+    count_success_repair = 0
 
     for scen in eachindex(inst.scenarios)
         bs_avg_rt += cache.status[scen].beam_search_runtime
@@ -101,6 +101,9 @@ function log_status(inst::Instance, cache::Cache)
             bs_min_rm_rat = cache.status[scen].beam_search_rm_ratio
             bs_min_rm_scen = scen
         end
+
+        count_use_repair += cache.status[scen].count_use_repair
+        count_success_repair += cache.status[scen].count_success_repair
     end
 
     bs_avg_rt /= inst.num_scenarios
@@ -118,6 +121,11 @@ function log_status(inst::Instance, cache::Cache)
     @info "avg rm rat(%) bin:$bin_avg_rm_rat bs:$bs_avg_rm_rat"
     @info "min rm rat(%) bin:$bin_min_rm_rat(scen#$bin_min_rm_scen) " * 
             "bs:$bs_min_rm_rat(scen#$bs_min_rm_scen)"
+
+    if count_use_repair > 0
+        @info "avg repair rat(%):" * 
+                            "$(roundp(count_success_repair, count_use_repair))"
+    end
 
     return nothing
 end
@@ -153,7 +161,7 @@ function update_cache_best_convergence_delta!(inst::Instance,
         @infov 1 "ph td:$(round(cache.t_deviation, digits = 2)) " * 
                  "best_td:$(round(cache.best_convergence_delta, digits = 2)) " * 
                  "qd:$(round(cache.quality_deviation, digits = 2))"
-        @infov 2 join(round.(cache.deltas, digits = 2), " ")
+        # @infov 2 join(round.(cache.deltas, digits = 2), " ")
     end
 
     if isl(cache.t_deviation, cache.best_convergence_delta)
@@ -321,7 +329,7 @@ function comp_ph_penalized_cost(inst::Instance,
     @info "viols lb:$(round(lb_viol, digits = 2)) " * 
           "ub:$(round(ub_viol, digits = 2))"
 
-    @warn "pcosts lb:$(round(lb_cost, digits = 2)) " * 
+    @info "pcosts lb:$(round(lb_cost, digits = 2)) " * 
           "ub:$(round(ub_cost, digits = 2))"
 
     lb_is_feas = iseq(lb_viol, 0.0)
@@ -330,43 +338,35 @@ function comp_ph_penalized_cost(inst::Instance,
     best_cost = lb_cost
     is_feas = lb_is_feas || ub_is_feas
     best_sol = cache.sol_lb.insert
+    best_costs = cache.sol_lb.costs
+    cache.sol_lb.count_use += 1
 
-    if lb_is_feas == ub_is_feas # both feasible or infeasible
-        if isl(ub_cost, lb_cost)
-            best_cost = ub_cost
-            best_sol = cache.sol_ub.insert
-        end
-    elseif lb_is_feas
-        best_cost = lb_cost
-        best_sol = cache.sol_lb.insert
-    elseif ub_is_feas
+    if (lb_is_feas == ub_is_feas && isl(ub_cost, lb_cost)) || 
+            (!lb_is_feas && ub_is_feas)
         best_cost = ub_cost
         best_sol = cache.sol_ub.insert
+        best_costs = cache.sol_ub.costs
+        cache.sol_lb.count_use -= 1
+        cache.sol_ub.count_use += 1
     end
 
-    return best_cost, is_feas, lb_cost, ub_cost, best_sol
+    return best_cost, is_feas, lb_cost, ub_cost, copy(best_sol), best_costs
 end
 
 """
-    update_cache_best_sol!(inst::Instance, params::Parameters, 
-                           cache::Cache, best_cost::Float64, 
-                           is_global_feas::Bool, 
-                           lb_best_cost::Float64, ub_best_cost::Float64)
-
-Update the cache best solution and return the new costs.
-"""
-function update_cache_best_sol!(inst::Instance, params::Parameters, 
+    update_cache_start_and_best_sols!(inst::Instance, params::Parameters, 
                                 cache::Cache, best_cost::Float64, 
                                 is_global_feas::Bool, 
                                 lb_best_cost::Float64, ub_best_cost::Float64)
-    cost, is_feas, lb_cost, ub_cost, sol = 
-                                    comp_ph_penalized_cost(inst, params, cache)
 
-    # TODO Fix bug: pode ser que a solução de menor custo computada com 
-    # comp_ph_penalized_cost seja inviável, apesar da outra ser viável. Neste 
-    # caso, is_feas seria true e a lógica a seguir não functionaria 
-    # corretamente. Depois, commitar e continuar implementar o repair sugerido
-    # por JDG.
+Update the cache best solution and return the new costs.
+"""
+function update_cache_start_and_best_sols!(inst::Instance, params::Parameters, 
+                                cache::Cache, best_cost::Float64, 
+                                is_global_feas::Bool, 
+                                lb_best_cost::Float64, ub_best_cost::Float64)
+    cost, is_feas, lb_cost, ub_cost, sol, costs = 
+                                    comp_ph_penalized_cost(inst, params, cache)
 
     # 0 0 && isl
     # 0 1 true
@@ -383,6 +383,11 @@ function update_cache_best_sol!(inst::Instance, params::Parameters,
     if isl(ub_cost, ub_best_cost)
         ub_best_cost = ub_cost
     end
+
+    cache.start_sol = sol
+    cache.start_costs = costs
+
+    @info "best cost:$(round(best_cost, digits = 2))"
 
     return best_cost, is_feas, lb_best_cost, ub_best_cost
 end
@@ -448,76 +453,6 @@ function update_cache_detect_cycles!(inst::Instance, cache::Cache)
 end
 
 """
-    build_start_sol(inst::Instance, 
-                    params::Parameters, 
-                    scen::Int64, 
-                    cache::WorkerCache)
-
-Build the best starting solution considering both lower and upper bound 
-solutions.
-
-At the end of this procedure, the model contains data associated with the best 
-solution found.
-"""
-function build_start_sol(inst::Instance, 
-                         params::Parameters, 
-                         scen::Int64, 
-                         lp::LPModel, 
-                         cache::WorkerCache)
-    cost = 0.0
-    inserted = Set{CandType}()
-    removed = Set{CandType}()
-    lb_count_use = 0.0
-    lb_g_cost = 0.0
-    lb_viol = 0.0
-    ub_count_use = 0.0
-    ub_g_cost = 0.0
-    ub_viol = 0.0
-
-    unfix_s_vars!(lp)
-
-    if params.progressive_hedging.is_en
-        ub_cost, ub_g_cost, ub_viol, ub_max_viol = 
-                    comp_sol_info!(inst, params, scen, lp, cache, cache.sol_ub)
-        lb_cost, lb_g_cost, lb_viol, lb_max_viol = 
-                    comp_sol_info!(inst, params, scen, lp, cache, cache.sol_lb)
-            
-        cost, inserted, viol, lb_count_use, ub_count_use = 
-                    select_best_warm_start!(inst, params, cache, lp, 
-                                            lb_cost, lb_viol, ub_cost, ub_viol)
-
-        if !iseq(viol, 0.0)
-            # Try to repair the best solution, if infeasible
-            cost, inserted = 
-                        repair!(inst, params, cache, scen, lp, inserted, viol)
-        else
-            # We eliminate candidates that are not built in any of the scenarios 
-            # considered
-            removed = setdiff(cache.sol_ub, inserted)
-        end
-    else
-        inserted = cache.sol_ub
-        removed = Set{CandType}()
-
-        cost, g_cost, viol, _ = 
-                        comp_sol_info!(inst, params, scen, lp, cache, inserted)
-
-        if params.debugging_level == 1
-            @assert iseq(viol, 0.0) "scen#$scen viol $viol at first ph it != 0"
-        end
-
-        lb_g_cost = g_cost
-        lb_viol = viol
-        ub_g_cost = g_cost 
-        ub_viol = viol
-    end
-
-    return cost, inserted, removed, 
-           SolutionInfo(lb_count_use, lb_g_cost, lb_viol), 
-           SolutionInfo(ub_count_use, ub_g_cost, ub_viol)
-end
-
-"""
 select_best_warm_start!(inst::Instance, params::Parameters, 
                         cache::WorkerCache, lp::LPModel, 
                         lb_cost::Float64, lb_viol::Float64, 
@@ -565,83 +500,150 @@ end
 
 """
     repair!(inst::Instance, params::Parameters, cache::WorkerCache, 
-            scen::Int64, lp::LPModel, inserted::Set{CandType}, viol::Float64)
+            scen::Int64, lp::LPModel, inserted::Set{CandType})
 
 Repair a solution with the binary search repair operator, if possible, and 
-return the new cost; otherwise, get the last feasible upper bound solution.
+return the new solution; otherwise, get the last feasible upper bound solution.
 """
 function repair!(inst::Instance, params::Parameters, cache::WorkerCache, 
-            scen::Int64, lp::LPModel, inserted::Set{CandType}, viol::Float64)
-    rm = setdiff(Set{CandType}(keys(inst.K)), inserted)
-    rm_cands = copy(rm)
-    viol = repair!(inst, params, scen, lp, rm_cands, viol)
+                 scen::Int64, lp::LPModel, inserted::Set{CandType})
+    unfix_s_vars!(lp)
 
-    @info "repaired: $viol"
-    if iseq(viol, 0.0)
-        union!(inserted, setdiff(rm, rm_cands))
-        # removed = rm_cands
-        # TODO Update repair so that the inserted set can be computed 
-        # faster
-    else
-        # If still infeasible, get the last feasible ub solution
-        inserted = copy(cache.sol_ub_feas)
-        update_lp!(inst, params, lp, inserted)
+    update_lp!(inst, params, lp, inserted)
+    viol = comp_viol(lp, true)
+
+    count_use_repair = 0
+    count_success_repair = 0
+
+    reinsert = Set{CandType}()
+    if !iseq(viol, 0.0)
+        count_use_repair = 1
+        v = viol
+
+        reinsert = setdiff(Set{CandType}(keys(inst.K)), inserted)
+        removed = copy(reinsert)
+        viol = repair!(inst, params, scen, lp, removed, viol)
+
+        if iseq(viol, 0.0)
+            count_success_repair = 1
+            @info "repaired $v -> 0.0"
+            setdiff!(reinsert, removed)
+        else
+            # If still infeasible, get the last feasible ub solution
+            reinsert = setdiff(cache.inserted, inserted)
+        end
+    end
+    
+    return reinsert, count_use_repair, count_success_repair
+end
+
+function jqm_repair_sols!(inst::Instance, 
+                          params::Parameters, 
+                          cache::Cache, it::Int64, 
+                          controller, 
+                          start_time::Float64)
+    num_lb_cands = length(cache.sol_lb.insert)
+    num_ub_cands = length(cache.sol_ub.insert)
+    for scen in 1:inst.num_scenarios
+        tl = comp_bs_time_limit(params, time() - start_time)
+        
+        wcache = WorkerCache(cache, repair_sols)
+        msg = ControllerMessage(wcache, it, scen, tl)
+        JQM.add_job_to_queue!(controller, msg)
+    end
+    while !has_finished_all_jobs(controller)
+        if !JQM.is_job_queue_empty(controller)
+            JQM.send_jobs_to_any_available_workers(controller)
+        end
+        if JQM.any_pending_jobs(controller)
+            job_answer = JQM.check_for_job_answers(controller)
+            if !isnothing(job_answer)
+                msg = JQM.get_message(job_answer)
+                update_cache_repair!(cache, msg)
+            end
+        end
+    end
+    @info "lb size $(num_lb_cands) -> $(length(cache.sol_lb.insert))"
+    @info "ub size $(num_ub_cands) -> $(length(cache.sol_ub.insert))"
+
+    return nothing
+end
+
+function update_cache_repair!(cache::Cache, msg::WorkerMessage)
+    cache.status[msg.scen].count_use_repair += msg.status.count_use_repair
+    cache.status[msg.scen].count_success_repair += 
+                                                msg.status.count_success_repair
+    union!(cache.sol_lb.insert, msg.sol_info_lb.reinsert)
+    union!(cache.sol_ub.insert, msg.sol_info_ub.reinsert)
+
+    return nothing
+end
+
+function jqm_comp_costs!(inst::Instance, 
+                         params::Parameters, 
+                         cache::Cache, it::Int64, 
+                         controller, 
+                         start_time::Float64)
+    for scen in 1:inst.num_scenarios
+        tl = comp_bs_time_limit(params, time() - start_time)
+        
+        wcache = WorkerCache(cache, comp_g_costs)
+        msg = ControllerMessage(wcache, it, scen, tl)
+        JQM.add_job_to_queue!(controller, msg)
+    end
+    while !has_finished_all_jobs(controller)
+        if !JQM.is_job_queue_empty(controller)
+            JQM.send_jobs_to_any_available_workers(controller)
+        end
+        if JQM.any_pending_jobs(controller)
+            job_answer = JQM.check_for_job_answers(controller)
+            if !isnothing(job_answer)
+                msg = JQM.get_message(job_answer)
+                update_cache_sol_costs_and_viols!(cache, msg)
+            end
+        end
     end
 
-    cost, _ = 
-            comp_penalized_cost(inst, params, scen, lp, cache, inserted)
-    
-    return cost, inserted
+    return nothing
+end
+
+function comp_costs_and_viol!(inst::Instance, 
+                              params::Parameters,
+                              scen::Int64, 
+                              lp::LPModel, 
+                              cache::WorkerCache, 
+                              inserted::Set{CandType})
+    update_lp!(inst, params, lp, inserted)
+    cost, g_cost = comp_cost(inst, params, scen, lp, cache, inserted)
+
+    return cost, g_cost, comp_viol(lp)
 end
 
 """
-    comp_sol_info!(inst::Instance, 
-                   params::Parameters, 
-                   scen::Int64, 
-                   lp::LPModel, 
-                   cache::WorkerCache, 
-                   sol::Set{CandType})
-
-Compute costs (total and generation costs) and violations (total and maximum) of 
-a solution.
-"""
-function comp_sol_info!(inst::Instance, 
-                        params::Parameters, 
-                        scen::Int64, 
-                        lp::LPModel, 
-                        cache::WorkerCache, 
-                        sol::Set{CandType})
-    update_lp!(inst, params, lp, sol)
-    cost, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, sol)
-
-    return (cost, g_cost, comp_viol_and_max(lp)...)
-end
-
-"""
-    comp_g_costs_lb_ub!(inst::Instance, 
-                        params::Parameters,
-                        scen::Int64, 
-                        lp::LPModel, 
-                        cache::WorkerCache)
+    comp_sol_info_lb_ub!(inst::Instance, 
+                         params::Parameters,
+                         scen::Int64, 
+                         lp::LPModel, 
+                         cache::WorkerCache)
 
 Compute generation costs of both lower and upper bound solutions.
 """
-function comp_g_costs_lb_ub!(inst::Instance, 
-                             params::Parameters,
-                             scen::Int64, 
-                             lp::LPModel, 
-                             cache::WorkerCache)
+function comp_sol_info_lb_ub!(inst::Instance, 
+                              params::Parameters,
+                              scen::Int64, 
+                              lp::LPModel, 
+                              cache::WorkerCache)
     unfix_s_vars!(lp)
 
-    update_lp!(inst, params, lp, cache.sol_lb)
-    _, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, cache.sol_lb)
-    viol = comp_viol(lp)
-    sol_info_lb = SolutionInfo(0, g_cost, viol)
+    cost, g_cost, viol = comp_costs_and_viol!(inst, params, scen, lp, 
+                                                cache, cache.sol_lb)
+    sol_info_lb = SolutionInfo(cost, g_cost, viol, Set{CandType}())
+    isg(viol, 0.0) && @info "lb viol:$viol"
     
-    update_lp!(inst, params, lp, cache.sol_ub)
-    _, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, cache.sol_ub)
-    viol = comp_viol(lp)
-    sol_info_ub = SolutionInfo(0, g_cost, viol)
+    cost, g_cost, viol = comp_costs_and_viol!(inst, params, scen, lp, 
+                                                cache, cache.sol_ub)
+    sol_info_ub = SolutionInfo(cost, g_cost, viol, Set{CandType}())
+    isg(viol, 0.0) && @info "ub viol:$viol"
 
     return sol_info_lb, sol_info_ub
 end
@@ -654,8 +656,8 @@ end
 
 function update_cache_incumbent!(cache::Cache, msg::WorkerMessage)
     cache.scenarios[msg.scen].state = msg.state_values
-    cache.sol_lb.count_use += msg.sol_info_lb.count_use
-    cache.sol_ub.count_use += msg.sol_info_ub.count_use
+    # cache.sol_lb.count_use += msg.sol_info_lb.count_use
+    # cache.sol_ub.count_use += msg.sol_info_ub.count_use
 
     return nothing
 end

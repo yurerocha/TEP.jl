@@ -60,8 +60,8 @@ function run_serial_bs!(inst::Instance,
                     is_feas = false
                     viol = 0.0
                     if JuMP.has_values(lp.jump_model)
-                        cost, _ = comp_penalized_cost(inst, params, scen, lp, 
-                                                      cache, in_cands)
+                        cost, _ = 
+                            comp_cost(inst, params, scen, lp, cache, in_cands)
                         is_feas = true
                         # The model is either feasible or infeasible as s
                         # variables are fixed at zero
@@ -123,7 +123,7 @@ function run_serial_bs!(inst::Instance,
             params.beam_search.is_shuffle_en = ~params.beam_search.is_shuffle_en
         end
     end
-    union!(inserted, Set(cache.fixed_x_variables))
+    # union!(inserted, Set(cache.fixed_x_variables))
     update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
 
     

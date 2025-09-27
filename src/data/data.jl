@@ -202,12 +202,14 @@ mutable struct Solution
     insert::Set{CandType}
     feas_insert::Set{CandType}
     count_use::Int64
+    costs::Vector{Float64}
     g_costs::Vector{Float64}
     viols::Vector{Float64}
 
     Solution(inst::Instance) = new(Set{CandType}(keys(inst.K)), 
                                    Set{CandType}(keys(inst.K)), 
                                    0, 
+                                   Vector{Float64}(undef, inst.num_scenarios), 
                                    Vector{Float64}(undef, inst.num_scenarios), 
                                    Vector{Float64}(undef, inst.num_scenarios))
 end
@@ -217,6 +219,8 @@ mutable struct ScenarioStatus
     solver_runtime::Float64
     bin_search_rm_ratio::Float64
     beam_search_rm_ratio::Float64
+    count_use_repair::Int64
+    count_success_repair::Int64
 end
 
 mutable struct Cache
@@ -226,6 +230,8 @@ mutable struct Cache
     x_average::Vector{Float64}
     sol_lb::Solution
     sol_ub::Solution
+    start_sol::Set{CandType}
+    start_costs::Vector{Float64}
     # SEP rho heuristic by https://doi.org/10.1007/s10287-010-0125-4
     rho::Vector{Float64}
     sep_rho_x_min::Vector{Float64}
@@ -259,6 +265,8 @@ mutable struct Cache
             # Vector{Float64}(undef, inst.num_scenarios), 
             # Vector{Float64}(undef, inst.num_scenarios), 
             Solution(inst), Solution(inst), 
+            Set{CandType}(keys(inst.K)), 
+            [const_infinite for _ in eachindex(inst.scenarios)], 
             [params.progressive_hedging.rho / 2.0 for _ in eachindex(inst.K)], 
             Vector{Float64}(), 
             Vector{Float64}(), 
@@ -272,26 +280,38 @@ mutable struct Cache
             Vector{Float64}(undef, inst.num_K), 
             Set{CandType}(), 
             zeros(Int64, inst.num_K), 
-            [ScenarioStatus(0.0, 0.0, 0.0, 0.0) for _ 
+            [ScenarioStatus(0.0, 0.0, 0.0, 0.0, 0, 0) for _ 
                                                 in eachindex(inst.scenarios)]) 
 end
 
+@enum WorkerOption repair_sols comp_g_costs run_method
+
 mutable struct WorkerCache
+    option::WorkerOption
     scenarios::Vector{ScenarioCache}
     x_hat::Vector{Float64}
     sol_lb::Set{CandType}
-    sol_lb_feas::Set{CandType}
     sol_ub::Set{CandType}
-    sol_ub_feas::Set{CandType}
+    inserted::Set{CandType}
+    costs::Vector{Float64}
     rho::Vector{Float64}
-    fixed_x_variables::Set{CandType}
 
-    WorkerCache(cache::Cache) = new(cache.scenarios, cache.x_hat, 
-                                    cache.sol_lb.insert, 
-                                    cache.sol_lb.feas_insert, 
-                                    cache.sol_ub.insert, 
-                                    cache.sol_ub.feas_insert, 
-                                    cache.rho, cache.fixed_x_variables) 
+    # Construct the struct according to the worker option
+    function WorkerCache(cache::Cache, option::WorkerOption)
+        if option == repair_sols
+            return new(option, cache.scenarios, cache.x_hat, 
+                        cache.sol_lb.insert, cache.sol_ub.insert, 
+                        cache.sol_ub.feas_insert, Vector{Float64}(), cache.rho) 
+        elseif option == comp_g_costs
+            return new(option, cache.scenarios, cache.x_hat, 
+                        cache.sol_lb.insert, cache.sol_ub.insert, 
+                        Set{CandType}(), Vector{Float64}(), cache.rho) 
+        elseif option == run_method
+            return new(option, cache.scenarios, cache.x_hat, 
+                        Set{CandType}(), Set{CandType}(), 
+                        cache.start_sol, cache.start_costs, cache.rho) 
+        end
+    end
 end
 
 mutable struct ControllerMessage
@@ -299,15 +319,16 @@ mutable struct ControllerMessage
     it::Int64
     scen::Int64
     time_limit::Float64
-    is_last_it::Bool
 end
 
 mutable struct SolutionInfo
-    count_use::Int64
+    cost::Float64
     g_cost::Float64
     viol::Float64
+    reinsert::Set{CandType}
 
-    SolutionInfo(count_use, g_cost, viol) = new(count_use, g_cost, viol)
+    SolutionInfo(cost, g_cost, viol, reinsert) = 
+                                            new(cost, g_cost, viol, reinsert)
 end
 
 mutable struct WorkerMessage

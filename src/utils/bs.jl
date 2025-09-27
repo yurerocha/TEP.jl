@@ -197,23 +197,23 @@ function get_data(inst::Instance,
 end
 
 """
-    comp_penalized_cost(inst::Instance, 
-                        params::Parameters, 
-                        scen::Int64, 
-                        lp::LPModel, 
-                        cache::WorkerCache, 
-                        inserted::Set{CandType})
+    comp_cost(inst::Instance, 
+              params::Parameters, 
+              scen::Int64, 
+              lp::LPModel, 
+              cache::WorkerCache, 
+              inserted::Set{CandType})
 
 Compute the penalized cost considering inserted candidate lines and the cache 
 memory of the progressive hedging algorithm, if in the progressive hedging.
 """
-function comp_penalized_cost(inst::Instance, 
-                             params::Parameters, 
-                             scen::Int64, 
-                             lp::LPModel, 
-                             cache::WorkerCache, 
-                             inserted::Set{CandType})
-    cost = const_infinite * comp_viol(lp)
+function comp_cost(inst::Instance, 
+                   params::Parameters, 
+                   scen::Int64, 
+                   lp::LPModel, 
+                   cache::WorkerCache, 
+                   inserted::Set{CandType})
+    cost = 0.0
     g_cost = comp_g_cost(inst, params, scen, lp)
 
     if params.progressive_hedging.is_en
