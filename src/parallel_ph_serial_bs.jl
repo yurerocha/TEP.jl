@@ -37,7 +37,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     it = 1
     while true
         for scen in 1:inst.num_scenarios
-            tl = comp_bs_time_limit(params, time() - start_time)
+            tl = comp_bs_time_limit(inst, params, time() - start_time)
             
             wcache = WorkerCache(cache, run_method)
             msg = ControllerMessage(wcache, it, scen, tl)
@@ -186,8 +186,8 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             solver_runtime = 0.0
             bin_rm_rat = 0.0
             bs_rm_rat = 0.0
-            count_use_repair = 0
-            count_success_repair = 0
+            repair_st = (false, false)
+            reinsert_st = (false, false, 0)
 
             io = open(get_log_filename(inst, params, msg.scen), "a")
             # Logging.with_logger(ConsoleLogger(io[msg.scen])) do
@@ -202,17 +202,17 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                 if msg.cache.option == repair_sols
                     # Repair both lower bound and upper bound solutions, if 
                     # needed
-                    reinsert, ur, sr = repair!(inst, params, msg.cache, 
+                    sol_info_lb.reinsert, lb_rep_st, lb_rein_st = 
+                                        repair!(inst, params, msg.cache, 
                                                 msg.scen, lp, msg.cache.sol_lb)
-                    sol_info_lb.reinsert = reinsert
-                    count_use_repair += ur
-                    count_success_repair += sr
 
-                    reinsert, ur, sr = repair!(inst, params, msg.cache, 
+                    sol_info_ub.reinsert, ub_rep_st, ub_rein_st = 
+                                        repair!(inst, params, msg.cache, 
                                                 msg.scen, lp, msg.cache.sol_ub)
-                    sol_info_ub.reinsert = reinsert
-                    count_use_repair += ur
-                    count_success_repair += sr
+
+                    # Update tuples with results from both lb and ub repairs
+                    repair_st = map((a, b) -> a + b, lb_rep_st, ub_rep_st)
+                    reinsert_st = map((a, b) -> a + b, lb_rein_st, ub_rein_st)
 
 
                 elseif msg.cache.option == comp_g_costs
@@ -248,19 +248,20 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                     has_mip_state_vals = false
                     if isg(tl, 0.0)
                         update_model!(inst, params, msg.cache, msg.scen, mip)
-                        # flush(io[msg.scen])
 
-                        fix_start!(inst, params, msg.scen, mip, inserted)
+                        # If feasible, continue the execution
+                        if fix_start!(inst, params, msg.scen, mip, inserted)
+                            el = time() - start_time
+                            tl = max(msg.time_limit - el, 0.0)
 
-                        tl = max(msg.time_limit - (time() - start_time), 0.0)
+                            set_attribute(mip.jump_model, "TimeLimit", tl)
 
-                        set_attribute(mip.jump_model, "SolutionLimit", MAXINT)
-                        set_attribute(mip.jump_model, "TimeLimit", tl)
+                            solver_runtime = 
+                                        @elapsed JuMP.optimize!(mip.jump_model)
 
-                        solver_runtime = @elapsed JuMP.optimize!(mip.jump_model)
-
-                        has_mip_state_vals = 
+                            has_mip_state_vals = 
                                         JuMP.result_count(mip.jump_model) > 0
+                        end
                     end
 
                     if has_mip_state_vals
@@ -275,7 +276,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             close(io)
 
             status = ScenarioStatus(bs_runtime, solver_runtime, bin_rm_rat, 
-                            bs_rm_rat, count_use_repair, count_success_repair)
+                                    bs_rm_rat, repair_st, reinsert_st)
             ret_msg = WorkerMessage(state_values, msg.it, msg.scen, sol_info_lb, 
                                     sol_info_ub, status)
 

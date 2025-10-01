@@ -83,8 +83,13 @@ function log_status(inst::Instance, cache::Cache)
     bs_avg_rm_rat = 0.0
     bs_min_rm_rat = 1.0
     bs_min_rm_scen = 0
-    count_use_repair = 0
-    count_success_repair = 0
+    repair_count_use = 0
+    repair_count_success = 0
+    reinsert_count_use = 0
+    reinsert_count_success = 0
+    reinsert_avg_it = 0
+    reinsert_max_it = 0
+    reinsert_max_it_scen = 0
 
     for scen in eachindex(inst.scenarios)
         bs_avg_rt += cache.status[scen].beam_search_runtime
@@ -101,9 +106,17 @@ function log_status(inst::Instance, cache::Cache)
             bs_min_rm_rat = cache.status[scen].beam_search_rm_ratio
             bs_min_rm_scen = scen
         end
+        
+        repair_count_use += cache.status[scen].repair[1]
+        repair_count_success += cache.status[scen].repair[2]
 
-        count_use_repair += cache.status[scen].count_use_repair
-        count_success_repair += cache.status[scen].count_success_repair
+        reinsert_count_use += cache.status[scen].reinsert[1]
+        reinsert_count_success +=  cache.status[scen].reinsert[2]
+        reinsert_avg_it += cache.status[scen].reinsert[3]
+        if cache.status[scen].reinsert[3] > reinsert_max_it
+            reinsert_max_it = cache.status[scen].reinsert[3]
+            reinsert_max_it_scen = scen
+        end
     end
 
     bs_avg_rt /= inst.num_scenarios
@@ -122,10 +135,20 @@ function log_status(inst::Instance, cache::Cache)
     @info "min rm rat(%) bin:$bin_min_rm_rat(scen#$bin_min_rm_scen) " * 
             "bs:$bs_min_rm_rat(scen#$bs_min_rm_scen)"
 
-    if count_use_repair > 0
+    if repair_count_use > 0
         @info "avg repair rat(%):" * 
-                            "$(roundp(count_success_repair, count_use_repair))"
+                            "$(roundp(repair_count_success, repair_count_use))"
     end
+
+    if reinsert_count_use > 0
+        reinsert_avg_it = 
+                        round(reinsert_avg_it / reinsert_count_use, digits = 2)
+        @info "avg reinsert rat(%):" * 
+                "$(roundp(reinsert_count_success, reinsert_count_use)) " * 
+                "it:$reinsert_avg_it max_it:$reinsert_max_it" * 
+                "(scen#$reinsert_max_it_scen)"
+    end
+
 
     return nothing
 end
@@ -309,15 +332,26 @@ function comp_ph_penalized_cost(inst::Instance,
     lb_viol = 0.0
     ub_viol = 0.0
 
+    g_lb = 0.0
+    g_ub = 0.0
     for scen in eachindex(inst.scenarios)
         lb_cost += inst.scenarios[scen].p * cache.sol_lb.g_costs[scen]
         ub_cost += inst.scenarios[scen].p * cache.sol_ub.g_costs[scen]
+        g_lb += inst.scenarios[scen].p * cache.sol_lb.g_costs[scen]
+        g_ub += inst.scenarios[scen].p * cache.sol_ub.g_costs[scen]
 
         lb_viol += cache.sol_lb.viols[scen]
         ub_viol += cache.sol_ub.viols[scen]
     end
     @info "costs lb:$(round(lb_cost, digits = 2)) " * 
           "ub:$(round(ub_cost, digits = 2))"
+
+    @info "build lb:$(round(lb_build, digits = 2)) " * 
+          "ub:$(round(ub_build, digits = 2))"
+
+    g_lb = round(g_lb, digits = 2)
+    g_ub = round(g_ub, digits = 2)
+    @info "g lb:$g_lb ub:$g_ub"
 
     @info "build(%) lb:$(roundp(lb_build, lb_cost)) " * 
           "ub:$(roundp(ub_build, ub_cost))"
@@ -398,14 +432,26 @@ function update_cache_sol_ub_feas!(inst::Instance, cache::Cache)
 end
 
 """
-    comp_bs_time_limit(params::Parameters, elapsed_time::Float64)
+    comp_bs_time_limit(inst::Instance, 
+                       params::Parameters, 
+                       elapsed_time::Float64)
 
 Compute beam search' time limit based on the elapsed time and progressive 
 hedging's time limit.
 """
-function comp_bs_time_limit(params::Parameters, elapsed_time::Float64)
+function comp_bs_time_limit(inst::Instance, 
+                            params::Parameters, 
+                            elapsed_time::Float64)
+    den = 1.0
+    workers_num_th = params.progressive_hedging.num_threads - 1
+    # When the number of threads is less thant the number of scenarios, the time
+    # limit has to be divided so that all scenarios can be solved
+    if workers_num_th < inst.num_scenarios
+        den = ceil(Int64, inst.num_scenarios / workers_num_th)
+    end
+
     tl = max(params.progressive_hedging.time_limit - elapsed_time, 0.0)
-    return min(tl, params.beam_search.time_limit)
+    return min(tl / den, params.beam_search.time_limit)
 end
 
 function comp_quality_deviation(inst::Instance, cache::Cache)
@@ -512,12 +558,14 @@ function repair!(inst::Instance, params::Parameters, cache::WorkerCache,
     update_lp!(inst, params, lp, inserted)
     viol = comp_viol(lp, true)
 
-    count_use_repair = 0
-    count_success_repair = 0
+    # TODO COnverter todos para inteiro como tava antes
+    repair_count = 0
+    repair_success = 0
+    reinsert_st = (0, 0, 0)
 
     reinsert = Set{CandType}()
-    if !iseq(viol, 0.0)
-        count_use_repair = 1
+    if isg(viol, 0.0)
+        repair_count = 1
         v = viol
 
         reinsert = setdiff(Set{CandType}(keys(inst.K)), inserted)
@@ -525,16 +573,71 @@ function repair!(inst::Instance, params::Parameters, cache::WorkerCache,
         viol = repair!(inst, params, scen, lp, removed, viol)
 
         if iseq(viol, 0.0)
-            count_success_repair = 1
-            @info "repaired $v -> 0.0"
+            repair_success = 1
+            @info "repaired: $v -> 0.0"
             setdiff!(reinsert, removed)
+            # @info "reinserted: $v -> $viol"
         else
+            # v = viol
+            # viol, reinsert_st = 
+            #         reinsert!(inst, params, scen, lp, inserted, removed, viol)
+            # setdiff!(reinsert, removed)
+            @info "viol:$v -> $viol"
             # If still infeasible, get the last feasible ub solution
-            reinsert = setdiff(cache.inserted, inserted)
+            # reinsert = setdiff(cache.inserted, inserted)
+            setdiff!(reinsert, removed)
         end
     end
+    repair_st = (repair_count, repair_success)
     
-    return reinsert, count_use_repair, count_success_repair
+    return reinsert, repair_st, reinsert_st
+end
+
+function reinsert!(inst::Instance, 
+                   params::Parameters, 
+                   scen::Int64, 
+                   lp::LPModel, 
+                   inserted::Set{CandType}, 
+                   removed::Set{CandType}, 
+                   best_viol::Float64)
+    reinsert = Set{CandType}()
+    b = comp_candidates_per_batch_mult(inst, params, removed) * length(removed)
+    b = max(floor(Int64, b), 1)
+    @info "b:$b"
+    rm_vec = collect(removed)
+    samples = disjoint_samples(rm_vec, b, true)
+
+    # Sort samples in non-descending order of sum of costs
+    sort!(samples, by = x -> sum([inst.K[k].cost for k in x]), rev = false)
+
+    it = 0
+    for s in samples
+        if iseq(best_viol, 0.0)
+            break
+        end
+
+        new_inserted = union(inserted, s)
+        update_lp!(inst, params, lp, new_inserted)
+        viol = comp_viol(lp)
+        @info it viol, best_viol
+
+        if isl(viol, best_viol)
+            best_viol = viol
+            union!(reinsert, s)
+            inserted = new_inserted
+        end
+        it += 1
+    end
+
+    l = length(rm_vec)
+    setdiff!(removed, reinsert)
+    # best_viol = repair!(inst, params, scen, lp, removed, best_viol)
+    @info "reinforce it:$it removed:$l -> $(length(removed))"
+
+    num_applied = 1
+    num_successes = iseq(best_viol, 0.0) ? 1 : 0
+
+    return best_viol, (num_applied, num_successes, it)
 end
 
 function jqm_repair_sols!(inst::Instance, 
@@ -545,7 +648,7 @@ function jqm_repair_sols!(inst::Instance,
     num_lb_cands = length(cache.sol_lb.insert)
     num_ub_cands = length(cache.sol_ub.insert)
     for scen in 1:inst.num_scenarios
-        tl = comp_bs_time_limit(params, time() - start_time)
+        tl = comp_bs_time_limit(inst, params, time() - start_time)
         
         wcache = WorkerCache(cache, repair_sols)
         msg = ControllerMessage(wcache, it, scen, tl)
@@ -563,16 +666,17 @@ function jqm_repair_sols!(inst::Instance,
             end
         end
     end
-    @info "lb size $(num_lb_cands) -> $(length(cache.sol_lb.insert))"
-    @info "ub size $(num_ub_cands) -> $(length(cache.sol_ub.insert))"
+    @info "size total:$(inst.num_K) " * 
+            "lb:$(num_lb_cands) -> $(length(cache.sol_lb.insert)) " * 
+            "ub:$(num_ub_cands) -> $(length(cache.sol_ub.insert))"
 
     return nothing
 end
 
 function update_cache_repair!(cache::Cache, msg::WorkerMessage)
-    cache.status[msg.scen].count_use_repair += msg.status.count_use_repair
-    cache.status[msg.scen].count_success_repair += 
-                                                msg.status.count_success_repair
+    cache.status[msg.scen].repair = msg.status.repair
+    cache.status[msg.scen].reinsert = msg.status.reinsert
+
     union!(cache.sol_lb.insert, msg.sol_info_lb.reinsert)
     union!(cache.sol_ub.insert, msg.sol_info_ub.reinsert)
 
@@ -585,7 +689,7 @@ function jqm_comp_costs!(inst::Instance,
                          controller, 
                          start_time::Float64)
     for scen in 1:inst.num_scenarios
-        tl = comp_bs_time_limit(params, time() - start_time)
+        tl = comp_bs_time_limit(inst, params, time() - start_time)
         
         wcache = WorkerCache(cache, comp_g_costs)
         msg = ControllerMessage(wcache, it, scen, tl)
@@ -614,7 +718,7 @@ function comp_costs_and_viol!(inst::Instance,
                               cache::WorkerCache, 
                               inserted::Set{CandType})
     update_lp!(inst, params, lp, inserted)
-    cost, g_cost = comp_cost(inst, params, scen, lp, cache, inserted)
+    cost, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, inserted)
 
     return cost, g_cost, comp_viol(lp)
 end

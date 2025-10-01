@@ -20,6 +20,11 @@ Base.@kwdef mutable struct InstanceParameters
     ref_bus::Int64 = 1 # Default reference bus used when none is found
 end
 
+Base.@kwdef mutable struct StochasticInstanceParameters
+    selection_percentile::Float64 = 0.9
+    rounding_digits::Int64 = 5
+end
+
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
     penalty::Float64 = 1.0
@@ -71,9 +76,10 @@ Base.@kwdef mutable struct Parameters
     log_dir::String = "logs"
     log_file::String = "log.txt"
     debugging_level::Int64 = 0
-    stochastic_inst_round_digits::Int64 = 5
     solver::SolverParameters = SolverParameters()
     instance::InstanceParameters = InstanceParameters()
+    stochastic_instance::StochasticInstanceParameters = 
+                                                  StochasticInstanceParameters()
     model::ModelParameters = ModelParameters()
     binary_search::BinarySearchParameters = BinarySearchParameters()
     beam_search::BeamSearchParameters = BeamSearchParameters()

@@ -1,11 +1,15 @@
 function has_reached_stop(params::Parameters, it::Int64, it_wo_impr::Int64, 
                          num_cands_prev_it::Int64, rm_cands::Set{CandType}, 
                          start_time::Float64)
-    return it > params.binary_search.max_it || 
-            it_wo_impr >= params.binary_search.num_max_it_wo_impr || 
-                length(rm_cands) == num_cands_prev_it || 
-                    isempty(rm_cands) || 
-                    isg(time() - start_time, params.binary_search.time_limit)
+    c1 = it > params.binary_search.max_it
+    c2 = it_wo_impr >= params.binary_search.num_max_it_wo_impr
+    c3 = length(rm_cands) == num_cands_prev_it
+    c4 = isempty(rm_cands)
+    c5 = isg(time() - start_time, params.binary_search.time_limit)
+
+    @info "bin $c1 $c2 $c3 $c4 $c5"
+
+    return c1 || c2 || c3 || c4 || c5
 end
 
 """

@@ -12,11 +12,11 @@ Build stochastic instance considering a set of days
 """
 function build_stochastic_instance(params::Parameters, 
                                    filepath::String, 
-                                   days::Set{Int64} = Set([79]))
+                                   days::Set{Int64} = Set([79, 171]))
     log(params, "Build stochastic instance", true)
     # -------------- Set the scenarios based on the selected days --------------
     scenarios = Vector{Int64}()
-    num_days = 10
+    num_days = 24
     for d in days
         s = (d - 1) * num_days + 1
         e = d * num_days
@@ -87,25 +87,17 @@ function build_stochastic_instance(params::Parameters,
         #     "Scen#$i: $sumD, $sum_lb, $sum_ub, $(sumD / sum_ub)", 
         #     true)
         if params.debugging_level == 1
-            @warn sum_lb, sumD
-            @assert isl(sum_lb, sumD)
-            @warn sumD, sum_ub
-            @assert isl(sumD, sum_ub)
+            @assert isl(sum_lb, sumD) "sum lb gen $sum_lb > sum load $sumD"
+            @assert isl(sumD, sum_ub) "sum load $sumD > sum ub gen $sum_ub"
         end
 
         push!(inst.scenarios, Scenario(prob, D, G))
+    end
 
-        # mip = build_mip(inst, params, i)
-        # _, is_feas = 
-        #         fix_start!(inst, params, i, mip, Set{CandType}(keys(inst.K)))
-        # if !is_feas
-        #     @warn "scen#$i infeasible build all"
-        # end
-        # solve!(inst, params, mip)
-        # if JuMP.has_values(mip.jump_model)
-        #     x = get_values(mip.x)
-        #     @warn "$(round(Int64, sum([v for (_, v) in x])))/$(length(x))"
-        # end
+    scale_loads_gens!(inst, params, pglib_mpc)
+
+    if params.debugging_level == 1
+        assert_feas_build_all(inst, params)
     end
     
     return inst

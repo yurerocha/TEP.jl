@@ -66,26 +66,25 @@ function select_batches!(inst::Instance,
     b = candidates_per_batch_mult * length(K)
     b = max(floor(Int64, b), 1)
 
-    samples = disjoint_samples(params, K, b)
+    samples = disjoint_samples(K, b, params.beam_search.is_shuffle_en)
 
     return select_best_child_nodes!(inst, samples, w)
 end
 
 
 """
-    disjoint_samples(params::Parameters, lines::Vector{CandType}, b::Int)
+    disjoint_samples(lines::Vector{CandType}, b::Int, is_shuffle_en::Bool)
 
-Divide the lines into b disjoint samples.
+Divide the lines into disjoint samples of length b.
 """
-function disjoint_samples(params::Parameters, lines::Vector{CandType}, b::Int)
+function disjoint_samples(lines::Vector{CandType}, b::Int, is_shuffle_en::Bool)
     # Shuffle the indices, if required
-    is_en = params.beam_search.is_shuffle_en
-    indices = is_en ? randperm(length(lines)) : 1:length(lines)
+    indices = is_shuffle_en ? randperm(length(lines)) : 1:length(lines)
     selected = lines[indices]
 
     # Divide the elements into batches
     samples = Vector{Set{CandType}}()
-    n = trunc(Int64, length(selected) / b)
+    # n = trunc(Int64, length(selected) / b)
     for i in 1:b:length(selected)
         j = i + b - 1
         push!(samples, Set{CandType}(selected[i:min(j, end)]))
@@ -197,23 +196,23 @@ function get_data(inst::Instance,
 end
 
 """
-    comp_cost(inst::Instance, 
-              params::Parameters, 
-              scen::Int64, 
-              lp::LPModel, 
-              cache::WorkerCache, 
-              inserted::Set{CandType})
+    comp_penalized_cost(inst::Instance, 
+                        params::Parameters, 
+                        scen::Int64, 
+                        lp::LPModel, 
+                        cache::WorkerCache, 
+                        inserted::Set{CandType})
 
 Compute the penalized cost considering inserted candidate lines and the cache 
 memory of the progressive hedging algorithm, if in the progressive hedging.
 """
-function comp_cost(inst::Instance, 
-                   params::Parameters, 
-                   scen::Int64, 
-                   lp::LPModel, 
-                   cache::WorkerCache, 
-                   inserted::Set{CandType})
-    cost = 0.0
+function comp_penalized_cost(inst::Instance, 
+                             params::Parameters, 
+                             scen::Int64, 
+                             lp::LPModel, 
+                             cache::WorkerCache, 
+                             inserted::Set{CandType})
+    cost = params.progressive_hedging.penalty_mult * comp_viol(lp)
     g_cost = comp_g_cost(inst, params, scen, lp)
 
     if params.progressive_hedging.is_en
@@ -232,7 +231,7 @@ function comp_cost(inst::Instance,
         #        (params.progressive_hedging.rho / 2.0) * sq2norm
         cost += acc_omega + sq2norm
     else
-        cost = comp_build_cost(inst, inserted)
+        cost += comp_build_cost(inst, inserted)
     end
 
     return cost + g_cost, g_cost

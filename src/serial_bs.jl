@@ -17,7 +17,7 @@ function run_serial_bs!(inst::Instance,
     # Update time limit
     time_limit = params.beam_search.time_limit - (time() - start_time)
 
-    fix_s_vars!(lp)
+    # fix_s_vars!(lp)
 
     num_ins_start = length(inserted)
     num_ins = length(inserted)
@@ -60,8 +60,8 @@ function run_serial_bs!(inst::Instance,
                     is_feas = false
                     viol = 0.0
                     if JuMP.has_values(lp.jump_model)
-                        cost, _ = 
-                            comp_cost(inst, params, scen, lp, cache, in_cands)
+                        cost, _ = comp_penalized_cost(inst, params, scen, 
+                                                        lp, cache, in_cands)
                         is_feas = true
                         # The model is either feasible or infeasible as s
                         # variables are fixed at zero

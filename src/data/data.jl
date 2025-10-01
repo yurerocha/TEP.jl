@@ -214,13 +214,18 @@ mutable struct Solution
                                    Vector{Float64}(undef, inst.num_scenarios))
 end
 
+# mutable struct ExecutionInfo
+#     num_trials::Int64
+#     num_successes::Int64
+# end
+
 mutable struct ScenarioStatus
     beam_search_runtime::Float64
     solver_runtime::Float64
     bin_search_rm_ratio::Float64
     beam_search_rm_ratio::Float64
-    count_use_repair::Int64
-    count_success_repair::Int64
+    repair::Tuple{Int64, Int64} # applied, succeeded
+    reinsert::Tuple{Int64, Int64, Int64} # applied, succeeded, iterations
 end
 
 mutable struct Cache
@@ -280,8 +285,8 @@ mutable struct Cache
             Vector{Float64}(undef, inst.num_K), 
             Set{CandType}(), 
             zeros(Int64, inst.num_K), 
-            [ScenarioStatus(0.0, 0.0, 0.0, 0.0, 0, 0) for _ 
-                                                in eachindex(inst.scenarios)]) 
+            [ScenarioStatus(0.0, 0.0, 0.0, 0.0, (false, false), 
+                (false, false, 0)) for _ in eachindex(inst.scenarios)]) 
 end
 
 @enum WorkerOption repair_sols comp_g_costs run_method

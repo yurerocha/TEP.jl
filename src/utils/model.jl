@@ -693,9 +693,7 @@ function fix_start!(inst::Instance,
                     scen::Int64, 
                     mip::MIPModel, 
                     inserted::Set{CandType})
-    JuMP.set_attribute(mip.jump_model, 
-                       MOI.RawOptimizerAttribute("SolutionLimit"), 
-                       1)
+    JuMP.set_attribute(mip.jump_model, "SolutionLimit", 1)
     # JuMP.set_attribute(mip.jump_model, 
     #                    MOI.RawOptimizerAttribute("FeasibilityTol"), 
     #                    1e-3)
@@ -731,8 +729,8 @@ function fix_start!(inst::Instance,
     if status == MOI.OPTIMAL
         cost = JuMP.objective_value(model)
     elseif status == MOI.INFEASIBLE || status == MOI.INFEASIBLE_OR_UNBOUNDED
-        @info "Infeasible model"
-        if params.log_level >= 1
+        @info "infeasible model"
+        if params.solver.log_level >= 1
             JuMP.compute_conflict!(model)
             if JuMP.get_attribute(model, MOI.ConflictStatus()) == 
                MOI.CONFLICT_FOUND
@@ -765,7 +763,9 @@ function fix_start!(inst::Instance,
     #     # unfix(md.theta[i])
     # end
 
-    return cost
+    set_attribute(mip.jump_model, "SolutionLimit", MAXINT)
+
+    return is_feas
 end
 
 function solve!(inst::Instance, params::Parameters, mip::MIPModel)

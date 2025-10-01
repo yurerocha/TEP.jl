@@ -1,3 +1,15 @@
+function comp_load_sum(D::Dict{String, Any})
+    return sum(l["pd"] for l in values(D))
+end
+
+function comp_gen_sum(G::Dict{String, Any}, g_key::String)
+    return sum(g[g_key] for g in values(G) if g["gen_status"] > 0)
+end
+
+function comp_load_gen_rat(D::Dict{String, Any}, G::Dict{String, Any})
+    return comp_load_sum(D) / comp_gen_sum(G, "pmax")
+end
+
 """
     select_ren!(pglib_mpc::Dict{String, Any}, 
                 cats_ren_avg::Float64, 
@@ -13,8 +25,7 @@ function select_ren!(pglib_mpc::Dict{String, Any},
                      cats_ren_avg::Float64, 
                      cats_ren_ratio::Float64, 
                      candidates::Set{String})
-    gen_cap = 
-            sum(g["pmax"] for (_, g) in pglib_mpc["gen"] if g["gen_status"] > 0)
+    gen_cap = comp_gen_sum(pglib_mpc["gen"], "pmax")
     ren_cap = 0.0
     ren_index = Set{String}()
     while !isempty(candidates) && isl(ren_cap / gen_cap, cats_ren_ratio)
@@ -72,7 +83,7 @@ function scale_ren_gen!(params::Parameters,
                      pglib_mpc["gen"][k]["pmax"], 
                      cats_ren_cap)
         G[k]["pmax"] = 
-                    round(g, digits = params.stochastic_inst_round_digits)
+                round(g, digits = params.stochastic_instance.rounding_digits)
     end
     return nothing
 end
@@ -106,12 +117,12 @@ function scale_gen_lb!(params::Parameters,
                        cats_mpc::Dict{String, Any}, 
                        pglib_mpc::Dict{String, Any}, 
                        G::Dict{String, Any})
-    gen_lb = sum(g["pmin"] for (_, g) in cats_mpc["gen"] if g["gen_status"] > 0)
-    gen_ub = sum(g["pmax"] for (_, g) in cats_mpc["gen"] if g["gen_status"] > 0)
+    gen_lb = comp_gen_sum(cats_mpc["gen"], "pmin")
+    gen_ub = comp_gen_sum(cats_mpc["gen"], "pmax")
     cats_ratio = gen_lb / gen_ub
 
-    gen_lb = sum(g["pmin"] for (_, g) in G if g["gen_status"] > 0)
-    gen_ub = sum(g["pmax"] for (_, g) in G if g["gen_status"] > 0)
+    gen_lb = comp_gen_sum(G, "pmin")
+    gen_ub = comp_gen_sum(G, "pmax")
     new_ratio = gen_lb / gen_ub
 
     if iseq(gen_ub, 0.0) || iseq(new_ratio, 0.0)
@@ -122,14 +133,15 @@ function scale_gen_lb!(params::Parameters,
     for (k, g) in G
         if g["gen_status"] > 0
             G[k]["pmin"] = round(m * g["pmin"], 
-                                 digits = params.stochastic_inst_round_digits)
+                            digits = params.stochastic_instance.rounding_digits)
         end
     end
 
     if params.debugging_level == 1
-        gen_lb = sum(g["pmin"] for (_, g) in G if g["gen_status"] > 0)
-        @warn cats_ratio, gen_lb / gen_ub
-        @assert iseq(cats_ratio, gen_lb / gen_ub)
+        gen_lb = comp_gen_sum(G, "pmin")
+        r1 = cats_ratio
+        r2 = gen_lb / gen_ub
+        @assert iseq(r1, r2, 1e-3) "diff gen ratio [cats and new scen $r1 $r2"
     end
 
     return nothing
@@ -148,14 +160,9 @@ function scale_loads(params::Parameters,
                      cats_mpc::Dict{String, Any}, 
                      pglib_mpc::Dict{String, Any}, 
                      G::Dict{String, Any})
-    sum_load = sum(l["pd"] for (_, l) in cats_mpc["load"])
-    gen_cap = 
-            sum(g["pmax"] for (_, g) in cats_mpc["gen"] if g["gen_status"] > 0)
-    cats_ratio = sum_load / gen_cap
-
-    sum_load = sum(l["pd"] for (_, l) in pglib_mpc["load"])
-    gen_cap = sum(g["pmax"] for (_, g) in G if g["gen_status"] > 0)
-    new_ratio = sum_load / gen_cap
+    cats_ratio = comp_load_gen_rat(cats_mpc["load"], cats_mpc["gen"])
+    new_ratio = comp_load_gen_rat(pglib_mpc["load"], G)
+    gen_cap = comp_gen_sum(G, "pmax")
 
     D = deepcopy(pglib_mpc["load"])
     if iseq(gen_cap, 0.0) || iseq(new_ratio, 0.0)
@@ -165,13 +172,14 @@ function scale_loads(params::Parameters,
     m = cats_ratio / new_ratio
     for (k, l) in pglib_mpc["load"]
         D[k]["pd"] = round(m * l["pd"], 
-                           digits = params.stochastic_inst_round_digits)
+                            digits = params.stochastic_instance.rounding_digits)
     end
 
     if params.debugging_level == 1
-        sum_load = sum(d["pd"] for (k, d) in D)
-        @warn cats_ratio, sum_load / gen_cap
-        @assert iseq(cats_ratio, sum_load / gen_cap)
+        sum_load = comp_load_sum(D)
+        r1 = cats_ratio
+        r2 = sum_load / gen_cap
+        @assert iseq(r1, r2, 1e-3) "diff load ratio [cats and new scen $r1 $r2"
     end
 
     return D
@@ -192,7 +200,7 @@ function comp_ren_and_avg_cap(mpc::Dict{String, Any},
     
     # Renewable generation capacity
     rcap = sum(g["pmax"] for (i, g) in mpc["gen"] if g["index"] in gen_indices)
-    cap = sum(g["pmax"] for (i, g) in mpc["gen"] if g["gen_status"] > 0)
+    cap = comp_gen_sum(mpc["gen"], "pmax")
 
     return rcap, rcap / length(gen_indices)
 end
@@ -208,4 +216,60 @@ function dict_hourly_data(hourly_data::DataFrames.DataFrame,
                           scenarios::Vector{Int64}, 
                           ren_type::String)
     return Dict([k => hourly_data[k, ren_type] for k in scenarios])
+end
+
+function scale_loads_gens!(inst::Instance, 
+                           params::Parameters, 
+                           pglib_mpc::Dict{String, Any})
+    # Select the instance in a given percentile regarding their loads
+    scenarios = deepcopy(inst.scenarios)
+    sort!(scenarios, by = x -> sum(values(x.D)))
+    scen = params.stochastic_instance.selection_percentile * length(scenarios)
+    scen = round(Int64, scen)
+
+    # Compute the multiplier for the selected instance according to parameter 
+    # load_gen_mult
+    pglib_sum = comp_load_sum(pglib_mpc["load"])
+    sel_sum = sum(values(scenarios[scen].D))
+    m = params.instance.load_gen_mult * pglib_sum / sel_sum
+    @info "scen#$scen m:$m pglib_sum:$(round(pglib_sum, digits = 2))"
+
+    # Update the instances
+    for scen in eachindex(inst.scenarios)
+        # d1 = sum(values(scenarios[scen].D))
+        for k in keys(inst.scenarios[scen].D)
+            inst.scenarios[scen].D[k] *= m
+        end
+        d = sum(values(inst.scenarios[scen].D))
+        # msg = "scen$scen d:$(round(d1, digits = 2)) -> " * 
+        #         "$(round(d2, digits = 2)) " * 
+        #         "r:$(round(d2 / pglib_sum, digits = 2))"
+        # println(msg)
+
+        g_lb = 0.0
+        g_ub = 0.0
+        for k in keys(inst.scenarios[scen].G)
+            inst.scenarios[scen].G[k].lower_bound *= m
+            inst.scenarios[scen].G[k].upper_bound *= m
+            inst.scenarios[scen].G[k].costs = 
+                                            inst.scenarios[scen].G[k].costs ./ m
+            g_lb += inst.scenarios[scen].G[k].lower_bound
+            g_ub += inst.scenarios[scen].G[k].upper_bound
+        end
+        @info round.([d, g_lb, g_ub, d / g_ub, d / pglib_sum], digits = 2)
+    end
+
+    return nothing
+end
+
+function assert_feas_build_all(inst::Instance, params::Parameters)
+    for scen in eachindex(inst.scenarios)
+        @info "run feasibility test for scen#$scen"
+        mip = build_mip(inst, params, scen)
+        is_feas = 
+                fix_start!(inst, params, scen, mip, Set{CandType}(keys(inst.K)))
+        @assert is_feas "scen#$scen infeasible build all"
+    end
+
+    return nothing
 end
