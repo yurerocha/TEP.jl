@@ -248,13 +248,15 @@ function scale_loads_gens!(inst::Instance,
 
         g_lb = 0.0
         g_ub = 0.0
+        rd = params.stochastic_instance.rounding_digits
         for k in keys(inst.scenarios[scen].G)
-            inst.scenarios[scen].G[k].lower_bound *= m
-            inst.scenarios[scen].G[k].upper_bound *= m
-            inst.scenarios[scen].G[k].costs = 
-                                            inst.scenarios[scen].G[k].costs ./ m
-            g_lb += inst.scenarios[scen].G[k].lower_bound
-            g_ub += inst.scenarios[scen].G[k].upper_bound
+            g = inst.scenarios[scen].G[k]
+            inst.scenarios[scen].G[k].lower_bound = 
+                                        round(m * g.lower_bound, digits = rd)
+            inst.scenarios[scen].G[k].upper_bound = 
+                                        round(m * g.upper_bound, digits = rd)
+            g_lb += g.lower_bound
+            g_ub += g.upper_bound
         end
         @info round.([d, g_lb, g_ub, d / g_ub, d / pglib_sum], digits = 2)
     end

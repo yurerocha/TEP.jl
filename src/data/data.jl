@@ -112,9 +112,10 @@ struct MIPModel <: TEPModel
                     Dict{Int64, JuMP.ConstraintRef}())
 end
 
-struct LPModel <: TEPModel
+mutable struct LPModel <: TEPModel
     jump_model::JuMP.Model
     obj::AffExpr
+    has_fixed_s_vars::Bool
     s::Dict{Any, JuMP.VariableRef}
     f::Dict{Any, JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
@@ -126,6 +127,7 @@ struct LPModel <: TEPModel
 
     LPModel(params::Parameters) = new(JuMP.Model(params.model.optimizer), 
                                       AffExpr(), 
+                                      false, 
                                       Dict{Any, JuMP.VariableRef}(), 
                                       Dict{Any, JuMP.VariableRef}(), 
                                       Dict{Int64, JuMP.VariableRef}(), 
@@ -306,7 +308,7 @@ mutable struct WorkerCache
         if option == repair_sols
             return new(option, cache.scenarios, cache.x_hat, 
                         cache.sol_lb.insert, cache.sol_ub.insert, 
-                        cache.sol_ub.feas_insert, Vector{Float64}(), cache.rho) 
+                        cache.start_sol, Vector{Float64}(), cache.rho) 
         elseif option == comp_g_costs
             return new(option, cache.scenarios, cache.x_hat, 
                         cache.sol_lb.insert, cache.sol_ub.insert, 

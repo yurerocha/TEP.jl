@@ -5,33 +5,29 @@
 Configure the solver parameters.
 """
 function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
-    set_attribute(tep.jump_model, 
-                  MOI.RawOptimizerAttribute("Threads"), 
-                  params.solver.num_threads)
-    # set_attribute(tep.jump_model, 
-    #               MOI.RawOptimizerAttribute("DualReductions"), 
-    #               0)
-    # set_attribute(tep.jump_model, 
-    #               MOI.RawOptimizerAttribute("Method"), 
-    #               6)
-    # set_attribute(tep.jump_model, 
-    #               MOI.RawOptimizerAttribute("GURO_PAR_PDHGGPU"), 
-    #               1)
+    set_attribute(tep.jump_model, "Threads", params.solver.num_threads)
+    # set_attribute(tep.jump_model, "DualReductions", 0)
+    # set_attribute(tep.jump_model, "Method", 6)
+    # set_attribute(tep.jump_model, "GURO_PAR_PDHGGPU", 1)
+    config_log!(inst, params, scen, tep)
+
+    return nothing
+end
+
+function config_log!(inst::Instance, 
+                     params::Parameters, 
+                     scen::Int64, 
+                     tep::TEPModel)
     if params.model.optimizer == Gurobi.Optimizer
         if params.solver.log_level == 0 || tep isa LPModel
             JuMP.set_silent(tep.jump_model)
-            # set_attribute(tep.jump_model, 
-            #               MOI.RawOptimizerAttribute("OutputFlag"), 
-            #               0)
+            # set_attribute(tep.jump_model, "OutputFlag", 0)
         elseif params.solver.log_level == 1 || params.solver.log_level == 3
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("LogFile"), 
-                          get_log_filename(inst, params, scen))
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("LogToConsole"), 0)
+            set_attribute(tep.jump_model, "LogFile", 
+                            get_log_filename(inst, params, scen))
+            set_attribute(tep.jump_model, "LogToConsole", 0)
         elseif params.solver.log_level == 2 || params.solver.log_level == 3
-            set_attribute(tep.jump_model, 
-                          MOI.RawOptimizerAttribute("LogToConsole"), 1)
+            set_attribute(tep.jump_model, "LogToConsole", 1)
         end
     end
 
@@ -217,7 +213,6 @@ function add_thermal_limits_cons!(inst::Instance,
     # Candidates
     for k in keys(inst.K)
         # if params.model.is_lp_model_s_var_set_req
-            s = lp.s[k]
             @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
             @constraint(lp.jump_model,  lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
         # else
@@ -409,16 +404,13 @@ function set_obj!(inst::Instance,
                   is_build_obj_req::Bool, 
                   lp::LPModel)
     # Generation costs
-    # TODO: remover os custos de operação quadráticos do cálculo da penalidade
     pen = 0.0
     for k in keys(lp.g)
-        c = inst.scenarios[scen].G[k].costs
-        add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], c))
+        g_info = inst.scenarios[scen].G[k]
+        add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], g_info.costs))
         # pen = max(pen, comp_largest_g(params, c, 
         #                               inst.scenarios[scen].G[k].upper_bound))
-        if length(c) > 0
-            pen = max(pen, maximum(c))
-        end
+        pen = max(pen, comp_max_g_obj_value(params, g_info))
     end
     pen *= params.model.penalty
     # if params.model.is_lp_model_s_var_set_req
@@ -442,7 +434,6 @@ function comp_g_obj(params::Parameters,
                          costs::Vector{Float64}) where 
                                         T <: Union{Float64, JuMP.VariableRef}
     l = length(costs)
-    costs = abs.(costs)
     if l == 0
         return 0.0
     elseif l == 1
@@ -458,6 +449,28 @@ function comp_g_obj(params::Parameters,
                 true)
         end
         return costs[1] + costs[2]*g + costs[3]*g^2
+    end
+end
+
+function comp_max_g_obj_value(params::Parameters, g_info::GeneratorInfo)
+    l = length(g_info.costs)
+    if l == 0
+        return 0.0
+    elseif l == 1
+        return g_info.costs[1]
+    elseif l == 2 || !params.model.is_dcp_power_model_en
+        # When is_dcp_power_model_en == false, the objective function is, at 
+        # most, linear in terms of g.
+        return max(g_info.costs[1], g_info.costs[2]*g_info.upper_bound)
+    else
+        if l > 3
+            log(params, 
+                "Length of costs > 3, but quadratic polynomial considered", 
+                true)
+        end
+        return maximum([g_info.costs[1], 
+                        g_info.costs[2]*g_info.upper_bound, 
+                        g_info.costs[3]*g_info.upper_bound^2])
     end
 end
 
@@ -499,12 +512,7 @@ function update_model!(inst::Instance,
     update_g_vars!(inst, scen, tep)
     update_fkl_cons_rhs!(inst, scen, tep)
 
-    # TODO: Use config! here (pay attention to the params, especially "Threads")
-    if params.model.optimizer == Gurobi.Optimizer
-        set_attribute(tep.jump_model, 
-                      MOI.RawOptimizerAttribute("LogFile"), 
-                      get_log_filename(inst, params, scen))
-    end
+    config_log!(inst, params, scen, tep)
 
     if params.progressive_hedging.is_en && tep isa MIPModel
         update_model_obj!(params, cache, scen, tep)
@@ -555,21 +563,11 @@ end
 
 Compute violation as the sum of values of slack variables.
 """
-function comp_viol(lp::LPModel, is_count_infeas::Bool = false)
-    if is_count_infeas
-        count = 0
-        viol = 0.0
-        for s in values(lp.s)
-            v = JuMP.value(s)
-            if isg(v, 0.0)
-                count += 1
-            end
-            viol += v
-        end
-        @info "count:$count"
-        return viol
+function comp_viol(lp::LPModel)
+    if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
+        sum(JuMP.value(s) for s in values(lp.s))
     else
-        return sum(JuMP.value(s) for s in values(lp.s))
+        return const_infinite
     end
 end
 
@@ -579,8 +577,12 @@ end
 Compute violation as the sum of the slack variables, and the maximum violation.
 """
 function comp_viol_and_max(lp::LPModel)
-    vals = [JuMP.value(s) for s in values(lp.s)]
-    return sum(vals), maximum(vals)
+    if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
+        vals = [JuMP.value(s) for s in values(lp.s)]
+        return sum(vals), maximum(vals)
+    else
+        return const_infinite, const_infinite
+    end
 end
 
 function check_sol(inst::Instance, tep::TEPModel, md)
@@ -656,6 +658,7 @@ end
 Fix the s variables.
 """
 function fix_s_vars!(lp::LPModel)
+    lp.has_fixed_s_vars = true
     for k in keys(lp.s)
         if !JuMP.is_fixed(lp.s[k])
             JuMP.fix(lp.s[k], 0.0; force = true)
@@ -670,6 +673,7 @@ end
 Unfix and set the lower bounds of the s variables.
 """
 function unfix_s_vars!(lp::LPModel)
+    lp.has_fixed_s_vars = false
     for k in keys(lp.s)
         if JuMP.is_fixed(lp.s[k])
             JuMP.unfix(lp.s[k])

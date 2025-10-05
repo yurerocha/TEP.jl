@@ -21,13 +21,13 @@ Base.@kwdef mutable struct InstanceParameters
 end
 
 Base.@kwdef mutable struct StochasticInstanceParameters
-    selection_percentile::Float64 = 0.9
-    rounding_digits::Int64 = 5
+    selection_percentile::Float64 = 0.8
+    rounding_digits::Int64 = 2
 end
 
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
-    penalty::Float64 = 1.0
+    penalty::Float64 = 1e2
     # is_lp_model_s_var_set_req = true
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
@@ -37,8 +37,8 @@ end
 Base.@kwdef mutable struct BinarySearchParameters
     is_en::Bool = true
     time_limit::Float64 = 300.0
-    max_it::Int64 = 10 # 1.Calibrar 5, 10, 15: 10
-    num_max_it_wo_impr::Int64 = 5 # 1.Calibrar 1, 3, 5: 1
+    max_it::Int64 = 15 # 1.Calibrar 5, 10, 15: 10
+    num_max_it_wo_impr::Int64 = 15 # 1.Calibrar 1, 3, 5: 1
 end
 
 Base.@kwdef mutable struct BeamSearchParameters

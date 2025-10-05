@@ -22,9 +22,14 @@ end
 # try
     results = TEP.init_results()
 
-    el, cost = TEP.run_parallel_ph_serial_bs!(inst, params)
-    results["ph_time"] = el
-    results["ub"] = cost
+    el, cost, is_feas, lb_cost, ub_cost, inserted = 
+                                    TEP.run_parallel_ph_serial_bs!(inst, params)
+    results["add_rat"] = length(inserted) / inst.num_K
+    results["time"] = el
+    results["best"] = cost
+    results["lb"] = lb_cost
+    results["ub"] = ub_cost
+    results["is_feas"] = is_feas
     
     TEP.log_instance(log_file, file, inst, results)
 # catch e

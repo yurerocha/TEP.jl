@@ -4,9 +4,9 @@ using Random
 
 params = TEP.Parameters()
 
-start_file = 1 # 40
-end_file = 1 # 61
-log_dir = "test/ph"
+start_file = 3 # 40
+end_file = 4 # 61
+log_dir = "test/b"
 log_file = "$log_dir/log.md"
 dir = "input_bin/"
 num_threads = params.progressive_hedging.num_threads
@@ -17,15 +17,19 @@ catch e
     @warn e
 end
 
-rng = Random.MersenneTwister(123)
-
 TEP.log_header(log_file)
+
+rng = Random.MersenneTwister(123)
 
 files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
 skip = ["pglib_opf_case8387_pegase.m"]
+# Infeas build all first it
+# pglib_opf_case3022_goc.m
+# pglib_opf_case4917_goc.m
+# pglib_opf_case10192_epigrids.m
 
 project_dir = dirname(Base.active_project())
 parallel_script = joinpath(@__DIR__, "parallel_ph_serial_bs_pglibopf.jl")

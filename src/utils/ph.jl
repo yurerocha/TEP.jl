@@ -410,6 +410,9 @@ function update_cache_start_and_best_sols!(inst::Instance, params::Parameters,
         (is_global_feas == is_feas && isl(cost, best_cost))
         best_cost = cost
         cache.best_sol = copy(sol)
+        if is_feas
+            is_global_feas = true
+        end
     end
     if isl(lb_cost, lb_best_cost)
         lb_best_cost = lb_cost
@@ -418,12 +421,14 @@ function update_cache_start_and_best_sols!(inst::Instance, params::Parameters,
         ub_best_cost = ub_cost
     end
 
-    cache.start_sol = sol
-    cache.start_costs = costs
+    if is_feas
+        cache.start_sol = sol
+        cache.start_costs = costs
+    end
 
     @info "best cost:$(round(best_cost, digits = 2))"
 
-    return best_cost, is_feas, lb_best_cost, ub_best_cost
+    return best_cost, is_global_feas, lb_best_cost, ub_best_cost
 end
 
 function update_cache_sol_ub_feas!(inst::Instance, cache::Cache)
@@ -556,7 +561,7 @@ function repair!(inst::Instance, params::Parameters, cache::WorkerCache,
     unfix_s_vars!(lp)
 
     update_lp!(inst, params, lp, inserted)
-    viol = comp_viol(lp, true)
+    viol = comp_viol(lp)
 
     # TODO COnverter todos para inteiro como tava antes
     repair_count = 0
@@ -570,7 +575,7 @@ function repair!(inst::Instance, params::Parameters, cache::WorkerCache,
 
         reinsert = setdiff(Set{CandType}(keys(inst.K)), inserted)
         removed = copy(reinsert)
-        viol = repair!(inst, params, scen, lp, removed, viol)
+        viol, _ = repair!(inst, params, scen, lp, removed, viol)
 
         if iseq(viol, 0.0)
             repair_success = 1

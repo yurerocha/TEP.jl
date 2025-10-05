@@ -27,6 +27,15 @@ function get_circuit(inst::Instance, l::Int64)
 end
 
 """
+    get_existing_line(k::CandType)
+
+Return k's corresponding existing line.
+"""
+function get_existing_line(k::CandType)
+    return k[1]
+end
+
+"""
     get_inst_name(input::String)
 
 Return the filename without the path and the extension.
@@ -107,7 +116,7 @@ function build_gens(params::Parameters, gen::Dict{String, Any})
         lb = params.instance.load_gen_mult * dt["pmin"]
         ub = params.instance.load_gen_mult * dt["pmax"]
         G[dt["index"]] = 
-                    GeneratorInfo(dt["gen_bus"], lb, ub, reverse(dt["cost"]))
+                GeneratorInfo(dt["gen_bus"], lb, ub, abs.(reverse(dt["cost"])))
     end
 
     return G

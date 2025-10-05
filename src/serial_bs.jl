@@ -10,8 +10,8 @@ function run_serial_bs!(inst::Instance,
     params.binary_search.time_limit = 
                         params.beam_search.time_limit - (time() - start_time)
     num_ins_start = length(inserted)
-    cost = 
-        binary_search!(inst, params, scen, lp, cache, inserted, removed, cost)
+    cost = binary_search!(inst, params, scen, lp, cache, 
+                            inserted, removed, cost, start_time)
     bin_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
     
     # Update time limit
@@ -82,7 +82,7 @@ function run_serial_bs!(inst::Instance,
                         # Log info
                         LoggingExtras.withlevel(Info; 
                                                 verbosity = params.log_level) do
-                            st = Status("bs", num_ins_start - num_ins, 
+                            st = Status("bs level:$it", num_ins_start - num_ins, 
                                         num_ins_start, 
                                         cost, start_cost, start_time)
                             @infov 2 log(st)

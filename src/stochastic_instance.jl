@@ -12,7 +12,7 @@ Build stochastic instance considering a set of days
 """
 function build_stochastic_instance(params::Parameters, 
                                    filepath::String, 
-                                   days::Set{Int64} = Set([79, 171]))
+                                   days::Set{Int64} = Set([79, 171, 265, 355]))
     log(params, "Build stochastic instance", true)
     # -------------- Set the scenarios based on the selected days --------------
     scenarios = Vector{Int64}()

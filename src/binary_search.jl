@@ -17,9 +17,8 @@ function binary_search!(inst::Instance,
                         cache::WorkerCache, 
                         inserted::Set{CandType}, 
                         removed::Set{CandType}, 
-                        cost::Float64)
-    start_time = time()
-
+                        cost::Float64, 
+                        start_time::Float64)
     unfix_s_vars!(lp)
 
     if !JuMP.has_values(lp.jump_model)
@@ -27,11 +26,11 @@ function binary_search!(inst::Instance,
     end
 
     if params.debugging_level == 1
-        @assert isdisjoint(inserted, removed)
+        @assert isdisjoint(inserted, removed) "bin not disjoint sets"
     elseif params.debugging_level == 2
         if termination_status(lp.jump_model) == MOI.OPTIMAL
             v = comp_viol(lp)
-            @assert iseq(v, 0.0) "scen#$scen viol $v at start of bin != 0.0"
+            @assert iseq(v, 0.0) "bin scen#$scen viol $v at start != 0.0"
         end
     end
 
@@ -53,37 +52,44 @@ function binary_search!(inst::Instance,
     num_cands = length(rm_cands)
     while !has_reached_stop(params, it, it_wo_impr, 
                             num_prev_cands, rm_cands, start_time)
+        set_time_limit!(params, lp, start_time)
+        
         rm_lines!(inst, params, lp, rm_cands, true)
         
-        viol = const_infinite
-        if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
-            viol = comp_viol(lp)
-        end
-
+        viol = comp_viol(lp)
+        reinserted = Set{CandType}()
         if isg(viol, 0.0)
-            viol = repair!(inst, params, scen, lp, rm_cands, viol)
-        end
-
-        cost = 0.0
-        if iseq(viol, 0.0)
-            cost, _ = 
-                    comp_penalized_cost(inst, params, scen, lp, cache, in_cands)
+            set_time_limit!(params, lp, start_time)
+            viol, reinserted = repair!(inst, params, scen, lp, rm_cands, viol)
         end
 
         has_impr = false
-        if iseq(viol, 0.0) && isl(cost, best_cost)
-            has_impr = true
-            st = Status("bin", length(rm_cands), inst.num_K, 
-                        cost, init_cost, start_time)
-            @infov 2 log(st)
+        if iseq(viol, 0.0)
+            union!(in_cands, reinserted)
+            cost, _ = 
+                    comp_penalized_cost(inst, params, scen, lp, cache, in_cands)
+            
+            if isl(cost, best_cost)
+                has_impr = true
+                it_wo_impr = 0
+                st = Status("bin it:$it", length(rm_cands), inst.num_K, 
+                            cost, init_cost, start_time)
+                @infov 2 log(st)
 
-            best_rm = rm_cands
-            best_cost = cost
+                best_rm = rm_cands
+                best_cost = cost
 
-            # @infov 2 "rm_ratio:$rm_ratio -> $(rm_ratio + 0.5 * delta) " * 
-            #             "num_cands:$num_cands"
-            rm_ratio += 0.5 * delta
-        else
+                # @infov 2 "rm_ratio:$rm_ratio -> $(rm_ratio + 0.5 * delta) " * 
+                #             "num_cands:$num_cands"
+                rm_ratio += 0.5 * delta
+            end
+        end
+
+        if !has_impr
+            it_wo_impr += 1
+            # Since we do not know which lines were removed from rm_cands, 
+            # restart the inserted lines in the lp model
+            update_lp!(inst, params, lp, inserted, false)
             # @infov 2 "rm_ratio:$rm_ratio -> $(rm_ratio - 0.5 * delta) " * 
             #             "num_cands:$num_cands"
             rm_ratio -= 0.5 * delta
@@ -94,21 +100,21 @@ function binary_search!(inst::Instance,
         num_prev_cands = num_cands
         num_cands = length(rm_cands)
         it += 1
-        if has_impr
-            it_wo_impr = 0
-        else
-            it_wo_impr += 1
-        end
     end
+    has_reached_stop(params, it, it_wo_impr, 
+                     num_prev_cands, rm_cands, start_time, true)
+    JuMP.set_attribute(lp.jump_model, "TimeLimit", GRB_INFINITY)
     setdiff!(inserted, best_rm)
     union!(removed, best_rm)
 
     if params.debugging_level == 1
-        @assert length(all_cands) == length(inserted) + length(removed)
-        @assert length(setdiff(all_cands, union(inserted, removed))) == 0
+        na = length(all_cands)
+        ni = length(inserted)
+        nr = length(removed)
+        @assert na == ni + nr "Num cands differ $na != $ni + $nr"
     end
     
-    st = Status("bin", num_ins_start - length(inserted), inst.num_K, 
+    st = Status("bin it:$it", num_ins_start - length(inserted), inst.num_K, 
                 best_cost, init_cost, start_time)
     @info log(st)
 
@@ -125,8 +131,10 @@ function repair!(inst::Instance,
     if !has_values(lp.jump_model)
         optimize!(lp.jump_model)
     end
+
+    reinserted = Set{CandType}()
     if termination_status(lp.jump_model) != MOI.OPTIMAL
-        return best_viol
+        return best_viol, reinserted
     end
 
     s_vals = get_values(lp.s)
@@ -137,24 +145,21 @@ function repair!(inst::Instance,
         
         add_lines!(inst, params, lp, rein_cands, true)
 
-        viol = Inf64
-        if termination_status(lp.jump_model) == MOI.OPTIMAL
-            viol = comp_viol(lp)
-        end
-
+        viol = comp_viol(lp)
         if isl(viol, best_viol)
             setdiff!(removed, rein_cands)
+            union!(reinserted, rein_cands)
 
             best_viol = viol
             s_vals = get_values(lp.s)
             rein_cands = select_with_viol(inst, params, s_vals, removed)
         else
             # The inserted candidates make the solution worse
-            rm_lines!(inst, params, lp, rein_cands, true)
+            # rm_lines!(inst, params, lp, rein_cands, true)
             break
         end
         it += 1
     end
 
-    return best_viol
+    return best_viol, reinserted
 end

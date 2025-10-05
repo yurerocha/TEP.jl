@@ -7,11 +7,9 @@ using PowerModels
 # using Profile, PProf
 using Serialization
 
-params = TEP.Parameters()
-
 # start_file = 38
 start_file = 38
-end_file = 61 # 61
+end_file = 42 # 61
 dir = "submodules/pglib-opf"
 scen = 1
 
@@ -33,13 +31,13 @@ skip = ["pglib_opf_case8387_pegase.m"]
 project_dir = dirname(Base.active_project())
 parallel_script = joinpath(@__DIR__, "parallel_bs_pglibopf.jl")
 
-# test_params = [[it, it_wo_impr] for it in [10, 15, 20], it_wo_impr in [1, 3, 5]]
+# test_params = [[it, it_wo_impr] for it in [5, 10, 15], it_wo_impr in [1]]
 # test_params = [[cands_per_batch, rcl_rat] for cands_per_batch in [5e-4, 1e-3, 5e-3], rcl_rat in [1.0]]
-test_params = [[cands_per_batch, rcl_rat] for cands_per_batch in [1e-2], rcl_rat in [0.75]]
+# test_params = [[cands_per_batch, rcl_rat] for cands_per_batch in [0.25e-2], rcl_rat in [1.0]]
 
-for tp in test_params
-    log_dir = "test/tuning/bs/test$(tp[1])_$(tp[2])"
-    log_file = "$log_dir/linear$(tp[1])_$(tp[2]).md"
+for tp in [20, 5]
+    log_dir = "test/tuning/bs/test$tp"
+    log_file = "$log_dir/log$tp.md"
     try
         TEP.rm_dir(log_dir)
     catch e
@@ -47,14 +45,15 @@ for tp in test_params
     end
     TEP.log_header(log_file)
 
-    # params.remove_repair.max_it = tp[1]
-    # params.remove_repair.num_max_it_wo_impr = tp[2]
+    # params.binary_search.max_it = tp[1]
+    # params.binary_search.num_max_it_wo_impr = tp[2]
 
     # params.beam_search.candidates_per_batch_mult = tp[1]
-    params.beam_search.restricted_list_ratio = tp[2]
+    # params.beam_search.restricted_list_ratio = tp[2]
 
     for (i, file) in enumerate(files[start_file:end_file])
-        params.beam_search.candidates_per_batch_mult = tp[1]
+        params = TEP.Parameters()
+        params.beam_search.num_max_it_wo_impr = tp
         if file in skip
             TEP.log(params, "Skipping instance $file")
             continue
@@ -67,7 +66,7 @@ for tp in test_params
         params.log_file = "$log_dir/$file"
         
         inst = TEP.build_instance(params, filepath)
-        try
+        # try
             lp = TEP.build_lp(inst, params, scen)
             cache = TEP.WorkerCache(TEP.Cache(inst, params))
             inserted = Set{TEP.CandType}(keys(inst.K))
@@ -81,7 +80,7 @@ for tp in test_params
             # @profile inserted = TEP.run_serial_bs!(inst, params, scen, lp, cache, 
             #                                   inserted, removed, cost, start_time)
             # pprof()
-            inserted, el = TEP.run_serial_bs!(inst, params, scen, lp, cache, 
+            el, inserted = TEP.run_serial_bs!(inst, params, scen, lp, cache, 
                                     inserted, removed, init_cost, start_time)
             cost, _ = TEP.comp_penalized_cost(inst, params, scen, 
                                                 lp, cache, inserted)
@@ -103,10 +102,10 @@ for tp in test_params
             # end
 
             TEP.log_instance(log_file, file, inst, results)
-        catch e
-            @warn e
-            TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
-        end
+        # catch e
+        #     @warn e
+        #     TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
+        # end
     end
 end
 

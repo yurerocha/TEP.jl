@@ -452,7 +452,7 @@ function get_state_values(inst::Instance, lp::LPModel, inserted)
     end
     y = lp.jump_model.ext[:state].y
 
-    return State(x, value.(y))
+    return State(x, JuMP.value.(y))
 end
 
 """

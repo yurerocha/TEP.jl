@@ -35,6 +35,11 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     is_global_feas = false
     elapsed_time = time() - start_time
     it = 1
+
+    # jqm_comp_costs!(inst, params, cache, it, controller, start_time)
+    # ph_cost, is_global_feas, lb_best_cost, ub_best_cost = 
+    #     update_cache_start_and_best_sols!(inst, params, cache, const_infinite, 
+    #                                       false, const_infinite, const_infinite)
     while true
         for scen in 1:inst.num_scenarios
             tl = comp_bs_time_limit(inst, params, time() - start_time)
@@ -97,17 +102,9 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         log_status(inst, cache)
         @info "ph time(s):$(time() - start_time)"
 
-        # TODO Colocar a função a seguir (update_cache_best_sol) e a próxima 
-        # (update_cache_sol_ub_feas) como uma só.
-        ph_cost, is_feas, lb_best_cost, ub_best_cost = 
+        ph_cost, is_global_feas, lb_best_cost, ub_best_cost = 
             update_cache_start_and_best_sols!(inst, params, cache, ph_cost, 
                                     is_global_feas, lb_best_cost, ub_best_cost)
-        if is_feas
-            is_global_feas = true
-            l = length(cache.sol_ub.feas_insert)
-            update_cache_sol_ub_feas!(inst, cache)
-            @info "update feas insert $l -> $(length(cache.sol_ub.feas_insert))"
-        end
 
         elapsed_time = time() - start_time
         if isl(cache.best_convergence_delta, 
@@ -267,6 +264,11 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                     if has_mip_state_vals
                         state_values = get_state_values(mip)
                     else
+                        if params.debugging_level == 1
+                            is_opt = JuMP.termination_status(lp.jump_model) == 
+                                        MOI.OPTIMAL
+                            @assert is_opt "Not opt scen#$(msg.scen)"
+                        end
                         state_values = get_state_values(inst, lp, inserted)
                     end
                 end

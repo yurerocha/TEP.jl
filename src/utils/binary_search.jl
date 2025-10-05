@@ -1,13 +1,21 @@
+function set_time_limit!(params::Parameters, lp::LPModel, start_time::Float64)
+    el = time() - start_time
+    tl = max(params.binary_search.time_limit - el, 0.0)
+    JuMP.set_attribute(lp.jump_model, "TimeLimit", tl)
+end
+
 function has_reached_stop(params::Parameters, it::Int64, it_wo_impr::Int64, 
                          num_cands_prev_it::Int64, rm_cands::Set{CandType}, 
-                         start_time::Float64)
+                         start_time::Float64, is_log_en::Bool = false)
     c1 = it > params.binary_search.max_it
     c2 = it_wo_impr >= params.binary_search.num_max_it_wo_impr
     c3 = length(rm_cands) == num_cands_prev_it
     c4 = isempty(rm_cands)
     c5 = isg(time() - start_time, params.binary_search.time_limit)
 
-    @info "bin $c1 $c2 $c3 $c4 $c5"
+    if is_log_en
+        @info "bin $c1 $c2 $c3 $c4 $c5"
+    end
 
     return c1 || c2 || c3 || c4 || c5
 end
@@ -64,7 +72,7 @@ function select_with_viol(inst::Instance,
                           lines::Set{CandType})
     viols = Vector{Tuple{Any, Float64}}()
     for k in lines
-        j = k[1]
+        j = get_existing_line(k)
         if isg(s[k], 0.0)
             push!(viols, (k, s[k]))
         elseif isg(s[j], 0.0)
@@ -93,10 +101,9 @@ function rm_lines!(inst::Instance,
                    lines::Set{CandType}, 
                    is_opt_req::Bool = false)
     for k in lines
-        # if params.model.is_lp_model_s_var_set_req && !is_fixed(lp.s[k])
-        # if !is_fixed(lp.s[k])
-        #     fix(lp.s[k], 0.0; force = true)
-        # end
+        if !lp.has_fixed_s_vars && !is_fixed(lp.s[k])
+            fix(lp.s[k], 0.0; force = true)
+        end
 
         # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
         #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
@@ -131,10 +138,10 @@ function add_lines!(inst::Instance,
         # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
         # Attention! Beam search requires the s variables to be always fixed at 
         # zero
-        # if is_fixed(lp.s[k])
-        #     unfix(lp.s[k])
-        #     set_lower_bound(lp.s[k], 0.0)
-        # end
+        if !lp.has_fixed_s_vars && is_fixed(lp.s[k])
+            unfix(lp.s[k])
+            set_lower_bound(lp.s[k], 0.0)
+        end
 
         # if is_fixed(lp.f[k])
         #     unfix(lp.f[k])
