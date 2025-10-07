@@ -16,7 +16,7 @@ Base.@kwdef mutable struct InstanceParameters
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
     max_rand::Int64 = 100 # Max random value for the new cost (see text)
     num_candidates::Int64 = 2 # Number of candidates available per existing line
-    cost_mult::Float64 = 1e4 # Value multiplied by x to build the costs
+    cost_mult::Float64 = 1e2 # Value multiplied by x to build the costs
     ref_bus::Int64 = 1 # Default reference bus used when none is found
 end
 
@@ -27,7 +27,7 @@ end
 
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
-    penalty::Float64 = 1e2
+    penalty::Float64 = 1.0
     # is_lp_model_s_var_set_req = true
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
@@ -48,14 +48,14 @@ Base.@kwdef mutable struct BeamSearchParameters
     num_children_per_level_mult::Float64 = 0.5 # gamma
     candidates_per_batch_mult::Float64 = 5e-3 # 1.Cal. 0.25e-3, 5e-3, 1e-2: 5e-3
     num_max_it::Int64 = 2
-    num_max_it_wo_impr::Int64 = 10 # 2.Calibrar 5, 10, 15
+    num_max_it_wo_impr::Int64 = 15 # 2.Calibrar 5, 10, 15
     is_shuffle_en::Bool = true
     restricted_list_ratio::Float64 = 1.0 # 1.Calibrar 0.5, 0.75, 1.0: 1.0
 end
 
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     is_en::Bool = false
-    time_limit::Float64 = 3600.0
+    time_limit::Float64 = 7200.0
     num_threads::Int64 = 49
     rho::Float64 = 1.0
     is_sep_rho_en::Bool = false # Calibrar true, false
@@ -66,7 +66,7 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
 end
 
 Base.@kwdef mutable struct SolverParameters
-    time_limit::Float64 = 3600.0
+    time_limit::Float64 = 7200.0
     num_threads::Int64 = 1
     log_level::Int64 = 0
 end

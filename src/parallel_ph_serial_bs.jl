@@ -36,10 +36,17 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     elapsed_time = time() - start_time
     it = 1
 
-    # jqm_comp_costs!(inst, params, cache, it, controller, start_time)
-    # ph_cost, is_global_feas, lb_best_cost, ub_best_cost = 
-    #     update_cache_start_and_best_sols!(inst, params, cache, const_infinite, 
-    #                                       false, const_infinite, const_infinite)
+    @info "-------------------- it 0 --------------------"
+    jqm_comp_costs!(inst, params, cache, it, controller, start_time)
+    ph_cost, is_global_feas, lb_best_cost, ub_best_cost = 
+        update_cache_start_and_best_sols!(inst, params, cache, const_infinite, 
+                                          false, const_infinite, const_infinite)
+    @info "time to compute initial costs(s):$(time() - start_time)"
+    flush(io)
+
+    return elapsed_time, ph_cost, is_global_feas, 
+            lb_best_cost, ub_best_cost, cache.best_sol 
+    
     while true
         for scen in 1:inst.num_scenarios
             tl = comp_bs_time_limit(inst, params, time() - start_time)

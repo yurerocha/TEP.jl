@@ -4,9 +4,9 @@ using Random
 
 params = TEP.Parameters()
 
-start_file = 3 # 40
-end_file = 4 # 61
-log_dir = "test/b"
+start_file = 1 # 40
+end_file = 7 # 61
+log_dir = "test/tests2"
 log_file = "$log_dir/log.md"
 dir = "input_bin/"
 num_threads = params.progressive_hedging.num_threads
@@ -22,6 +22,16 @@ TEP.log_header(log_file)
 rng = Random.MersenneTwister(123)
 
 files = TEP.select_files(dir, end_file)
+
+
+files = ["pglib_opf_case3012wp_k.m",
+         "pglib_opf_case6495_rte.m",
+         "pglib_opf_case7336_epigrids.m",
+         "pglib_opf_case9241_pegase.m",
+         "pglib_opf_case10000_goc.m",
+         "pglib_opf_case13659_pegase.m"]
+
+
 # Sort files so that the smallest instances are solved first
 sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 # Run solver with binary decision variables
