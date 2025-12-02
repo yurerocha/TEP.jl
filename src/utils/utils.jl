@@ -178,8 +178,9 @@ function log_header(outputfile::String)
     #          "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNRBS (s) " * 
     #          "| Rm | RNRBS impr | BS (s) | Start UB | PH (s) | \n"
     # outstr *= "|:---"^21 * "| \n"
-    s = "| Instance | L | N | L/N | Best | LB | UB | Add  | Time | Feas | \n"
-    s *= "|:---"^10 * "| \n"
+    s = "| Instance | L | N | L/N | Best | LB | UB | Gap | Add  | Heur | Solver | Time " * 
+        "| Feas | \n"
+    s *= "|:---"^13 * "| \n"
     log(outputfile, s)
 
     return nothing
@@ -190,7 +191,7 @@ function get_keys_results()
     #         "status", "root_best_bound", "root_time", "lb", "ub", "gap", 
     #         "fix_start_time", "rnr_time", "rm_rat", "rnr_impr_rat", 
     #         "bs_time", "start_ub", "ph_time"]
-    return ["best", "lb", "ub", "add_rat", "time", "is_feas"]
+    return ["best", "lb", "ub", "gap", "add_rat", "heur_time", "solver_time", "time", "is_feas"]
 end
 
 """

@@ -44,8 +44,8 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     @info "time to compute initial costs(s):$(time() - start_time)"
     flush(io)
 
-    return elapsed_time, ph_cost, is_global_feas, 
-            lb_best_cost, ub_best_cost, cache.best_sol 
+    # return elapsed_time, ph_cost, is_global_feas, 
+    #         lb_best_cost, ub_best_cost, cache.best_sol 
     
     while true
         for scen in 1:inst.num_scenarios

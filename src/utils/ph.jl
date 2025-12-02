@@ -406,6 +406,7 @@ function update_cache_start_and_best_sols!(inst::Instance, params::Parameters,
     # 0 1 true
     # 1 0 false
     # 1 1 && isl
+    @info "status g_feas:$is_global_feas feas:$is_feas"
     if !is_global_feas && is_feas || 
         (is_global_feas == is_feas && isl(cost, best_cost))
         best_cost = cost

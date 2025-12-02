@@ -19,7 +19,7 @@ function config_log!(inst::Instance,
                      scen::Int64, 
                      tep::TEPModel)
     if params.model.optimizer == Gurobi.Optimizer
-        if params.solver.log_level == 0 || tep isa LPModel
+        if tep isa LPModel
             JuMP.set_silent(tep.jump_model)
             # set_attribute(tep.jump_model, "OutputFlag", 0)
         elseif params.solver.log_level == 1 || params.solver.log_level == 3
@@ -852,14 +852,14 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
 
     status = JuMP.termination_status(model)
     
-    lower_bound = const_infinite
+    upper_bound = const_infinite
     obj = const_infinite
     gap = const_infinite
     build_obj_rat = const_infinite
 
     # If the solver found a solution
     if JuMP.has_values(model)
-        lower_bound = JuMP.objective_value(model)
+        upper_bound = JuMP.objective_value(model)
         obj = JuMP.objective_value(model)
         if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED
             gap = 0.0
@@ -907,13 +907,13 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     end
 
     results = Dict(
-        "incumbent_time" => incumbent_time, 
-        "solve_time" => solve_time(model), 
-        "status" => status, 
-        "root_best_bound" => rt_best_bound, 
-        "root_time" => rt_runtime, 
-        "lower_bound" => lower_bound, 
-        "objective" => obj, 
+        # "incumbent_time" => incumbent_time, 
+        # "solve_time" => solve_time(model), 
+        # "status" => status, 
+        # "root_best_bound" => rt_best_bound, 
+        "lb" => upper_bound, 
+        "ub" => upper_bound, 
+        "best" => obj, 
         "gap" => gap
     )
 end
