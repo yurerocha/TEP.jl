@@ -22,7 +22,7 @@ function config_log!(inst::Instance,
                      scen::Int64, 
                      tep::TEPModel)
     if params.model.optimizer == Gurobi.Optimizer
-        if params.solver.log_level == 0 || tep isa LPModel
+        if tep isa LPModel
             JuMP.set_silent(tep.jump_model)
             # set_attribute(tep.jump_model, "OutputFlag", 0)
         elseif params.solver.log_level == 1 || params.solver.log_level == 3
