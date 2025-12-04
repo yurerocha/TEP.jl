@@ -31,6 +31,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
     ph_cost = const_infinite
     ph_viol = const_infinite
+    ph_viol = const_infinite
     lb_best_cost = const_infinite
     ub_best_cost = const_infinite
     is_global_feas = false
@@ -150,7 +151,10 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         set_state!(inst, mip)
 
         lp_with_slacks = build_lp(inst, params, current_model_scen, true)
+        set_state!(lp_with_slacks, lp_with_slacks.g)
+
         lp = build_lp(inst, params, current_model_scen, false)
+        set_state!(lp, lp.g)
 
         # Reset the number of threads to the default value
         params.solver.num_threads = num_threads
@@ -188,7 +192,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                                         comp_gen_costs!(inst, params, lp, msg)
                 elseif msg.cache.option == opt_run_integrated
                     # Run the integrated approach
-                    neigh_st, solver_rt, state_values = 
+                    inserted, neigh_st, solver_rt, state_values = 
                                 run_integrated!(inst, params, lp_with_slacks, 
                                                 lp, mip, msg, start_time)
                 end

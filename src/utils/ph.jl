@@ -76,6 +76,7 @@ end
 
 function log_status(inst::Instance, cache::Cache)
     solver_acc_rt = 0.0
+    solver_acc_rt = 0.0
     repair_count_use = 0
     repair_count_success = 0
     reinsert_count_use = 0
@@ -949,7 +950,7 @@ function run_integrated!(inst::Instance,
     inserted = msg.cache.inserted
     neigh_st = NeighborhoodStatus[]
     solver_rt = 0.0
-    state_values = nothing
+    state_values = State(Vector{Float64}(), Vector{Float64}())
 
     # Used in utils:bs.jl:comp_penalized_cost
     params.progressive_hedging.is_en = msg.it > 1
@@ -989,14 +990,18 @@ function run_integrated!(inst::Instance,
     if has_vals
         state_values = get_state_values(mip)
     else
-        state_values = get_state_values(inst, inserted)
+        update_lp!(inst, params, lp_with_slacks, inserted, true)
+
+        st = JuMP.termination_status(lp_with_slacks.jump_model)
+        @warn "status:$st scen:$(msg.scen)"
         if params.debugging_level == 1
-            update_lp!(inst, params, lp, inserted, true)
-            st = JuMP.termination_status(lp.jump_model)
-            @assert st == MOI.OPTIMAL "status:$st scen:$(msg.scen)"
+            is_opt = st == MOI.OPTIMAL
+            @assert is_opt "Not opt scen#$(msg.scen)"
         end
+        state_values = 
+                get_state_values(inst, lp_with_slacks, inserted)
     end
     @info "got state values in $(round(time() - t, digits = 2))"
 
-    return neigh_st, solver_rt, state_values
+    return inserted, neigh_st, solver_rt, state_values
 end

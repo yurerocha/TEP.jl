@@ -61,15 +61,25 @@ function binary_search!(inst::Instance,
     while !has_reached_stop(params, it, it_wo_impr, 
                             num_prev_cands, rm_cands, start_time)
         set_time_limit!(params, lp, start_time, params.binary_search.time_limit)
+                            num_prev_cands, rm_cands, init_time)
+        set_time_limit!(params, lp, init_time)
         
         rm_lines!(inst, params, lp, rm_cands, true)
         
         viol = comp_viol(lp)
         reinserted = Set{CandType}()
         if isg(viol, 0.0)
-            set_time_limit!(params, lp, start_time, 
-                            params.binary_search.time_limit)
-            viol, reinserted = repair!(inst, params, scen, lp, rm_cands, viol)
+            rp_count += 1
+            set_time_limit!(params, lp_with_slacks, init_time)
+            t = time()
+            update_lp!(inst, params, lp_with_slacks, inserted)
+            rm_lines!(inst, params, lp_with_slacks, rm_cands, true)
+            viol, reinserted = repair!(inst, params, scen, 
+                                       lp_with_slacks, rm_cands, viol)
+            rp_time += time() - t
+            if iseq(viol, 0.0)
+                rp_success += 1
+            end
         end
 
         has_impr = false
@@ -87,11 +97,9 @@ function binary_search!(inst::Instance,
                 end
                 has_impr = true
                 it_wo_impr = 0
-                LoggingExtras.withlevel(Info; verbosity = params.log_level) do
-                    st = Status("bin it:$it", length(rm_cands), inst.num_K, 
-                                cost, init_cost, start_time)
-                    @infov 2 log(st)
-                end
+                st = Status("bin it:$it", length(rm_cands), inst.num_K, 
+                            cost, init_cost, init_time)
+                @infov 2 log(st)
 
                 best_rm = rm_cands
                 best_cost = cost
@@ -135,9 +143,14 @@ function binary_search!(inst::Instance,
     st = Status("bin it:$it", init_in - length(inserted), inst.num_K, 
                 best_cost, init_cost, init_time)
     @info log(st)
-    @info "bin best cost:$best_cost"
 
-    return best_cost
+    rp_rat = rp_count > 0 ? rp_success / rp_count : 0.0
+    rp_neigh_st = NeighborhoodStatus(rp_time, rp_rat, rp_gap)
+    dr_neigh_st = NeighborhoodStatus(time() - init_time, 
+                                comp_rm_ratio(inst, length(inserted), init_in), 
+                                comp_gap(best_cost, init_cost))
+
+    return best_cost, rp_neigh_st, dr_neigh_st
 end
 
 function repair!(inst::Instance, 

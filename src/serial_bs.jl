@@ -7,23 +7,11 @@ function run_serial_bs!(inst::Instance,
                         inserted::Set{CandType}, 
                         removed::Set{CandType}, 
                         cost::Float64, 
-                        start_time::Float64)
-    params.binary_search.time_limit = 
-                        params.beam_search.time_limit - (time() - start_time)
-    num_ins_start = length(inserted)
-
-    # Compute BS improvement wrt the initial cost
-    start_cost = cost
-
-    cost = binary_search!(inst, params, scen, lp, cache, 
-                            inserted, removed, cost, start_time)
-    bin_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
-
-    # params.solver.log_level = 2
-    # lp = build_lp(inst, params, scen)
-    # @warn "aqui"
-
-    # readline()
+                        init_time::Float64)
+    bs_init_time = time()
+    init_in = length(inserted)
+    init_cost = cost
+    bin_rm_rat = (init_in - length(inserted)) / inst.num_K
     
     # Update time limit
     time_limit = params.beam_search.time_limit - (time() - init_time)
@@ -33,6 +21,7 @@ function run_serial_bs!(inst::Instance,
     init_in = length(inserted)
     num_in = length(inserted)
     best_cost = cost
+    init_cost = cost
 
     cache_in, cache_rm = init_cache_in_rm(inst)
     # Set the inserted lines according to cache_in and cache_rm
@@ -136,12 +125,11 @@ function run_serial_bs!(inst::Instance,
         end
     end
     # union!(inserted, Set(cache.fixed_x_variables))
-    JuMP.set_attribute(lp.jump_model, "TimeLimit", GRB_INFINITY)
-    update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
+    # update_lp!(inst, params, lp_with_slacks, cache_in, cache_rm, inserted)
 
-    @info "bs best cost:$best_cost"
-    
-    bs_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
+    bs_neigh_st = NeighborhoodStatus(time() - bs_init_time, 
+                            comp_rm_ratio(inst, length(inserted), init_in), 
+                            comp_gap(best_cost, init_cost))
 
-    return inserted, bin_rm_rat, bs_rm_rat 
+    return inserted, bs_neigh_st
 end

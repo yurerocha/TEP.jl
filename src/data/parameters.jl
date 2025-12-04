@@ -70,7 +70,7 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
 end
 
 Base.@kwdef mutable struct SolverParameters
-    time_limit::Float64 = 7200.0
+    time_limit::Float64 = 1200.0
     num_threads::Int64 = 1
     log_level::Int64 = 0
 end
