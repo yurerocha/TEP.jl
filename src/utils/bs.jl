@@ -250,7 +250,7 @@ function comp_g_cost(inst::Instance,
                      params::Parameters, 
                      scen::Int64, 
                      tep::TEPModel)
-    if JuMP.result_count(tep.jump_model) == 0
+    if JuMP.termination_status(tep.jump_model) != MOI.OPTIMAL
         return const_infinite
     end
 

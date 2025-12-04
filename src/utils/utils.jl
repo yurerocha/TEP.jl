@@ -178,8 +178,8 @@ function log_header(outputfile::String)
     #          "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNRBS (s) " * 
     #          "| Rm | RNRBS impr | BS (s) | Start UB | PH (s) | \n"
     # outstr *= "|:---"^21 * "| \n"
-    s = "| Instance | L | N | L/N | Start | Best | LB | UB | Gap | Add  " * 
-        "| Heur | Solver | Time | Feas | \n"
+    s = "| Instance | L | N | L/N | Best | LB | UB | Gap | Add  | Heur " * 
+        "| Solver | Time | Viol | Feas | \n"
     s *= "|:---"^14 * "| \n"
     log(outputfile, s)
 
@@ -191,8 +191,8 @@ function get_keys_results()
     #         "status", "root_best_bound", "root_time", "lb", "ub", "gap", 
     #         "fix_start_time", "rnr_time", "rm_rat", "rnr_impr_rat", 
     #         "bs_time", "start_ub", "ph_time"]
-    return ["start", "best", "lb", "ub", "gap", "add_rat", 
-            "heur_time", "solver_time", "time", "is_feas"]
+    return ["best", "lb", "ub", "gap", "add_rat", "heur_time", "solver_time", 
+            "time", "viol", "is_feas"]
 end
 
 """
@@ -518,12 +518,19 @@ function roundp(num, den, digits::Int64 = 2)
     return round(100.0 * num / den, digits = digits)
 end
 
-function set_time_limit!(params::Parameters, 
-                         lp::LPModel, 
-                         start_time::Float64, 
-                         time_limit::Float64)
-    el = time() - start_time
-    tl = max(time_limit - el, 0.0)
-    # tl = min(tl, params.solver.lp_time_limit)
-    JuMP.set_attribute(lp.jump_model, "TimeLimit", tl)
+"""
+    comp_gap(cost, prev_cost)
+
+Compute gap for max problem.
+"""
+function comp_gap(cost, prev_cost)
+    return 100.0 * (cost - prev_cost) / prev_cost
+end
+
+function comp_rm_ratio(inst::Instance, num_in, prev_num_in)
+    return (prev_num_in - num_in) / inst.num_K
+end
+
+function comp_time_limit(time_limit::Float64, start_time::Float64)
+    return  max(time_limit - (time() - start_time), 0.0)
 end
