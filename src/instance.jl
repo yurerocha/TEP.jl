@@ -7,7 +7,7 @@ function build_instance(params::Parameters, filepath::String)
     mpc = PowerModels.parse_file(filepath)
 
     if params.model.is_dcp_power_model_en
-        rm_g_nonlinear_coeffs!(mp_data)
+        rm_g_nonlinear_coeffs!(mpc)
     end
     
     I = build_buses(mpc)

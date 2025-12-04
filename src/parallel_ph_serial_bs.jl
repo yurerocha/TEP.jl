@@ -30,47 +30,33 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     Logging.global_logger(ConsoleLogger(io))
 
     ph_cost = const_infinite
+    ph_viol = const_infinite
     lb_best_cost = const_infinite
     ub_best_cost = const_infinite
     is_global_feas = false
-    elapsed_time = time() - start_time
     it = 1
 
     @info "-------------------- it 0 --------------------"
-    jqm_comp_costs!(inst, params, cache, it, controller, start_time)
-    ph_cost, is_global_feas, lb_best_cost, ub_best_cost = 
-        update_cache_start_and_best_sols!(inst, params, cache, const_infinite, 
-                                          false, const_infinite, const_infinite)
+    jqm_comp_gen_costs!(inst, params, cache, it, controller, start_time)
+    ph_cost, ph_viol, is_global_feas, lb_best_cost, ub_best_cost = 
+        update_cache_start_and_best_sols!(inst, params, cache, const_infinite,
+                                          const_infinite, false, 
+                                          const_infinite, const_infinite)
     @info "time to compute initial costs(s):$(time() - start_time)"
     flush(io)
 
-    return elapsed_time, ph_cost, is_global_feas, 
-            lb_best_cost, ub_best_cost, cache.best_sol 
+    elapsed_time = time() - start_time
+    if params.progressive_hedging.is_build_init_sol_en
+        JQM.send_termination_message()
+        JQM.mpi_finalize()
+        close(io)
+        return elapsed_time, ph_cost, ph_viol, is_global_feas, 
+                lb_best_cost, ub_best_cost, cache.best_sol
+    end
     
     while true
-        for scen in 1:inst.num_scenarios
-            tl = comp_bs_time_limit(inst, params, time() - start_time)
-            
-            wcache = WorkerCache(cache, run_method)
-            msg = ControllerMessage(wcache, it, scen, tl)
-            JQM.add_job_to_queue!(controller, msg)
-        end
-        while !has_finished_all_jobs(controller)
-            if !JQM.is_job_queue_empty(controller)
-                JQM.send_jobs_to_any_available_workers(controller)
-            end
-            if JQM.any_pending_jobs(controller)
-                job_answer = JQM.check_for_job_answers(controller)
-                if !isnothing(job_answer)
-                    msg = JQM.get_message(job_answer)
-                    update_cache_incumbent!(cache, msg)
-                    # update_cache_sol_costs_and_viols!(cache, msg)
-                    update_cache_status!(cache, msg)
-                end
-            end
-        end
-
         @info "-------------------- it $it --------------------"
+        jqm_run_integrated!(inst, params, cache, it, controller, start_time)
 
         # Update SEP-rho parameters
         update_cache_sep_rho_x_min_max!(inst, cache)
@@ -84,10 +70,10 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
         
         # Aggregation
         update_cache_x_hat!(inst, cache)
-        
+
         # Price update
         update_cache_omega!(inst, params, cache)
-        
+
         # Termination criterion
         update_cache_x_average!(inst, params, cache)
 
@@ -95,30 +81,23 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
         update_cache_best_convergence_delta!(inst, params, cache, it)
 
-        # TODO Implementar método que, ao final da iteração, já calcula os 
-        # custos e as violações das soluções lb e ub. Caso sejam inviáveis, 
-        # também já repara as soluções. Para isso, utilizar os workers.
-        # Implementar tudo como um único método. Dessa forma, não será mais 
-        # preciso duas iterações para calcular os custos. Na próxima it, já 
-        # passar os dados da melhor solução para utilizar como mipstart.
-
         jqm_repair_sols!(inst, params, cache, it, controller, start_time)
 
-        jqm_comp_costs!(inst, params, cache, it, controller, start_time)
+        jqm_comp_gen_costs!(inst, params, cache, it, controller, start_time)
 
         log_status(inst, cache)
         @info "ph time(s):$(time() - start_time)"
 
-        ph_cost, is_global_feas, lb_best_cost, ub_best_cost = 
+        ph_cost, ph_viol, is_global_feas, lb_best_cost, ub_best_cost = 
             update_cache_start_and_best_sols!(inst, params, cache, ph_cost, 
-                                    is_global_feas, lb_best_cost, ub_best_cost)
+                                              ph_viol, is_global_feas, 
+                                              lb_best_cost, ub_best_cost)
 
         elapsed_time = time() - start_time
         if isl(cache.best_convergence_delta, 
                params.progressive_hedging.convergence_eps)
             @info "convergence reached: $(cache.best_convergence_delta)"
             break
-            # break
         elseif isg(elapsed_time, params.progressive_hedging.time_limit)
             @info "ph time limit reached $(round(elapsed_time, digits = 2))"
             break
@@ -152,7 +131,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     end
     close(io)
 
-    return elapsed_time, ph_cost, is_global_feas, 
+    return elapsed_time, ph_cost, ph_viol, is_global_feas, 
             lb_best_cost, ub_best_cost, cache.best_sol 
 end
 
@@ -169,7 +148,10 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         mip = build_mip(inst, params, current_model_scen)
         set_state!(mip, mip.x, mip.g)
 
-        lp = build_lp(inst, params, current_model_scen)
+        lp_with_slacks = build_lp(inst, params, current_model_scen, true)
+        set_state!(lp_with_slacks, lp_with_slacks.g)
+
+        lp = build_lp(inst, params, current_model_scen, false)
         set_state!(lp, lp.g)
 
         # Reset the number of threads to the default value
@@ -186,106 +168,38 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             sol_info_lb = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
             sol_info_ub = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
             start_time = time()
-            bs_runtime = 0.0
-            solver_runtime = 0.0
-            bin_rm_rat = 0.0
-            bs_rm_rat = 0.0
+            solver_rt = 0.0
+            neigh_st = NeighborhoodStatus[]
             repair_st = (false, false)
             reinsert_st = (false, false, 0)
 
             io = open(get_log_filename(inst, params, msg.scen), "a")
-            # Logging.with_logger(ConsoleLogger(io[msg.scen])) do
             Logging.with_logger(ConsoleLogger(io)) do
-                # Update the model according to the current scenario
-                if msg.scen != current_model_scen
-                    # update_model!(inst, params, msg.scen, mip)
-                    update_model!(inst, params, msg.cache, msg.scen, lp)
-                    current_model_scen = msg.scen
-                end
 
-                if msg.cache.option == repair_sols
-                    # Repair both lower bound and upper bound solutions, if 
-                    # needed
-                    sol_info_lb.reinsert, lb_rep_st, lb_rein_st = 
-                                        repair!(inst, params, msg.cache, 
-                                                msg.scen, lp, msg.cache.sol_lb)
+                current_model_scen = 
+                                    update_models!(inst, params, lp_with_slacks, 
+                                                lp, msg, current_model_scen)
 
-                    sol_info_ub.reinsert, ub_rep_st, ub_rein_st = 
-                                        repair!(inst, params, msg.cache, 
-                                                msg.scen, lp, msg.cache.sol_ub)
-
-                    # Update tuples with results from both lb and ub repairs
-                    repair_st = map((a, b) -> a + b, lb_rep_st, ub_rep_st)
-                    reinsert_st = map((a, b) -> a + b, lb_rein_st, ub_rein_st)
-
-
-                elseif msg.cache.option == comp_g_costs
+                if msg.cache.option == opt_repair_sols
+                    # Repair solutions
+                    sol_info_lb, sol_info_ub, repair_st, reinsert_st = 
+                            repair_solutions!(inst, params, lp_with_slacks, msg)
+                elseif msg.cache.option == opt_comp_gen_costs
                     # Compute generation costs 
                     sol_info_lb, sol_info_ub = 
-                                    comp_sol_info_lb_ub!(inst, params, msg.scen, 
-                                                            lp, msg.cache)
-
-
-                elseif msg.cache.option == run_method
-                    @info "-------------------- it $(msg.it) " * 
-                            "--------------------"
-                    # Used in utils:bs.jl:comp_penalized_cost
-                    params.progressive_hedging.is_en = msg.it > 1
-                    
-                    params.beam_search.time_limit = msg.time_limit
-
-                    inserted = msg.cache.inserted
-                    # TODO Compute once in controller
-                    removed = setdiff(Set{CandType}(keys(inst.K)), inserted)
-                    cost = msg.cache.costs[msg.scen]
-
-                    bs_start_time = time()
-                    inserted, bin_rm_rat, bs_rm_rat = 
-                        run_serial_bs!(inst, params, msg.scen, lp, msg.cache, 
-                                        inserted, removed, cost, start_time)
-
-                    bs_runtime = time() - bs_start_time
-                    solver_runtime = 0.0
-                    
-                    tl = max(msg.time_limit - (time() - start_time), 0.0)
-
-                    has_mip_state_vals = false
-                    if isg(tl, 0.0)
-                        update_model!(inst, params, msg.cache, msg.scen, mip)
-
-                        # If feasible, continue the execution
-                        if fix_start!(inst, params, msg.scen, mip, inserted)
-                            el = time() - start_time
-                            tl = max(msg.time_limit - el, 0.0)
-
-                            set_attribute(mip.jump_model, "TimeLimit", tl)
-
-                            solver_runtime = 
-                                        @elapsed JuMP.optimize!(mip.jump_model)
-
-                            has_mip_state_vals = 
-                                        JuMP.result_count(mip.jump_model) > 0
-                        end
-                    end
-
-                    if has_mip_state_vals
-                        state_values = get_state_values(mip)
-                    else
-                        if params.debugging_level == 1
-                            is_opt = JuMP.termination_status(lp.jump_model) == 
-                                        MOI.OPTIMAL
-                            @assert is_opt "Not opt scen#$(msg.scen)"
-                        end
-                        state_values = get_state_values(inst, lp, inserted)
-                    end
+                                        comp_gen_costs!(inst, params, lp, msg)
+                elseif msg.cache.option == opt_run_integrated
+                    # Run the integrated approach
+                    inserted, neigh_st, solver_rt, state_values = 
+                                run_integrated!(inst, params, lp_with_slacks, 
+                                                lp, mip, msg, start_time)
                 end
                 # flush(io[msg.scen])
                 flush(io)
             end
             close(io)
 
-            status = ScenarioStatus(bs_runtime, solver_runtime, bin_rm_rat, 
-                                    bs_rm_rat, repair_st, reinsert_st)
+            status = ScenarioStatus(neigh_st, solver_rt, repair_st, reinsert_st)
             ret_msg = WorkerMessage(state_values, msg.it, msg.scen, sol_info_lb, 
                                     sol_info_ub, status)
 

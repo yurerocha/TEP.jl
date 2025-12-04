@@ -15,10 +15,11 @@ using LoggingExtras
 using MPI
 using OrderedCollections # OrderedDict
 using PowerModels
-# using Profile
-# using PProf
+using Profile
+using PProf
 using Random
 using SparseArrays
+using StatsPlots
 # External files in instance/ext
 using JobQueueMPI
 

@@ -9,6 +9,9 @@ function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
     # set_attribute(tep.jump_model, "DualReductions", 0)
     # set_attribute(tep.jump_model, "Method", 6)
     # set_attribute(tep.jump_model, "GURO_PAR_PDHGGPU", 1)
+    # set_attribute(tep.jump_model, "Method", 0)
+    # set_attribute(tep.jump_model, "BarHomogeneous", 1)
+    set_attribute(tep.jump_model, "Crossover", 0)
     config_log!(inst, params, scen, tep)
 
     return nothing
@@ -37,6 +40,7 @@ end
 function add_vars!(inst::Instance, 
                    params::Parameters, 
                    scen::Int64, 
+                   is_slacks_req::Bool, 
                    mip::MIPModel)
     for j in keys(inst.J)
         mip.f[j] = @variable(mip.jump_model, base_name = "f[$j]")
@@ -53,22 +57,28 @@ function add_vars!(inst::Instance,
     return nothing
 end
 
-function add_vars!(inst::Instance, params::Parameters, scen::Int64, lp::LPModel)
+function add_vars!(inst::Instance, 
+                   params::Parameters, 
+                   scen::Int64, 
+                   is_slacks_req::Bool, 
+                   lp::LPModel)
     for j in keys(inst.J)
         lp.f[j] = @variable(lp.jump_model, base_name = "f[$j]")
         # if params.model.is_lp_model_s_var_set_req
+        if is_slacks_req
             lp.s[j] = @variable(lp.jump_model, 
                                 lower_bound = 0.0, 
                                 base_name = "s[$j]")
-        # end
+        end
     end
     for k in keys(inst.K)
         lp.f[k] = @variable(lp.jump_model, base_name = "f[$k]")
         # if params.model.is_lp_model_s_var_set_req
+        if is_slacks_req
             lp.s[k] = @variable(lp.jump_model, 
                                 lower_bound = 0.0, 
                                 base_name = "s[$k]")
-        # end
+        end
     end
 
     for i in inst.I
@@ -176,6 +186,7 @@ Add flow variables to the model and thermal limits constraints.
 """
 function add_thermal_limits_cons!(inst::Instance, 
                                   params::Parameters, 
+                                  is_slacks_req::Bool, 
                                   tep::TEPModel)
     # Existing lines
     for j in keys(inst.J)
@@ -199,26 +210,27 @@ slack variables.
 """
 function add_thermal_limits_cons!(inst::Instance, 
                                   params::Parameters, 
+                                  is_slacks_req::Bool, 
                                   lp::LPModel)
     # Existing lines
     for j in keys(inst.J)
-        # if params.model.is_lp_model_s_var_set_req
+        if is_slacks_req
             @constraint(lp.jump_model, -lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
             @constraint(lp.jump_model,  lp.f[j] <= lp.s[j] + inst.J[j].f_bar)
-        # else
-        #     JuMP.set_lower_bound(lp.f[j], -inst.J[j].f_bar)
-        #     JuMP.set_upper_bound(lp.f[j],  inst.J[j].f_bar)
-        # end
+        else
+            JuMP.set_lower_bound(lp.f[j], -inst.J[j].f_bar)
+            JuMP.set_upper_bound(lp.f[j],  inst.J[j].f_bar)
+        end
     end
     # Candidates
     for k in keys(inst.K)
-        # if params.model.is_lp_model_s_var_set_req
+        if is_slacks_req
             @constraint(lp.jump_model, -lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
             @constraint(lp.jump_model,  lp.f[k] <= lp.s[k] + inst.K[k].f_bar)
-        # else
-        #     JuMP.set_lower_bound(lp.f[k], -inst.K[k].f_bar)
-        #     JuMP.set_upper_bound(lp.f[k],  inst.K[k].f_bar)
-        # end
+        else
+            JuMP.set_lower_bound(lp.f[k], -inst.K[k].f_bar)
+            JuMP.set_upper_bound(lp.f[k],  inst.K[k].f_bar)
+        end
     end
 
     return nothing
@@ -354,7 +366,8 @@ end
 Add constraint on the reference bus theta value.
 """
 function add_ref_bus_cons!(inst::Instance, tep::TEPModel)
-    @constraint(tep.jump_model, tep.theta[inst.ref_bus] == 0.0)
+    # @constraint(tep.jump_model, tep.theta[inst.ref_bus] == 0.0)
+    JuMP.fix(tep.theta[inst.ref_bus], 0.0)
     
     return nothing
 end
@@ -363,6 +376,7 @@ end
     set_obj!(inst::Instance, 
              params::Parameters, 
              scen::Int64, 
+             is_slacks_req::Bool, 
              is_build_obj_req::Bool, 
              tep::TEPModel)
 
@@ -371,6 +385,7 @@ Set the objective to minimize the costs of expanding the network.
 function set_obj!(inst::Instance, 
                   params::Parameters, 
                   scen::Int64, 
+                  is_slacks_req::Bool, 
                   is_build_obj_req::Bool, 
                   tep::TEPModel)
     # Cost of building new candidate lines
@@ -394,6 +409,8 @@ end
     set_obj!(inst::Instance, 
              params::Parameters, 
              scen::Int64, 
+             is_slacks_req::Bool, 
+             is_build_obj_req::Bool, 
              lp::LPModel)
 
 Set the objective to minimize the slacks.
@@ -401,21 +418,26 @@ Set the objective to minimize the slacks.
 function set_obj!(inst::Instance, 
                   params::Parameters, 
                   scen::Int64, 
+                  is_slacks_req::Bool, 
                   is_build_obj_req::Bool, 
                   lp::LPModel)
     # Generation costs
-    pen = 0.0
+    lambda = 0.0
+    g_obj = AffExpr(0.0)
     for k in keys(lp.g)
         g_info = inst.scenarios[scen].G[k]
-        add_to_expression!(lp.obj, comp_g_obj(params, lp.g[k], g_info.costs))
+        add_to_expression!(g_obj, comp_g_obj(params, lp.g[k], g_info.costs))
         # pen = max(pen, comp_largest_g(params, c, 
         #                               inst.scenarios[scen].G[k].upper_bound))
-        pen = max(pen, comp_max_g_obj_value(params, g_info))
+        lambda = max(lambda, comp_max_g_obj_value(params, g_info))
     end
-    pen *= params.model.penalty
-    # if params.model.is_lp_model_s_var_set_req
-        add_to_expression!(lp.obj, sum([pen * s for s in values(lp.s)]))
-    # end
+    lambda = round(Int64, params.model.penalty * lambda)
+    lambda = 1000.0
+    if is_slacks_req
+        add_to_expression!(lp.obj, sum([lambda * s for s in values(lp.s)]))
+    else
+        add_to_expression!(lp.obj, g_obj)
+    end
 
     @objective(lp.jump_model, Min, lp.obj)
     
@@ -461,16 +483,18 @@ function comp_max_g_obj_value(params::Parameters, g_info::GeneratorInfo)
     elseif l == 2 || !params.model.is_dcp_power_model_en
         # When is_dcp_power_model_en == false, the objective function is, at 
         # most, linear in terms of g.
-        return max(g_info.costs[1], g_info.costs[2]*g_info.upper_bound)
+        # return max(g_info.costs[1], g_info.costs[2]*g_info.upper_bound)
+        return g_info.costs[2] * g_info.upper_bound
     else
         if l > 3
             log(params, 
                 "Length of costs > 3, but quadratic polynomial considered", 
                 true)
         end
-        return maximum([g_info.costs[1], 
-                        g_info.costs[2]*g_info.upper_bound, 
-                        g_info.costs[3]*g_info.upper_bound^2])
+        # return maximum([g_info.costs[1], 
+        #                 g_info.costs[2]*g_info.upper_bound, 
+        #                 g_info.costs[3]*g_info.upper_bound^2])
+        return g_info.costs[2] * g_info.upper_bound
     end
 end
 
@@ -561,11 +585,36 @@ end
 """
     comp_viol(lp::LPModel)
 
-Compute violation as the sum of values of slack variables.
+Compute the violation as the sum of values of slack variables.
 """
 function comp_viol(lp::LPModel)
     if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
-        sum(JuMP.value(s) for s in values(lp.s))
+        return sum(JuMP.value(s) for s in values(lp.s); init = 0.0)
+    else
+        return const_infinite
+    end
+end
+
+"""
+    comp_relative_viol(inst::Instance, lp::LPModel)
+
+Compute the relative violation.
+"""
+function comp_relative_viol(inst::Instance, lp::LPModel)
+    if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
+        # return sum(JuMP.value(lp.s[j]) / inst.J[j].f_bar for j in keys(inst.J); 
+        #            init = 0.0)
+        #     + sum(JuMP.value(lp.s[k]) / inst.K[k].f_bar for k in keys(inst.K); 
+        #           init = 0.0)
+        viol = 0.0
+        for s in keys(lp.s)
+            if s in keys(inst.J)
+                viol += JuMP.value(lp.s[s]) / inst.J[s].f_bar
+            else
+                viol += JuMP.value(lp.s[s]) / inst.K[s].f_bar
+            end
+        end
+        return viol
     else
         return const_infinite
     end
@@ -579,7 +628,7 @@ Compute violation as the sum of the slack variables, and the maximum violation.
 function comp_viol_and_max(lp::LPModel)
     if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
         vals = [JuMP.value(s) for s in values(lp.s)]
-        return sum(vals), maximum(vals)
+        return sum(vals; init = 0.0), maximum(vals)
     else
         return const_infinite, const_infinite
     end
@@ -852,14 +901,14 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
 
     status = JuMP.termination_status(model)
     
-    lower_bound = const_infinite
+    upper_bound = const_infinite
     obj = const_infinite
     gap = const_infinite
     build_obj_rat = const_infinite
 
     # If the solver found a solution
     if JuMP.has_values(model)
-        lower_bound = JuMP.objective_value(model)
+        upper_bound = JuMP.objective_value(model)
         obj = JuMP.objective_value(model)
         if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED
             gap = 0.0
@@ -907,13 +956,13 @@ function solve!(inst::Instance, params::Parameters, mip::MIPModel)
     end
 
     results = Dict(
-        "incumbent_time" => incumbent_time, 
-        "solve_time" => solve_time(model), 
-        "status" => status, 
-        "root_best_bound" => rt_best_bound, 
-        "root_time" => rt_runtime, 
-        "lower_bound" => lower_bound, 
-        "objective" => obj, 
+        # "incumbent_time" => incumbent_time, 
+        # "solve_time" => solve_time(model), 
+        # "status" => status, 
+        # "root_best_bound" => rt_best_bound, 
+        "lb" => upper_bound, 
+        "ub" => upper_bound, 
+        "best" => obj, 
         "gap" => gap
     )
 end

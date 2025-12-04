@@ -1,28 +1,27 @@
 function run_serial_bs!(inst::Instance, 
                         params::Parameters, 
                         scen::Int64, 
+                        lp_with_slacks::LPModel, 
                         lp::LPModel, 
                         cache::WorkerCache, 
                         inserted::Set{CandType}, 
                         removed::Set{CandType}, 
                         cost::Float64, 
-                        start_time::Float64)
-    params.binary_search.time_limit = 
-                        params.beam_search.time_limit - (time() - start_time)
-    num_ins_start = length(inserted)
-    cost = binary_search!(inst, params, scen, lp, cache, 
-                            inserted, removed, cost, start_time)
-    bin_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
+                        init_time::Float64)
+    bs_init_time = time()
+    init_in = length(inserted)
+    init_cost = cost
+    bin_rm_rat = (init_in - length(inserted)) / inst.num_K
     
     # Update time limit
-    time_limit = params.beam_search.time_limit - (time() - start_time)
+    time_limit = params.beam_search.time_limit - (time() - init_time)
 
     # fix_s_vars!(lp)
 
-    num_ins_start = length(inserted)
-    num_ins = length(inserted)
+    init_in = length(inserted)
+    num_in = length(inserted)
     best_cost = cost
-    start_cost = cost
+    init_cost = cost
 
     cache_in, cache_rm = init_cache_in_rm(inst)
     # Set the inserted lines according to cache_in and cache_rm
@@ -46,7 +45,7 @@ function run_serial_bs!(inst::Instance,
                 batches = 
                     select_batches!(inst, params, lp, node, cands_per_batch_m)
                 for lines in batches
-                    el = time() - start_time
+                    el = time() - init_time
                     if isg(el, time_limit)
                         has_reached_tl = true
                         break
@@ -77,14 +76,14 @@ function run_serial_bs!(inst::Instance,
                         has_impr = true
                         best_cost = cost
                         inserted = UB[end].inserted
-                        num_ins = length(UB[end].inserted)
+                        num_in = length(UB[end].inserted)
 
                         # Log info
                         LoggingExtras.withlevel(Info; 
                                                 verbosity = params.log_level) do
-                            st = Status("bs level:$it", num_ins_start - num_ins, 
-                                        num_ins_start, 
-                                        cost, start_cost, start_time)
+                            st = Status("bs level:$it", init_in - num_in, 
+                                        init_in, 
+                                        cost, init_cost, init_time)
                             @infov 2 log(st)
                         end
                     end
@@ -102,8 +101,8 @@ function run_serial_bs!(inst::Instance,
             if has_reached_tl
                 break
             elseif num_it_wo_impr >= params.beam_search.num_max_it_wo_impr
-                st = Status("bs", num_ins_start - num_ins, 
-                            num_ins_start, best_cost, start_cost, start_time)
+                st = Status("bs", init_in - num_in, 
+                            init_in, best_cost, init_cost, init_time)
                 @info log(st)
                 @info "max it wo impr reached"
                 break
@@ -116,7 +115,7 @@ function run_serial_bs!(inst::Instance,
             it += 1
         end
         if has_reached_tl
-            @info "bs tl reached $(round(time() - start_time, digits = 2))"
+            @info "bs tl reached $(round(time() - init_time, digits = 2))"
             break
         else
             @info "enable shuffle strategy"
@@ -124,10 +123,11 @@ function run_serial_bs!(inst::Instance,
         end
     end
     # union!(inserted, Set(cache.fixed_x_variables))
-    update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
+    # update_lp!(inst, params, lp_with_slacks, cache_in, cache_rm, inserted)
 
-    
-    bs_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
+    bs_neigh_st = NeighborhoodStatus(time() - bs_init_time, 
+                            comp_rm_ratio(inst, length(inserted), init_in), 
+                            comp_gap(best_cost, init_cost))
 
-    return inserted, bin_rm_rat, bs_rm_rat 
+    return inserted, bs_neigh_st
 end

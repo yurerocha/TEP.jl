@@ -75,14 +75,7 @@ function update_cache_status!(cache::Cache, msg::WorkerMessage)
 end
 
 function log_status(inst::Instance, cache::Cache)
-    bs_avg_rt = 0.0
-    solver_avg_rt = 0.0
-    bin_avg_rm_rat = 0.0
-    bin_min_rm_rat = 1.0
-    bin_min_rm_scen = 0
-    bs_avg_rm_rat = 0.0
-    bs_min_rm_rat = 1.0
-    bs_min_rm_scen = 0
+    solver_acc_rt = 0.0
     repair_count_use = 0
     repair_count_success = 0
     reinsert_count_use = 0
@@ -90,22 +83,9 @@ function log_status(inst::Instance, cache::Cache)
     reinsert_avg_it = 0
     reinsert_max_it = 0
     reinsert_max_it_scen = 0
-
+    
     for scen in eachindex(inst.scenarios)
-        bs_avg_rt += cache.status[scen].beam_search_runtime
-        solver_avg_rt += cache.status[scen].solver_runtime
-
-        bin_avg_rm_rat += cache.status[scen].bin_search_rm_ratio
-        if isl(cache.status[scen].bin_search_rm_ratio, bin_min_rm_rat)
-            bin_min_rm_rat = cache.status[scen].bin_search_rm_ratio
-            bin_min_rm_scen = scen
-        end
-
-        bs_avg_rm_rat += cache.status[scen].beam_search_rm_ratio
-        if isl(cache.status[scen].beam_search_rm_ratio, bs_min_rm_rat)
-            bs_min_rm_rat = cache.status[scen].beam_search_rm_ratio
-            bs_min_rm_scen = scen
-        end
+        solver_acc_rt += cache.status[scen].solver_runtime
         
         repair_count_use += cache.status[scen].repair[1]
         repair_count_success += cache.status[scen].repair[2]
@@ -119,21 +99,17 @@ function log_status(inst::Instance, cache::Cache)
         end
     end
 
-    bs_avg_rt /= inst.num_scenarios
-    solver_avg_rt /= inst.num_scenarios
-    total_avg_rt = bs_avg_rt + solver_avg_rt
+    rp_avg_rt = comp_it_status(inst, cache, 1, "rp")
+    dr_avg_rt = comp_it_status(inst, cache, 2, "dr")
+    dr_avg_rt -= rp_avg_rt
+    bs_avg_rt = comp_it_status(inst, cache, 3, "bs")
+    solver_avg_rt = solver_acc_rt / inst.num_scenarios
+    total_avg_rt = rp_avg_rt + dr_avg_rt + bs_avg_rt + solver_avg_rt
 
-    @info "avg runtime(%) bs:$(roundp(bs_avg_rt, total_avg_rt))" *
-            " solver:$(roundp(solver_avg_rt, total_avg_rt))"
-
-    bin_avg_rm_rat = roundp(bin_avg_rm_rat / inst.num_scenarios, 1.0)
-    bin_min_rm_rat = roundp(bin_min_rm_rat, 1.0)
-    bs_avg_rm_rat = roundp(bs_avg_rm_rat / inst.num_scenarios, 1.0)
-    bs_min_rm_rat = roundp(bs_min_rm_rat, 1.0)
-
-    @info "avg rm rat(%) bin:$bin_avg_rm_rat bs:$bs_avg_rm_rat"
-    @info "min rm rat(%) bin:$bin_min_rm_rat(scen#$bin_min_rm_scen) " * 
-            "bs:$bs_min_rm_rat(scen#$bs_min_rm_scen)"
+    @info "avg runtime(%) rp:$(roundp(rp_avg_rt, total_avg_rt))" *
+          " dr:$(roundp(dr_avg_rt, total_avg_rt))" *
+          " bs:$(roundp(bs_avg_rt, total_avg_rt))" *
+          " solver:$(roundp(solver_avg_rt, total_avg_rt))"
 
     if repair_count_use > 0
         @info "avg repair rat(%):" * 
@@ -149,8 +125,40 @@ function log_status(inst::Instance, cache::Cache)
                 "(scen#$reinsert_max_it_scen)"
     end
 
-
     return nothing
+end
+
+function comp_it_status(inst::Instance, cache::Cache, 
+                        idx_neigh::Int64, neigh_name::String)
+    acc_rt = 0.0
+    acc_rm_rat = 0.0
+    min_rm_rat = 1.0
+    min_rm_scen = 0
+    acc_gap = 0.0
+
+    for scen in eachindex(inst.scenarios)
+        neigh_st = cache.status[scen].neigh_status[idx_neigh]
+        acc_rt += neigh_st.runtime
+
+        acc_rm_rat += neigh_st.rm_ratio
+        if isl(neigh_st.rm_ratio, min_rm_rat)
+            min_rm_rat = neigh_st.rm_ratio
+            min_rm_scen = scen
+        end
+
+        acc_gap += neigh_st.gap
+    end
+
+    avg_rt = acc_rt / inst.num_scenarios
+    avg_rm_rat = roundp(acc_rm_rat, inst.num_scenarios)
+    min_rm_rat = roundp(min_rm_rat, 1.0)
+    avg_gap = roundp(acc_gap / inst.num_scenarios, 2)
+
+    @info "$neigh_name avg_rm_rat(%):$avg_rm_rat " * 
+          "min_rm_rat(%):$min_rm_rat(scen#$min_rm_scen) " * 
+          "avg_gap_impr(%):$avg_gap"
+
+    return avg_rt
 end
 
 """
@@ -370,6 +378,7 @@ function comp_ph_penalized_cost(inst::Instance,
     ub_is_feas = iseq(ub_viol, 0.0)
 
     best_cost = lb_cost
+    best_viol = lb_viol
     is_feas = lb_is_feas || ub_is_feas
     best_sol = cache.sol_lb.insert
     best_costs = cache.sol_lb.costs
@@ -378,13 +387,15 @@ function comp_ph_penalized_cost(inst::Instance,
     if (lb_is_feas == ub_is_feas && isl(ub_cost, lb_cost)) || 
             (!lb_is_feas && ub_is_feas)
         best_cost = ub_cost
+        best_viol = ub_viol
         best_sol = cache.sol_ub.insert
         best_costs = cache.sol_ub.costs
         cache.sol_lb.count_use -= 1
         cache.sol_ub.count_use += 1
     end
 
-    return best_cost, is_feas, lb_cost, ub_cost, copy(best_sol), best_costs
+    return best_cost, best_viol, is_feas, lb_cost, ub_cost, 
+            copy(best_sol), best_costs
 end
 
 """
@@ -397,9 +408,10 @@ Update the cache best solution and return the new costs.
 """
 function update_cache_start_and_best_sols!(inst::Instance, params::Parameters, 
                                 cache::Cache, best_cost::Float64, 
+                                best_viol::Float64, 
                                 is_global_feas::Bool, 
                                 lb_best_cost::Float64, ub_best_cost::Float64)
-    cost, is_feas, lb_cost, ub_cost, sol, costs = 
+    cost, viol, is_feas, lb_cost, ub_cost, sol, costs = 
                                     comp_ph_penalized_cost(inst, params, cache)
 
     # 0 0 && isl
@@ -409,6 +421,7 @@ function update_cache_start_and_best_sols!(inst::Instance, params::Parameters,
     if !is_global_feas && is_feas || 
         (is_global_feas == is_feas && isl(cost, best_cost))
         best_cost = cost
+        best_viol = viol
         cache.best_sol = copy(sol)
         if is_feas
             is_global_feas = true
@@ -428,7 +441,7 @@ function update_cache_start_and_best_sols!(inst::Instance, params::Parameters,
 
     @info "best cost:$(round(best_cost, digits = 2))"
 
-    return best_cost, is_global_feas, lb_best_cost, ub_best_cost
+    return best_cost, best_viol, is_global_feas, lb_best_cost, ub_best_cost
 end
 
 function update_cache_sol_ub_feas!(inst::Instance, cache::Cache)
@@ -558,7 +571,7 @@ return the new solution; otherwise, get the last feasible upper bound solution.
 """
 function repair!(inst::Instance, params::Parameters, cache::WorkerCache, 
                  scen::Int64, lp::LPModel, inserted::Set{CandType})
-    unfix_s_vars!(lp)
+    # unfix_s_vars!(lp)
 
     update_lp!(inst, params, lp, inserted)
     viol = comp_viol(lp)
@@ -645,17 +658,27 @@ function reinsert!(inst::Instance,
     return best_viol, (num_applied, num_successes, it)
 end
 
+"""
+    jqm_repair_sols!(inst::Instance, 
+                     params::Parameters, 
+                     cache::Cache, it::Int64, 
+                     controller, 
+                     start_time::Float64)
+                     
+Repair both LB and UB solutions in parallel using the job queue MPI.
+"""
 function jqm_repair_sols!(inst::Instance, 
                           params::Parameters, 
                           cache::Cache, it::Int64, 
                           controller, 
                           start_time::Float64)
+    t = time()
     num_lb_cands = length(cache.sol_lb.insert)
     num_ub_cands = length(cache.sol_ub.insert)
     for scen in 1:inst.num_scenarios
         tl = comp_bs_time_limit(inst, params, time() - start_time)
         
-        wcache = WorkerCache(cache, repair_sols)
+        wcache = WorkerCache(cache, opt_repair_sols)
         msg = ControllerMessage(wcache, it, scen, tl)
         JQM.add_job_to_queue!(controller, msg)
     end
@@ -671,6 +694,7 @@ function jqm_repair_sols!(inst::Instance,
             end
         end
     end
+    @info "repaired sols in $(round(time() - t, digits = 2))"
     @info "size total:$(inst.num_K) " * 
             "lb:$(num_lb_cands) -> $(length(cache.sol_lb.insert)) " * 
             "ub:$(num_ub_cands) -> $(length(cache.sol_ub.insert))"
@@ -688,15 +712,26 @@ function update_cache_repair!(cache::Cache, msg::WorkerMessage)
     return nothing
 end
 
-function jqm_comp_costs!(inst::Instance, 
-                         params::Parameters, 
-                         cache::Cache, it::Int64, 
-                         controller, 
-                         start_time::Float64)
+"""
+    jqm_comp_gen_costs!(inst::Instance, 
+                        params::Parameters, 
+                        cache::Cache, it::Int64, 
+                        controller, 
+                        start_time::Float64)
+
+Compute generation costs for both LB and UB solutions in parallel using the job 
+queue MPI.
+"""
+function jqm_comp_gen_costs!(inst::Instance, 
+                             params::Parameters, 
+                             cache::Cache, it::Int64, 
+                             controller, 
+                             start_time::Float64)
+    t = time()
     for scen in 1:inst.num_scenarios
         tl = comp_bs_time_limit(inst, params, time() - start_time)
         
-        wcache = WorkerCache(cache, comp_g_costs)
+        wcache = WorkerCache(cache, opt_comp_gen_costs)
         msg = ControllerMessage(wcache, it, scen, tl)
         JQM.add_job_to_queue!(controller, msg)
     end
@@ -712,6 +747,49 @@ function jqm_comp_costs!(inst::Instance,
             end
         end
     end
+    @info "computed g_costs in $(round(time() - t, digits = 2))"
+
+    return nothing
+end
+
+"""
+    jqm_run_integrated!(inst::Instance, 
+                        params::Parameters, 
+                        cache::Cache, it::Int64, 
+                        controller, 
+                        start_time::Float64)
+
+Run the integrated destroy-and-repair + beam search + solver approach in 
+parallel using the job queue MPI.
+"""
+function jqm_run_integrated!(inst::Instance, 
+                             params::Parameters, 
+                             cache::Cache, it::Int64, 
+                             controller, 
+                             start_time::Float64)
+    t = time()
+    for scen in 1:inst.num_scenarios
+        tl = comp_bs_time_limit(inst, params, time() - start_time)
+        
+        wcache = WorkerCache(cache, opt_run_integrated)
+        msg = ControllerMessage(wcache, it, scen, tl)
+        JQM.add_job_to_queue!(controller, msg)
+    end
+    while !has_finished_all_jobs(controller)
+        if !JQM.is_job_queue_empty(controller)
+            JQM.send_jobs_to_any_available_workers(controller)
+        end
+        if JQM.any_pending_jobs(controller)
+            job_answer = JQM.check_for_job_answers(controller)
+            if !isnothing(job_answer)
+                msg = JQM.get_message(job_answer)
+                update_cache_incumbent!(cache, msg)
+                # update_cache_sol_costs_and_viols!(cache, msg)
+                update_cache_status!(cache, msg)
+            end
+        end
+    end
+    @info "collected all solutions in $(round(time() - t, digits = 2))"
 
     return nothing
 end
@@ -725,34 +803,65 @@ function comp_costs_and_viol!(inst::Instance,
     update_lp!(inst, params, lp, inserted)
     cost, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, inserted)
 
-    return cost, g_cost, comp_viol(lp)
+    return cost, g_cost, comp_relative_viol(inst, lp)
 end
 
 """
-    comp_sol_info_lb_ub!(inst::Instance, 
-                         params::Parameters,
-                         scen::Int64, 
-                         lp::LPModel, 
-                         cache::WorkerCache)
+    update_models!(inst::Instance, 
+                   params::Parameters, 
+                   lp_with_slacks::LPModel, 
+                   lp::LPModel, 
+                   msg::ControllerMessage, 
+                   current_model_scen::Int64)
+                   
+Update both LP models, if needed, with the scenario data contained in the worker 
+message.
+"""
+function update_models!(inst::Instance, 
+                        params::Parameters, 
+                        lp_with_slacks::LPModel, 
+                        lp::LPModel, 
+                        msg::ControllerMessage, 
+                        current_model_scen::Int64)
+    t = time()
+
+    if msg.scen == current_model_scen
+        return msg.scen
+    end
+
+    update_model!(inst, params, msg.cache, msg.scen, lp_with_slacks)
+    update_model!(inst, params, msg.cache, msg.scen, lp)
+
+    @info "updated models in $(round(time() - t, digits = 2))"
+
+    return msg.scen
+end
+
+"""
+    comp_gen_costs!(inst::Instance, 
+                    params::Parameters,
+                    lp::LPModel, 
+                    msg::ControllerMessage)
 
 Compute generation costs of both lower and upper bound solutions.
 """
-function comp_sol_info_lb_ub!(inst::Instance, 
-                              params::Parameters,
-                              scen::Int64, 
-                              lp::LPModel, 
-                              cache::WorkerCache)
-    unfix_s_vars!(lp)
+function comp_gen_costs!(inst::Instance, 
+                         params::Parameters,
+                         lp::LPModel, 
+                         msg::ControllerMessage)
+    t = time()
 
-    cost, g_cost, viol = comp_costs_and_viol!(inst, params, scen, lp, 
-                                                cache, cache.sol_lb)
+    cost, g_cost, viol = comp_costs_and_viol!(inst, params, msg.scen, lp, 
+                                              msg.cache, msg.cache.sol_lb)
     sol_info_lb = SolutionInfo(cost, g_cost, viol, Set{CandType}())
     isg(viol, 0.0) && @info "lb viol:$viol"
     
-    cost, g_cost, viol = comp_costs_and_viol!(inst, params, scen, lp, 
-                                                cache, cache.sol_ub)
+    cost, g_cost, viol = comp_costs_and_viol!(inst, params, msg.scen, lp, 
+                                              msg.cache, msg.cache.sol_ub)
     sol_info_ub = SolutionInfo(cost, g_cost, viol, Set{CandType}())
     isg(viol, 0.0) && @info "ub viol:$viol"
+
+    @info "computed g_costs in $(round(time() - t, digits = 2))"
 
     return sol_info_lb, sol_info_ub
 end
@@ -773,4 +882,124 @@ end
 
 function update_cache_sol_average_perturb!(cache::Cache)
 
+end
+
+function repair_solutions!(inst::Instance, 
+                           params::Parameters, 
+                           lp_with_slacks::LPModel, 
+                           msg::ControllerMessage)
+    t = time()
+
+    sol_ilb = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
+    sol_iub = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
+
+    # Repair both lower bound and upper bound solutions, if 
+    # needed
+    sol_ilb.reinsert, lb_rep_st, lb_rein_st = 
+                                    repair!(inst, params, msg.cache, msg.scen, 
+                                            lp_with_slacks, msg.cache.sol_lb)
+
+    sol_iub.reinsert, ub_rep_st, ub_rein_st = 
+                                    repair!(inst, params, msg.cache, msg.scen, 
+                                            lp_with_slacks, msg.cache.sol_ub)
+
+    # Update tuples with results from both lb and ub repairs
+    repair_st = map((a, b) -> a + b, lb_rep_st, ub_rep_st)
+    reinsert_st = map((a, b) -> a + b, lb_rein_st, ub_rein_st)
+
+    @info "repaired sols in $(round(time() - t, digits = 2))"
+
+    return sol_ilb, sol_iub, repair_st, reinsert_st
+end
+
+function run_drbs!(inst::Instance, 
+                   params::Parameters, 
+                   lp_with_slacks::LPModel, 
+                   lp::LPModel, 
+                   msg::ControllerMessage, 
+                   inserted::Set{CandType}, 
+                   removed::Set{CandType}, 
+                   cost::Float64, 
+                   start_time::Float64)
+    scen = msg.scen
+    cache = msg.cache
+    params.binary_search.time_limit = 
+                        params.beam_search.time_limit - (time() - start_time)
+                                        
+    cost, rp_neigh_st, dr_neigh_st = binary_search!(inst, params, scen, 
+                                            lp_with_slacks, lp, cache, 
+                                            inserted, removed, cost, start_time)
+
+    inserted, bs_neigh_st = run_serial_bs!(inst, params, scen, lp_with_slacks, 
+                                lp, cache, inserted, removed, cost, start_time)
+
+    return inserted, NeighborhoodStatus[rp_neigh_st, dr_neigh_st, bs_neigh_st]
+end
+
+function run_integrated!(inst::Instance, 
+                         params::Parameters, 
+                         lp_with_slacks::LPModel, 
+                         lp::LPModel, 
+                         mip::MIPModel, 
+                         msg::ControllerMessage, 
+                         start_time::Float64)
+    @info "-------------------- it $(msg.it) --------------------"
+    t = time()
+    inserted = msg.cache.inserted
+    neigh_st = NeighborhoodStatus[]
+    solver_rt = 0.0
+    state_values = State(Vector{Float64}(), Vector{Float64}())
+
+    # Used in utils:bs.jl:comp_penalized_cost
+    params.progressive_hedging.is_en = msg.it > 1
+    params.beam_search.time_limit = msg.time_limit
+
+    # TODO Compute once in controller
+    removed = setdiff(Set{CandType}(keys(inst.K)), inserted)
+    cost = msg.cache.costs[msg.scen]
+    @info "prepared data in $(round(time() - t, digits = 2))"
+    t = time()
+    inserted, neigh_st = run_drbs!(inst, params, lp_with_slacks, 
+                                   lp, msg, inserted, removed, cost, start_time)
+
+    @info "ran drbs in $(round(time() - t, digits = 2))"
+    
+    tl = comp_time_limit(msg.time_limit, start_time)
+    has_vals = false
+    t = time()
+    if isg(tl, 0.0)
+        update_model!(inst, params, msg.cache, msg.scen, mip)
+        @info "updated mip in $(round(time() - t, digits = 2))"
+        t = time()
+        # If feasible, continue the execution
+        if fix_start!(inst, params, msg.scen, mip, inserted)
+            tl = comp_time_limit(msg.time_limit, start_time)
+
+            set_attribute(mip.jump_model, "TimeLimit", tl)
+
+            solver_rt = @elapsed JuMP.optimize!(mip.jump_model)
+
+            has_vals = JuMP.result_count(mip.jump_model) > 0
+        end
+    end
+    @info "solved mip in $(round(time() - t, digits = 2))"
+
+    t = time()
+    if has_vals
+        state_values = get_state_values(mip)
+    else
+        update_lp!(inst, params, lp_with_slacks, inserted, true)
+
+        st = JuMP.termination_status(lp_with_slacks.jump_model)
+        @warn "status:$st scen:$(msg.scen)"
+        if params.debugging_level == 1
+            is_opt = st == MOI.OPTIMAL
+            @assert is_opt "Not opt scen#$(msg.scen)"
+        end
+        state_values = 
+                get_state_values(inst, lp_with_slacks, inserted)
+    end
+    @info "got state values in $(round(time() - t, digits = 2))"
+
+    return inserted, neigh_st, solver_rt, state_values
 end

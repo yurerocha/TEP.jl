@@ -2,6 +2,7 @@
     binary_search!(inst::Instance, 
                    params::Parameters, 
                    scen::Int64, 
+                   lp_with_slacks::LPModel, 
                    lp::LPModel, 
                    cache::WorkerCache, 
                    inserted::Set{CandType}, 
@@ -13,13 +14,22 @@ Remove and repair procedure for building feasible initial solutions.
 function binary_search!(inst::Instance, 
                         params::Parameters, 
                         scen::Int64, 
+                        lp_with_slacks::LPModel, 
                         lp::LPModel, 
                         cache::WorkerCache, 
                         inserted::Set{CandType}, 
                         removed::Set{CandType}, 
                         cost::Float64, 
-                        start_time::Float64)
-    unfix_s_vars!(lp)
+                        init_time::Float64)
+    # unfix_s_vars!(lp)
+
+    init_in = length(inserted)
+    init_time = time()
+    init_cost = cost
+    rp_time = 0.0
+    rp_count = 0
+    rp_success = 0
+    rp_gap = 0.0
 
     if !JuMP.has_values(lp.jump_model)
         update_lp!(inst, params, lp, inserted)
@@ -36,9 +46,7 @@ function binary_search!(inst::Instance,
 
     all_cands = params.debugging_level == 1 ? union(inserted, removed) : Set()
 
-    num_ins_start = length(inserted)
     best_cost = cost
-    init_cost = cost
     best_rm = Set()
     # Binary search based
     rm_ratio = 0.5
@@ -51,29 +59,44 @@ function binary_search!(inst::Instance,
     num_prev_cands = 0
     num_cands = length(rm_cands)
     while !has_reached_stop(params, it, it_wo_impr, 
-                            num_prev_cands, rm_cands, start_time)
-        set_time_limit!(params, lp, start_time)
+                            num_prev_cands, rm_cands, init_time)
+        set_time_limit!(params, lp, init_time)
         
         rm_lines!(inst, params, lp, rm_cands, true)
         
         viol = comp_viol(lp)
         reinserted = Set{CandType}()
         if isg(viol, 0.0)
-            set_time_limit!(params, lp, start_time)
-            viol, reinserted = repair!(inst, params, scen, lp, rm_cands, viol)
+            rp_count += 1
+            set_time_limit!(params, lp_with_slacks, init_time)
+            t = time()
+            update_lp!(inst, params, lp_with_slacks, inserted)
+            rm_lines!(inst, params, lp_with_slacks, rm_cands, true)
+            viol, reinserted = repair!(inst, params, scen, 
+                                       lp_with_slacks, rm_cands, viol)
+            rp_time += time() - t
+            if iseq(viol, 0.0)
+                rp_success += 1
+            end
         end
 
         has_impr = false
         if iseq(viol, 0.0)
             union!(in_cands, reinserted)
+            if length(reinserted) > 0
+                add_lines!(inst, params, lp, reinserted, true)
+            end
             cost, _ = 
                     comp_penalized_cost(inst, params, scen, lp, cache, in_cands)
             
             if isl(cost, best_cost)
+                if length(reinserted) > 0
+                    rp_gap += comp_gap(cost, best_cost)
+                end
                 has_impr = true
                 it_wo_impr = 0
                 st = Status("bin it:$it", length(rm_cands), inst.num_K, 
-                            cost, init_cost, start_time)
+                            cost, init_cost, init_time)
                 @infov 2 log(st)
 
                 best_rm = rm_cands
@@ -102,7 +125,8 @@ function binary_search!(inst::Instance,
         it += 1
     end
     has_reached_stop(params, it, it_wo_impr, 
-                     num_prev_cands, rm_cands, start_time, true)
+                     num_prev_cands, rm_cands, init_time, true)
+    JuMP.set_attribute(lp_with_slacks.jump_model, "TimeLimit", GRB_INFINITY)
     JuMP.set_attribute(lp.jump_model, "TimeLimit", GRB_INFINITY)
     setdiff!(inserted, best_rm)
     union!(removed, best_rm)
@@ -114,11 +138,17 @@ function binary_search!(inst::Instance,
         @assert na == ni + nr "Num cands differ $na != $ni + $nr"
     end
     
-    st = Status("bin it:$it", num_ins_start - length(inserted), inst.num_K, 
-                best_cost, init_cost, start_time)
+    st = Status("bin it:$it", init_in - length(inserted), inst.num_K, 
+                best_cost, init_cost, init_time)
     @info log(st)
 
-    return best_cost
+    rp_rat = rp_count > 0 ? rp_success / rp_count : 0.0
+    rp_neigh_st = NeighborhoodStatus(rp_time, rp_rat, rp_gap)
+    dr_neigh_st = NeighborhoodStatus(time() - init_time, 
+                                comp_rm_ratio(inst, length(inserted), init_in), 
+                                comp_gap(best_cost, init_cost))
+
+    return best_cost, rp_neigh_st, dr_neigh_st
 end
 
 function repair!(inst::Instance, 

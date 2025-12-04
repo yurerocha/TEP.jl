@@ -221,14 +221,19 @@ end
 #     num_successes::Int64
 # end
 
+mutable struct NeighborhoodStatus
+    runtime::Float64
+    rm_ratio::Float64
+    gap::Float64
+end
+
 mutable struct ScenarioStatus
-    beam_search_runtime::Float64
+    neigh_status::Vector{NeighborhoodStatus}
     solver_runtime::Float64
-    bin_search_rm_ratio::Float64
-    beam_search_rm_ratio::Float64
     repair::Tuple{Int64, Int64} # applied, succeeded
     reinsert::Tuple{Int64, Int64, Int64} # applied, succeeded, iterations
 end
+
 
 mutable struct Cache
     it::Int64
@@ -287,11 +292,11 @@ mutable struct Cache
             Vector{Float64}(undef, inst.num_K), 
             Set{CandType}(), 
             zeros(Int64, inst.num_K), 
-            [ScenarioStatus(0.0, 0.0, 0.0, 0.0, (false, false), 
-                (false, false, 0)) for _ in eachindex(inst.scenarios)]) 
+            [ScenarioStatus(NeighborhoodStatus[], 0.0, (0, 0), 
+                (0, 0, 0)) for _ in eachindex(inst.scenarios)]) 
 end
 
-@enum WorkerOption repair_sols comp_g_costs run_method
+@enum WorkerOption opt_repair_sols opt_comp_gen_costs opt_run_integrated
 
 mutable struct WorkerCache
     option::WorkerOption
@@ -305,15 +310,15 @@ mutable struct WorkerCache
 
     # Construct the struct according to the worker option
     function WorkerCache(cache::Cache, option::WorkerOption)
-        if option == repair_sols
+        if option == opt_repair_sols
             return new(option, cache.scenarios, cache.x_hat, 
                         cache.sol_lb.insert, cache.sol_ub.insert, 
                         cache.start_sol, Vector{Float64}(), cache.rho) 
-        elseif option == comp_g_costs
+        elseif option == opt_comp_gen_costs
             return new(option, cache.scenarios, cache.x_hat, 
                         cache.sol_lb.insert, cache.sol_ub.insert, 
                         Set{CandType}(), Vector{Float64}(), cache.rho) 
-        elseif option == run_method
+        elseif option == opt_run_integrated
             return new(option, cache.scenarios, cache.x_hat, 
                         Set{CandType}(), Set{CandType}(), 
                         cache.start_sol, cache.start_costs, cache.rho) 

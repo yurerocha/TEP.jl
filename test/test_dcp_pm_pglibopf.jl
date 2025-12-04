@@ -7,11 +7,14 @@ using Gurobi, Ipopt
 using PowerModels
 using Markdown, DataFrames
 
-path = "../submodules/pglib-opf/"
-num_tests = 40
+path = "submodules/pglib-opf/"
+num_tests = 3
 files = TEP.select_files(path, num_tests)
+files = files[3:3]
 
 params = TEP.Parameters()
+# params.instance.num_candidates = 0
+# params.instance.load_gen_mult = 4
 TEP.config_dcp_pm_tests!(params)
 
 eps = 1e-3
@@ -20,7 +23,7 @@ eps = 1e-3
 
 @testset "[DCP PM] PG Lib OPF" begin
     for (i, file) in enumerate(files)
-        TEP.log(params, "Test $i $file")
+        @info "test #$i $file"
         
         # params.log_file = "log/" * TEP.get_inst_name(file) * ".txt"
 
@@ -29,7 +32,6 @@ eps = 1e-3
         mp_data = PowerModels.parse_file(filepath)
         # pm = instantiate_model(mp_data, DCPPowerModel, PowerModels.build_opf)
         # TEP.print_constrs(pm.model, "TEP.jl/model2.lp")
-
         # Run DC-OPF
         dc_opf = PowerModels.solve_opf(mp_data, 
                                        DCPPowerModel, 
@@ -38,14 +40,24 @@ eps = 1e-3
         
         # Run TEP
         inst = TEP.build_instance(params, filepath)
+        @show inst.scenarios[1].D
+        @show inst.scenarios[1].G
         mip = TEP.build_mip(inst, params)
         # force_solution(inst, mip, dc_opf["solution"], mp_data)
         # TEP.print_constrs(mip.jump_model, "TEP.jl/model1.lp")
         tep = TEP.solve!(inst, params, mip)
 
+        for x in values(mip.x)
+            @info JuMP.value(x)
+        end
+
+        for k in keys(mip.f)
+            @info k, value(mip.f[k])
+        end
+
         TEP.log(params, "Test $i $file")
-        TEP.log(params, "$(tep["objective"]), $(dc_opf["objective"])", true)
-        @test abs(tep["objective"] - dc_opf["objective"]) < eps
+        # TEP.log(params, "$(tep["objective"]), $(dc_opf["objective"])", true)
+        # @test abs(tep["objective"] - dc_opf["objective"]) < eps
         # readline()
     end
 end

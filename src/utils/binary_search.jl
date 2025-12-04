@@ -101,9 +101,9 @@ function rm_lines!(inst::Instance,
                    lines::Set{CandType}, 
                    is_opt_req::Bool = false)
     for k in lines
-        if !lp.has_fixed_s_vars && !is_fixed(lp.s[k])
-            fix(lp.s[k], 0.0; force = true)
-        end
+        # if !lp.has_fixed_s_vars && !is_fixed(lp.s[k])
+        #     fix(lp.s[k], 0.0; force = true)
+        # end
 
         # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
         #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
@@ -138,10 +138,10 @@ function add_lines!(inst::Instance,
         # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
         # Attention! Beam search requires the s variables to be always fixed at 
         # zero
-        if !lp.has_fixed_s_vars && is_fixed(lp.s[k])
-            unfix(lp.s[k])
-            set_lower_bound(lp.s[k], 0.0)
-        end
+        # if !lp.has_fixed_s_vars && is_fixed(lp.s[k])
+        #     unfix(lp.s[k])
+        #     set_lower_bound(lp.s[k], 0.0)
+        # end
 
         # if is_fixed(lp.f[k])
         #     unfix(lp.f[k])

@@ -16,7 +16,7 @@ Base.@kwdef mutable struct InstanceParameters
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
     max_rand::Int64 = 100 # Max random value for the new cost (see text)
     num_candidates::Int64 = 2 # Number of candidates available per existing line
-    cost_mult::Float64 = 1e2 # Value multiplied by x to build the costs
+    cost_mult::Float64 = 1e4 # Value multiplied by x to build the costs
     ref_bus::Int64 = 1 # Default reference bus used when none is found
 end
 
@@ -63,10 +63,11 @@ Base.@kwdef mutable struct ProgressiveHedgingParameters
     convergence_eps::Float64 = 1e-3
     lb_threshold::Float64 = 0.25
     penalty_mult::Float64 = 1e6
+    is_build_init_sol_en::Bool = false
 end
 
 Base.@kwdef mutable struct SolverParameters
-    time_limit::Float64 = 7200.0
+    time_limit::Float64 = 1200.0
     num_threads::Int64 = 1
     log_level::Int64 = 0
 end
