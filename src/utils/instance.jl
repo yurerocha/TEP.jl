@@ -223,3 +223,127 @@ function read_reference_bus(params::Parameters, mpc::Dict{String, Any})
 
     return ref_bus
 end
+
+"""
+    get_endpoints(inst::Instance, k::Any)
+
+Return the endpoints (from_bus, to_bus) of existing or candidate line k.
+"""
+function get_endpoints(inst::Instance, k::Any)
+    if k isa CandType
+        return k[1][2], k[1][3]
+    else 
+        return k[2], k[3]
+    end
+end
+
+function comp_cap_constraints(inst::Instance, scen::Int64)
+    count = 0
+    D = inst.scenarios[scen].D
+    G = inst.scenarios[scen].G
+    for d in keys(D)
+        cap = 0.0
+        for k in keys(inst.J)
+            c = get_endpoints(inst, k)
+            if c[1] == d || c[2] == d
+                cap += inst.J[k].f_bar
+            end
+        end
+        for g in keys(G)
+            if G[g].bus == d
+                cap += G[g].upper_bound
+            end
+        end
+        if isl(cap, D[d])
+            count += 1
+            @warn "Bus $d has capacity $cap and demand $(D[d])"
+        end
+    end
+    @info "Count cap cons: $count"
+    return nothing
+end
+
+"""
+    rm_unnecessary_candidate_circuits!(inst::Instance)
+
+Remove candidate circuits connecting incident to leaf nodes when the existing 
+lines are enough to handle power flow in and out of the nodes.
+"""
+function rm_unnecessary_candidate_circuits!(inst::Instance)
+    leaf_count = 0
+    rm_cands_count = 0
+
+    num_K = inst.num_K
+    for b in inst.I
+        max_cap = 0.0
+        incident_j = nothing
+        incidence_count = 0
+        # Reminder: in case of multiple existing lines, the node is not a leaf
+        for j in keys(inst.J)
+            ep = get_endpoints(inst, j)
+            if b in ep
+                max_cap += inst.J[j].f_bar
+                incident_j = j
+                incidence_count += 1
+                if incidence_count > 1
+                    break
+                end
+            end
+        end
+        # Multiple existing lines involving bus b
+        if incidence_count > 1
+            continue
+        end
+
+        leaf_count += 1
+        max_unserved_d = 0.0
+        max_available_g = 0.0
+        for scen in eachindex(inst.scenarios)
+            d = (b in keys(inst.scenarios[scen].D) ? 
+                                        inst.scenarios[scen].D[b] : 0.0)
+            g = 0.0
+            for gen in values(inst.scenarios[scen].G)
+                if gen.bus == b
+                    g += gen.upper_bound
+                end
+            end
+            max_unserved_d = max(d - g, max_unserved_d)
+            max_available_g = max(g - d, max_available_g)
+        end
+
+        if isl(max_unserved_d, max_cap) && isl(max_available_g, max_cap)
+            # @info "Rm cands involving bus $b " * 
+            #         "(max_unserved_d:$max_unserved_d " * 
+            #         "max_available_g:$max_available_g max_cap:$max_cap)"
+            rm_cands_count += 1
+            rm_candidate_circuits!(inst, incident_j)
+        end
+
+    end
+    # @info inst.name
+    # @info "Leaf nodes:$leaf_count rm:$(2*rm_cands_count) " * 
+    #         "total:$(inst.num_K)"
+    inst.key_to_index = Dict(k => i for (i, k) in enumerate(keys(inst.K)))
+    inst.costs = [inst.K[k].cost for k in keys(inst.K)]
+    inst.num_K = length(inst.K)
+
+    @warn "num of candidate circuits reduced $num_K -> $(inst.num_K)"
+
+    return nothing
+end
+
+function rm_candidate_circuits!(inst::Instance, incident_j::Tuple3I)
+    rm = Set{CandType}()
+
+    for k in keys(inst.K)
+        if k[1] == incident_j
+            push!(rm, k)
+        end
+    end
+
+    for k in rm
+        delete!(inst.K, k)
+    end
+
+    return nothing
+end

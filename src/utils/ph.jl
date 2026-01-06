@@ -434,10 +434,10 @@ function update_cache_start_and_best_sols!(inst::Instance, params::Parameters,
         ub_best_cost = ub_cost
     end
 
-    # if is_feas
+    if is_feas
         cache.start_sol = sol
         cache.start_costs = costs
-    # end
+    end
 
     @info "best cost:$(round(best_cost, digits = 2))"
 

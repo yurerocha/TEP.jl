@@ -295,15 +295,17 @@ function log(st::Status)
     return "$(st.name) rm:$(d[1]) impr:$(d[2]) t:$(d[3])"
 end
 
-"""
-    shift_to_existing_line(inst::Instance, params::Parameters, k::Int64)
+# Reimplementation required due to removal of some candidate circuits in the
+# preprocessing step.
+# """
+#     shift_to_existing_line(inst::Instance, params::Parameters, k::Int64)
 
-Map candidate line k to corresponding existing circuit.
-"""
-function map_to_existing_line(inst::Instance, params::Parameters, k::Int64)
-    return div(k - inst.num_J + params.instance.num_candidates - 1, 
-               params.instance.num_candidates)
-end
+# Map candidate line k to corresponding existing circuit.
+# """
+# function map_to_existing_line(inst::Instance, params::Parameters, k::Int64)
+#     return div(k - inst.num_J + params.instance.num_candidates - 1, 
+#                params.instance.num_candidates)
+# end
 
 """
     log_neigh_run(inst::Instance, 
