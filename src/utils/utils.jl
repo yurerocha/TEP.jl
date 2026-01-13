@@ -536,3 +536,19 @@ end
 function comp_time_limit(time_limit::Float64, start_time::Float64)
     return  max(time_limit - (time() - start_time), 0.0)
 end
+
+function get_bus_gen_cap(inst::Instance, scen::Int64, b::Int64)
+    g = 0.0
+
+    for gen in values(inst.scenarios[scen].G)
+        if gen.bus == b
+            g += gen.upper_bound
+        end
+    end
+
+    return g
+end
+
+function get_bus_load(inst::Instance, scen::Int64, b::Int64)
+    return haskey(inst.scenarios[scen].D, b) ? inst.scenarios[scen].D[b] : 0.0
+end
