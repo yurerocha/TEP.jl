@@ -29,8 +29,8 @@ function build_instance(params::Parameters,
         @assert isl(sumD, sum_ub)
     end
 
-    J = build_existing_circuits(params, mpc, cost_data)
-    K = build_candidate_circuits(params, J)
+    J, existing_circuits = build_existing_circuits(params, mpc)
+    K, candidate_circuits = build_candidate_circuits(params, J)
 
     ref_bus = read_reference_bus(params, mpc)
 
@@ -38,9 +38,15 @@ function build_instance(params::Parameters,
 
     key_to_idx = Dict(k => i for (i, k) in enumerate(keys(K)))
     costs = [K[k].cost for k in keys(K)]
-    return Instance(inst_name, I, J, K, 
+
+    inst = Instance(get_inst_name(filepath), I, J, K, 
+                    existing_circuits, candidate_circuits, 
                     key_to_idx, costs, 
                     length(I), length(J), length(K), 
                     ref_bus, 
                     scenarios, length(scenarios))
+
+    rm_unnecessary_candidate_circuits!(inst)
+   
+    return inst
 end
