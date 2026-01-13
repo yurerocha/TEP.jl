@@ -70,6 +70,10 @@ mutable struct Instance
     I::Set{Int64} # Buses
     J::Dict{Tuple3I, BranchInfo} # Existing lines
     K::Dict{CandType, BranchInfo} # Candidates
+    # Existing circuits between each pair of nodes
+    existing_circuits::Dict{Tuple{Int64, Int64}, Set{Tuple3I}}
+     # Candidate lines for each j
+    candidate_circuits::Dict{Tuple3I, Vector{CandType}}
     key_to_index::Dict{CandType, Int64}
     costs::Vector{Float64}
     # f_bar::Vector{Float64} # Capacity of circuits

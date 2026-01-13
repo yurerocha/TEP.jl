@@ -331,8 +331,8 @@ function add_fkl_cons!(inst::Instance,
         add_to_expression!(e, comp_existing_incident_flows(inst, tep, i))
         
         # Some buses may not have load or generation
-        d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
-        g = i in keys(tep.g_bus) ? tep.g_bus[i] : AffExpr(0.0)
+        d = haskey(inst.scenarios[scen].D, i) ? inst.scenarios[scen].D[i] : 0.0
+        g = haskey(tep.g_bus, i) ? tep.g_bus[i] : AffExpr(0.0)
 
         cons = @constraint(tep.jump_model, e + g == d, base_name = "fkl[$i]")
 
@@ -355,7 +355,7 @@ function update_fkl_cons_rhs!(inst::Instance,
                               scen::Int64, 
                               tep::TEPModel)
     for i in inst.I
-        d = i in keys(inst.scenarios[scen].D) ? inst.scenarios[scen].D[i] : 0.0
+        d = haskey(inst.scenarios[scen].D, i) ? inst.scenarios[scen].D[i] : 0.0
         JuMP.set_normalized_rhs(tep.fkl_cons[i], d)
     end
 end

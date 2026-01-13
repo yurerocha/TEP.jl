@@ -18,6 +18,7 @@ using PowerModels
 using Profile
 using PProf
 using Random
+using Serialization
 using SparseArrays
 using StatsPlots
 # External files in instance/ext
@@ -54,6 +55,7 @@ include("utils/ph.jl")
 include("utils/stochastic_instance.jl")
 include("utils/tests.jl")
 include("utils/utils.jl")
+include("utils/valid_inequalities.jl")
 
 include("main.jl")
 
@@ -68,5 +70,6 @@ include("binary_search.jl")
 include("serial_bs.jl")
 include("serial_ph.jl")
 include("stochastic_instance.jl")
+include("valid_inequalities.jl")
 
 end

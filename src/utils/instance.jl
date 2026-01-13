@@ -129,6 +129,7 @@ Build existing lines, gamma values and capacities of circuits.
 """
 function build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
     J = Dict{Tuple{Int64, Int64, Int64}, BranchInfo}()
+    existing_circuits = Dict{Tuple{Int64, Int64}, Set{Tuple3I}}()
     # min_gamma = 1e15
     # max_gamma = 0.0
     for b in mpc["branch"]
@@ -150,6 +151,20 @@ function build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
         end
 
         j = (dt["index"], dt["f_bus"], dt["t_bus"])
+
+        c = j[2:3]
+        if haskey(existing_circuits, c)
+            push!(existing_circuits[c], j)
+        else
+            existing_circuits[c] = Set{Tuple3I}([j])
+        end
+        c = reverse(c)
+        if haskey(existing_circuits, c)
+            push!(existing_circuits[c], j)
+        else
+            existing_circuits[c] = Set{Tuple3I}([j])
+        end
+
         gamma = comp_gamma(params, x, r)
         # min_gamma = min(min_gamma, gamma)
         # max_gamma = max(max_gamma, gamma)
@@ -160,7 +175,7 @@ function build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
     # @warn min_gamma, max_gamma
     # readline()
 
-    return J
+    return J, existing_circuits
 end
 
 """
@@ -173,19 +188,24 @@ function build_candidate_circuits(params::Parameters,
                                 J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo})
     # TODO: K and J with the same key format
     K = Dict{CandType, BranchInfo}()
+    candidate_circuits = Dict{Tuple3I, Vector{CandType}}()
     for (j, v) in J
         # Candidate circuits are copies of the existing ones
+        candidate_circuits[j] = CandType[]
         for l in 1:params.instance.num_candidates
-            K[(j, l)] = v
+            k = (j, l)
+            K[k] = v
             # Compute the new costs based on the gamma values
             c = params.instance.cost_mult * abs(v.x)
             # n = rand(params.rng, 1:params.instance.max_rand)
             # K[(j, l)].cost = c / (params.instance.num_candidates + 1) + c / n
-            K[(j, l)].cost = c / (params.instance.num_candidates + 1)
+            K[k].cost = c / (params.instance.num_candidates + 1)
+
+            push!(candidate_circuits[j], k)
         end
     end
 
-    return K
+    return K, candidate_circuits
 end
 
 """
@@ -299,14 +319,9 @@ function rm_unnecessary_candidate_circuits!(inst::Instance)
         max_unserved_d = 0.0
         max_available_g = 0.0
         for scen in eachindex(inst.scenarios)
-            d = (b in keys(inst.scenarios[scen].D) ? 
-                                        inst.scenarios[scen].D[b] : 0.0)
-            g = 0.0
-            for gen in values(inst.scenarios[scen].G)
-                if gen.bus == b
-                    g += gen.upper_bound
-                end
-            end
+            d = haskey(inst.scenarios[scen].D, b) ? 
+                                        inst.scenarios[scen].D[b] : 0.0
+            g = get_bus_gen_cap(inst, scen, b)
             max_unserved_d = max(d - g, max_unserved_d)
             max_available_g = max(g - d, max_available_g)
         end
@@ -343,6 +358,12 @@ function rm_candidate_circuits!(inst::Instance, incident_j::Tuple3I)
 
     for k in rm
         delete!(inst.K, k)
+        for i in eachindex(inst.candidate_circuits[incident_j])
+            if inst.candidate_circuits[incident_j][i] == k
+                deleteat!(inst.candidate_circuits[incident_j], i)
+                break
+            end
+        end
     end
 
     return nothing
