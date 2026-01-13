@@ -288,6 +288,9 @@ end
 
 Remove candidate circuits connecting incident to leaf nodes when the existing 
 lines are enough to handle power flow in and out of the nodes.
+
+This function can only be applied to multi-scenario planning after scenarios are
+built.
 """
 function rm_unnecessary_candidate_circuits!(inst::Instance)
     leaf_count = 0

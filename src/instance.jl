@@ -34,14 +34,10 @@ function build_instance(params::Parameters, filepath::String)
     key_to_idx = Dict(k => i for (i, k) in enumerate(keys(K)))
     costs = [K[k].cost for k in keys(K)]
 
-    inst = Instance(get_inst_name(filepath), I, J, K, 
+    return Instance(get_inst_name(filepath), I, J, K, 
                     existing_circuits, candidate_circuits, 
                     key_to_idx, costs, 
                     length(I), length(J), length(K), 
                     ref_bus, 
                     scenarios, length(scenarios))
-
-    rm_unnecessary_candidate_circuits!(inst)
-   
-    return inst
 end

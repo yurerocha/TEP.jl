@@ -99,6 +99,8 @@ function build_stochastic_instance(params::Parameters,
     if params.debugging_level == 1
         assert_feas_build_all(inst, params)
     end
+
+    rm_unnecessary_candidate_circuits!(inst)
     
     return inst
 end
