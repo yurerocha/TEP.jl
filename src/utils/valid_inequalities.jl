@@ -25,17 +25,18 @@ function add_fence_cuts!(inst::Instance,
                          neigh_buses::Set{Int64})
     sum_d = sum(get_bus_load(inst, scen, l) for l in node)
     if iseq(sum_d, 0.0)
-        return false
+        return nothing
     end
 
     sum_g = sum(get_bus_gen_cap(inst, scen, l) for l in node)
     if isl(sum_d, sum_g)
-        return false
+        return nothing
     end
 
     Smax = 0.0
     lhs = AffExpr(0.0)
     existing_cap = 0.0
+    fence_cons = FenceConstraints(Set{CandType}(), 0.0)
     for l in node
         for m in neigh_buses
             # No circuit between l and m
@@ -49,8 +50,11 @@ function add_fence_cuts!(inst::Instance,
                 existing_cap += inst.J[j].f_bar
 
                 if length(inst.candidate_circuits[j]) > 0 && n_bar_lm >= 1
-                    lhs += sum(mip.x[k] 
-                                for k in inst.candidate_circuits[j][1:n_bar_lm])
+                    # lhs += sum(mip.x[k] 
+                    #         for k in inst.candidate_circuits[j][1:n_bar_lm])
+                    for k in inst.candidate_circuits[j][1:n_bar_lm]
+                        push!(fence_cons.candidate_circuits, k)
+                    end
                 end
             end
         end
@@ -61,12 +65,13 @@ function add_fence_cuts!(inst::Instance,
         rhs = ceil(unserved_d / Smax)
         # @info "Cons: $lhs >= $rhs, unserved_d:$unserved_d Smax:$Smax" *
         #       " sum_d:$sum_d sum_g:$sum_g existing_cap:$existing_cap"
-        JuMP.@constraint(mip.jump_model, lhs >= rhs)
+        # JuMP.@constraint(mip.jump_model, lhs >= rhs)
         # readline()
-        return true
+        fence_cons.rhs = rhs
+        return fence_cons
     end
 
-    return false
+    return nothing
 end
 
 function comp_n_bar_lm(inst::Instance, 
@@ -82,4 +87,42 @@ function comp_n_bar_lm(inst::Instance,
                     Int64(ceil(unserved_d / Smax_lm)))
 
     return n_bar_lm
+end
+
+function push_fence_cons!(fence_cons::Vector{FenceConstraints}, 
+                          new_cons::FenceConstraints)
+    for (i, fc) in enumerate(fence_cons)
+        # If new_cons already in fence_cons, ignore it
+        if new_cons.candidate_circuits == fc.candidate_circuits
+            fence_cons[i].rhs = max(fence_cons[i].rhs, new_cons.rhs)
+            @info "Equal sets: $(fc.rhs), $(new_cons.rhs)" 
+            return nothing
+        end
+    end
+
+    push!(fence_cons, new_cons)
+
+    return nothing
+end
+
+function add_fence_cons!(inst::Instance, 
+                         mip::MIPModel, 
+                         lp::LPModel, 
+                         lp_prime::LPModel, 
+                         fence_cons::Vector{FenceConstraints})
+    for fc in fence_cons
+        lhs = AffExpr(0.0)
+        for k in fc.candidate_circuits
+            push!(lp.fence_cons_candidates, k)
+            push!(lp_prime.fence_cons_candidates, k)
+            lhs += mip.x[k]
+        end
+        JuMP.@constraint(mip.jump_model, lhs >= fc.rhs)
+    end
+
+    K = Set{CandType}(keys(inst.K))
+    lp.remaining_candidates = setdiff(K, lp.fence_cons_candidates)
+    lp_prime.remaining_candidates = setdiff(K, lp_prime.fence_cons_candidates)
+
+    return nothing
 end

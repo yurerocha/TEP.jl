@@ -69,6 +69,14 @@ function update_cache_sol_costs_and_viols!(cache::Cache, msg::WorkerMessage)
     return nothing
 end
 
+function update_cache_fence_cons!(cache::Cache, msg::WorkerMessage)
+    for fc in msg.fence_cons
+        push_fence_cons!(cache.fence_cons, fc)
+    end
+
+    return nothing
+end
+
 function update_cache_status!(cache::Cache, msg::WorkerMessage)
     cache.status[msg.scen] = msg.status
     return nothing
@@ -576,7 +584,7 @@ function repair!(inst::Instance, params::Parameters, cache::WorkerCache,
     update_lp!(inst, params, lp, inserted)
     viol = comp_viol(lp)
 
-    # TODO COnverter todos para inteiro como tava antes
+    # TODO Converter todos para inteiro como tava antes
     repair_count = 0
     repair_success = 0
     reinsert_st = (0, 0, 0)
@@ -678,7 +686,7 @@ function jqm_repair_sols!(inst::Instance,
     for scen in 1:inst.num_scenarios
         tl = comp_bs_time_limit(inst, params, time() - start_time)
         
-        wcache = WorkerCache(cache, opt_repair_sols)
+        wcache = WorkerCache(cache, opt_repair_sols, it)
         msg = ControllerMessage(wcache, it, scen, tl)
         JQM.add_job_to_queue!(controller, msg)
     end
@@ -731,7 +739,7 @@ function jqm_comp_gen_costs!(inst::Instance,
     for scen in 1:inst.num_scenarios
         tl = comp_bs_time_limit(inst, params, time() - start_time)
         
-        wcache = WorkerCache(cache, opt_comp_gen_costs)
+        wcache = WorkerCache(cache, opt_comp_gen_costs, it)
         msg = ControllerMessage(wcache, it, scen, tl)
         JQM.add_job_to_queue!(controller, msg)
     end
@@ -744,10 +752,14 @@ function jqm_comp_gen_costs!(inst::Instance,
             if !isnothing(job_answer)
                 msg = JQM.get_message(job_answer)
                 update_cache_sol_costs_and_viols!(cache, msg)
+                if it == 0
+                    update_cache_fence_cons!(cache, msg)
+                end
             end
         end
     end
     @info "computed g_costs in $(round(time() - t, digits = 2))"
+    @info "ph total number of fence cons: $(length(cache.fence_cons))"
 
     return nothing
 end
@@ -771,7 +783,7 @@ function jqm_run_integrated!(inst::Instance,
     for scen in 1:inst.num_scenarios
         tl = comp_bs_time_limit(inst, params, time() - start_time)
         
-        wcache = WorkerCache(cache, opt_run_integrated)
+        wcache = WorkerCache(cache, opt_run_integrated, it)
         msg = ControllerMessage(wcache, it, scen, tl)
         JQM.add_job_to_queue!(controller, msg)
     end
@@ -945,7 +957,12 @@ function run_integrated!(inst::Instance,
                          start_time::Float64)
     @info "-------------------- it $(msg.it) --------------------"
     t = time()
-    inserted = msg.cache.inserted
+
+    # TODO FC: Remover os candidatos da RCL da lista inserted e atualizar ambos
+    # os LPs com os candidatos dessa lista que foram inseridos.
+    inserted, inserted_fence_cons_cands = 
+                apply_fence_cons!(inst, params, mip, lp, lp_with_slacks, msg)
+
     neigh_st = NeighborhoodStatus[]
     solver_rt = 0.0
     state_values = State(Vector{Float64}(), Vector{Float64}())
@@ -955,7 +972,8 @@ function run_integrated!(inst::Instance,
     params.beam_search.time_limit = msg.time_limit
 
     # TODO Compute once in controller
-    removed = setdiff(Set{CandType}(keys(inst.K)), inserted)
+    # removed = setdiff(Set{CandType}(keys(inst.K)), inserted)
+    removed = setdiff(lp.remaining_candidates, inserted)
     cost = msg.cache.costs[msg.scen]
     @info "prepared data in $(round(time() - t, digits = 2))"
     t = time()
@@ -970,9 +988,12 @@ function run_integrated!(inst::Instance,
     if isg(tl, 0.0)
         update_model!(inst, params, msg.cache, msg.scen, mip)
         @info "updated mip in $(round(time() - t, digits = 2))"
+        @info "num of received fence cons: $(length(msg.cache.fence_cons))"
         t = time()
         # If feasible, continue the execution
-        if fix_start!(inst, params, msg.scen, mip, inserted)
+        # TODO FC: Atualizar o MIP com os candidatos da RCL que foram adicionados
+        if fix_start!(inst, params, msg.scen, mip, 
+                      union(inserted, inserted_fence_cons_cands))
             tl = comp_time_limit(msg.time_limit, start_time)
 
             set_attribute(mip.jump_model, "TimeLimit", tl)
@@ -988,6 +1009,8 @@ function run_integrated!(inst::Instance,
     if has_vals
         state_values = get_state_values(mip)
     else
+        # TODO: Obter state values através da lista de inserted, sem reotimizar
+        # Isso pode impactar na próxima iteração do ph?
         update_lp!(inst, params, lp_with_slacks, inserted, true)
 
         st = JuMP.termination_status(lp_with_slacks.jump_model)
@@ -1002,4 +1025,32 @@ function run_integrated!(inst::Instance,
     @info "got state values in $(round(time() - t, digits = 2))"
 
     return inserted, neigh_st, solver_rt, state_values
+end
+
+function apply_fence_cons!(inst::Instance, 
+                           params::Parameters, 
+                           mip::MIPModel, 
+                           lp::LPModel, 
+                           lp_prime::LPModel, 
+                           msg::ControllerMessage)
+    if msg.it == 1
+        add_fence_cons!(inst, mip, lp, lp_prime, msg.cache.fence_cons)
+    # else
+    #     set_attribute(lp.jump_model, "LogFile", 
+    #                   get_log_filename(inst, params, scen))
+    end
+
+    inserted = msg.cache.inserted
+
+    rm_lines!(inst, params, lp, Set{CandType}(keys(inst.K)), false)
+    add_lines!(inst, params, lp, inserted, true)
+
+    rm_lines!(inst, params, lp_prime, Set{CandType}(keys(inst.K)), false)
+    add_lines!(inst, params, lp_prime, inserted, true)
+
+    inserted = setdiff(msg.cache.inserted, lp.fence_cons_candidates)
+    inserted_fence_cons_cands = 
+                        intersect(lp.fence_cons_candidates, msg.cache.inserted)
+
+    return inserted, inserted_fence_cons_cands
 end

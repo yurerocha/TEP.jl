@@ -128,6 +128,8 @@ mutable struct LPModel <: TEPModel
     Dtheta::Dict{Tuple{Int64, Int64}, JuMP.VariableRef}
     fkl_cons::Dict{Int64, JuMP.ConstraintRef}
     f_cons::Dict{Any, JuMP.ConstraintRef}
+    fence_cons_candidates::Set{CandType}
+    remaining_candidates::Set{CandType} # Candidates not involved in fence cons
 
     LPModel(params::Parameters) = new(JuMP.Model(params.model.optimizer), 
                                       AffExpr(), 
@@ -139,7 +141,8 @@ mutable struct LPModel <: TEPModel
                                       Dict{Int64, JuMP.VariableRef}(), 
                                       Dict{Int64, JuMP.VariableRef}(), 
                                       Dict{Int64, JuMP.ConstraintRef}(), 
-                                      Dict{Any, JuMP.ConstraintRef}())
+                                      Dict{Any, JuMP.ConstraintRef}(), 
+                                      Set{CandType}(), Set{CandType}())
 end
 
 const TepModel = Union{MIPModel, LPModel}
@@ -238,6 +241,10 @@ mutable struct ScenarioStatus
     reinsert::Tuple{Int64, Int64, Int64} # applied, succeeded, iterations
 end
 
+mutable struct FenceConstraints
+    candidate_circuits::Set{CandType}
+    rhs::Float64
+end
 
 mutable struct Cache
     it::Int64
@@ -264,6 +271,7 @@ mutable struct Cache
     fixed_x_variables::Set{CandType}
     count_cycle_it::Vector{Int64}
     status::Vector{ScenarioStatus}
+    fence_cons::Vector{FenceConstraints}
 
     Cache(inst::Instance, params::Parameters) = 
         new(0, 
@@ -297,7 +305,8 @@ mutable struct Cache
             Set{CandType}(), 
             zeros(Int64, inst.num_K), 
             [ScenarioStatus(NeighborhoodStatus[], 0.0, (0, 0), 
-                (0, 0, 0)) for _ in eachindex(inst.scenarios)]) 
+                (0, 0, 0)) for _ in eachindex(inst.scenarios)], 
+            Vector{FenceConstraints}()) 
 end
 
 @enum WorkerOption opt_repair_sols opt_comp_gen_costs opt_run_integrated
@@ -311,21 +320,27 @@ mutable struct WorkerCache
     inserted::Set{CandType}
     costs::Vector{Float64}
     rho::Vector{Float64}
+    fence_cons::Vector{FenceConstraints}
 
     # Construct the struct according to the worker option
-    function WorkerCache(cache::Cache, option::WorkerOption)
+    function WorkerCache(cache::Cache, option::WorkerOption, it::Int64)
         if option == opt_repair_sols
             return new(option, cache.scenarios, cache.x_hat, 
                         cache.sol_lb.insert, cache.sol_ub.insert, 
-                        cache.start_sol, Vector{Float64}(), cache.rho) 
+                        cache.start_sol, Vector{Float64}(), cache.rho, 
+                        Vector{FenceConstraints}()) 
         elseif option == opt_comp_gen_costs
             return new(option, cache.scenarios, cache.x_hat, 
                         cache.sol_lb.insert, cache.sol_ub.insert, 
-                        Set{CandType}(), Vector{Float64}(), cache.rho) 
+                        Set{CandType}(), Vector{Float64}(), cache.rho, 
+                        Vector{FenceConstraints}()) 
         elseif option == opt_run_integrated
+            # Fence constraints added to model at first it of run integrated
+            fence_cons = it == 1 ? cache.fence_cons : Vector{FenceConstraints}()
             return new(option, cache.scenarios, cache.x_hat, 
                         Set{CandType}(), Set{CandType}(), 
-                        cache.start_sol, cache.start_costs, cache.rho) 
+                        cache.start_sol, cache.start_costs, cache.rho, 
+                        fence_cons) 
         end
     end
 end
@@ -354,6 +369,7 @@ mutable struct WorkerMessage
     sol_info_lb::SolutionInfo
     sol_info_ub::SolutionInfo
     status::ScenarioStatus
+    fence_cons::Vector{FenceConstraints}
 end
 
 # ------------------------- Beam Search data structures ------------------------

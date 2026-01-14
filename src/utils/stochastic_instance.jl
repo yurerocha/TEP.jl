@@ -79,7 +79,7 @@ function scale_ren_gen!(params::Parameters,
     for k in pglib_ren_gen_indices
         G[k]["pmin"] = 0.0
         g = comp_gen(cats_ren_gen[scen], 
-                     pglib_mpc["baseMVA"], 
+                     Float64(pglib_mpc["baseMVA"]), 
                      pglib_mpc["gen"][k]["pmax"], 
                      cats_ren_cap)
         G[k]["pmax"] = 

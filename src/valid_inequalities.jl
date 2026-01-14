@@ -7,12 +7,16 @@ function add_valid_inequalities!(inst::Instance,
     count_single_cuts = 0
     count_double_cuts = 0
     count_neigh_cuts = 0
+    fence_cons = FenceConstraints[]
     for b in inst.I
         # Add single bus cuts
         node = Set{Int64}([b])
         neigh_buses_b = comp_neigh_buses(inst, node)
-        is_cut = add_fence_cuts!(inst, params, mip, scen, node, neigh_buses_b)
-        count_single_cuts += is_cut ? 1 : 0
+        fc = add_fence_cuts!(inst, params, mip, scen, node, neigh_buses_b)
+        if fc != nothing
+            count_single_cuts += 1
+            push_fence_cons!(fence_cons, fc)
+        end
 
         # Add double bus cuts
         for b_ in neigh_buses_b
@@ -20,23 +24,30 @@ function add_valid_inequalities!(inst::Instance,
             neigh_buses = comp_neigh_buses(inst, Set{Int64}([b_]))
             union!(neigh_buses, neigh_buses_b)
             setdiff!(neigh_buses, node)
-            is_cut = add_fence_cuts!(inst, params, mip, scen, node, neigh_buses)
-            count_double_cuts += is_cut ? 1 : 0
+            fc = add_fence_cuts!(inst, params, mip, scen, node, neigh_buses)
+            if fc != nothing
+                count_double_cuts += 1
+                push_fence_cons!(fence_cons, fc)
+            end
         end
 
         # Add neighboring bus cuts
         node = union(neigh_buses_b, b)
         neigh_buses = comp_neigh_buses(inst, node)
-        is_cut = add_fence_cuts!(inst, params, mip, scen, node, neigh_buses)
-        count_neigh_cuts += is_cut ? 1 : 0
+        fc = add_fence_cuts!(inst, params, mip, scen, node, neigh_buses)
+        if fc != nothing
+            count_neigh_cuts += 1
+            push_fence_cons!(fence_cons, fc)
+        end
     end
 
     @warn "ran add_valid_inequalities in $(round(time() - t, digits = 2))\n" * 
             "\t#single:$count_single_cuts\n" *
             "\t#double:$count_double_cuts\n" *
-            "\t#neigh:$count_neigh_cuts\n"
+            "\t#neigh:$count_neigh_cuts\n" *
+            "\t#total:$(length(fence_cons))"
 
-    return nothing
+    return fence_cons
 end
 
 # function add_valid_inequalities!(inst::Instance, mip::MIPModel, scen::Int64)

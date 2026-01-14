@@ -4,18 +4,18 @@ using Random
 
 params = TEP.Parameters()
 
-start_file = 6
-end_file = 6 # 40
-log_dir = "test/two_models_300"
+start_file = 1
+end_file = 1 # 40
+log_dir = "test/fence_cuts"
 log_file = "$log_dir/log.md"
 dir = "input_bin/"
 num_threads = params.progressive_hedging.num_threads
 
-# try
-#     TEP.rm_dir(log_dir)
-# catch e
-#     @warn e
-# end
+try
+    TEP.rm_dir(log_dir)
+catch e
+    @warn e
+end
 
 TEP.log_header(log_file)
 
@@ -27,13 +27,15 @@ rng = Random.MersenneTwister(123)
 # Sort files so that the smallest instances are solved first
 # sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 
-files = ["pglib_opf_case3012wp_k.m",
+files = [
+         "CaliforniaTestSystem.m",
+         "pglib_opf_case3012wp_k.m",
          "pglib_opf_case6495_rte.m",
          "pglib_opf_case7336_epigrids.m",
-         "CaliforniaTestSystem.m",
          "pglib_opf_case9591_goc.m",
-         "pglib_opf_case10000_goc.m", 
-         "pglib_opf_case13659_pegase.m"]
+         "pglib_opf_case10000_goc.m",
+         "pglib_opf_case13659_pegase.m"
+         ]
 
 
 # Run solver with binary decision variables
@@ -61,4 +63,6 @@ for (i, file) in enumerate(files[start_file:end_file])
     mpiexec(exe -> run(`$exe -n $num_threads $(Base.julia_cmd()) \
                         --project=$(project_dir) $(parallel_script) \
                         $log_file $log_dir $dir $file`))
+
+    readline()
 end

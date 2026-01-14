@@ -34,9 +34,9 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     lb_best_cost = const_infinite
     ub_best_cost = const_infinite
     is_global_feas = false
-    it = 1
+    it = 0
 
-    @info "-------------------- it 0 --------------------"
+    @info "-------------------- it $it --------------------"
     jqm_comp_gen_costs!(inst, params, cache, it, controller, start_time)
     ph_cost, ph_viol, is_global_feas, lb_best_cost, ub_best_cost = 
         update_cache_start_and_best_sols!(inst, params, cache, const_infinite,
@@ -54,6 +54,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
                 lb_best_cost, ub_best_cost, cache.best_sol
     end
     
+    it = 1
     while true
         @info "-------------------- it $it --------------------"
         jqm_run_integrated!(inst, params, cache, it, controller, start_time)
@@ -172,20 +173,29 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
             neigh_st = NeighborhoodStatus[]
             repair_st = (false, false)
             reinsert_st = (false, false, 0)
+            fence_cons = FenceConstraints[]
 
             io = open(get_log_filename(inst, params, msg.scen), "a")
             Logging.with_logger(ConsoleLogger(io)) do
 
                 current_model_scen = 
                                     update_models!(inst, params, lp_with_slacks, 
-                                                lp, msg, current_model_scen)
+                                                   lp, msg, current_model_scen)
+
+                if msg.it == 0
+                    fence_cons = add_valid_inequalities!(inst, params, 
+                                                         mip, msg.scen)
+                end
+
 
                 if msg.cache.option == opt_repair_sols
                     # Repair solutions
+                    # TODO FC: Nada. Só adiciona candidatos.
                     sol_info_lb, sol_info_ub, repair_st, reinsert_st = 
                             repair_solutions!(inst, params, lp_with_slacks, msg)
                 elseif msg.cache.option == opt_comp_gen_costs
-                    # Compute generation costs 
+                    # Compute generation costs
+                    # TODO FC: Nada. Não altera os candidatos.
                     sol_info_lb, sol_info_ub = 
                                         comp_gen_costs!(inst, params, lp, msg)
                 elseif msg.cache.option == opt_run_integrated
@@ -201,7 +211,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
 
             status = ScenarioStatus(neigh_st, solver_rt, repair_st, reinsert_st)
             ret_msg = WorkerMessage(state_values, msg.it, msg.scen, sol_info_lb, 
-                                    sol_info_ub, status)
+                                    sol_info_ub, status, fence_cons)
 
             JQM.send_job_answer_to_controller(worker, ret_msg)
         end
