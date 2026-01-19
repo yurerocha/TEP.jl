@@ -104,3 +104,81 @@ function build_stochastic_instance(params::Parameters,
     
     return inst
 end
+
+function build_cats_stochastic_instance(params::Parameters, 
+                                    filepath::String, 
+                                    days::Set{Int64} = Set([79, 171, 265, 355]))
+    log(params, "Build CATS stochastic instance", true)
+    # -------------- Set the scenarios based on the selected days --------------
+    scenarios = Vector{Int64}()
+    num_days = 24
+    for d in days
+        s = (d - 1) * num_days + 1
+        e = d * num_days
+        scenarios = vcat(scenarios, collect(range(s, e)))
+    end
+
+    # ----------------------------- Read CATS data -----------------------------
+    dir = "submodules/CATS-CaliforniaTestSystem"
+    
+    load_scens = CSV.read("$dir/Data/Load_Agg_Post_Assignment_v3_latest.csv", 
+                          header = false, DataFrame)
+    load_scens = [Dict([k => load_scens[i, k] for k in scenarios]) 
+                                                for i in 1:size(load_scens)[1]]
+
+    mpc = PowerModels.parse_file("$dir/MATPOWER/CaliforniaTestSystem.m")
+
+    gen_data = CSV.read("$dir/GIS/CATS_gens.csv", DataFrame)
+
+    load_mapping = map_buses_to_loads(mpc)
+
+    hourly_data = CSV.read("$dir/Data/HourlyProduction2019.csv", DataFrame)
+    solar_gen = dict_hourly_data(hourly_data, scenarios, "Solar")
+    wind_gen = dict_hourly_data(hourly_data, scenarios, "Wind")
+
+    pmax_og = [mpc["gen"][string(i)]["pmax"] for i in 1:size(gen_data)[1]]
+
+    solar_cap, _ = comp_ren_and_avg_cap(mpc, gen_data, "solar")
+    wind_cap, _ = comp_ren_and_avg_cap(mpc, gen_data, "wind")
+
+
+    # ------------------------ Build multiple scenarios ------------------------
+    inst = build_instance(params, filepath)
+    inst.scenarios = []
+    inst.num_scenarios = length(scenarios)
+    prob = 1.0 / inst.num_scenarios
+
+    for k in scenarios
+        # Change renewable generators' pg for the current scenario
+        update_rgen!(k, mpc, gen_data, solar_gen, 
+                        wind_gen, pmax_og, solar_cap, wind_cap)
+
+        # Change load buses' Pd and Qd for the current scenario
+        update_loads!(k, load_scens, mpc, load_mapping)
+
+        D = build_loads(params, mpc["load"], mpc["shunt"])
+        G = build_gens(params, mpc["gen"])
+
+        sumD = sum(d for d in values(D))
+        sum_lb = sum(g.lower_bound for g in values(G))
+        sum_ub = sum(g.upper_bound for g in values(G))
+
+        log(params, 
+            "scen#$k: $sumD, $sum_lb, $sum_ub, $(sumD / sum_ub)", 
+            true)
+        if params.debugging_level == 1
+            @assert isl(sum_lb, sumD) "sum lb gen $sum_lb > sum load $sumD"
+            @assert isl(sumD, sum_ub) "sum load $sumD > sum ub gen $sum_ub"
+        end
+
+        push!(inst.scenarios, Scenario(prob, D, G))
+    end
+
+    if params.debugging_level == 1
+        assert_feas_build_all(inst, params)
+    end
+
+    rm_unnecessary_candidate_circuits!(inst)
+
+    return inst
+end
