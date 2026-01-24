@@ -10,14 +10,14 @@ function update_cache_incumbent!(cache::Cache, scen::Int64, mip::MIPModel)
 end
 
 function update_cache_x_hat!(inst::Instance, cache::Cache)
-    cache.x_hat = sum(inst.scenarios[scen].p * cache.scenarios[scen].state.x 
+    cache.x_hat = sum(inst.scenarios[scen].p * cache.scenarios[scen].state 
                       for scen in 1:inst.num_scenarios)
     return nothing
 end
 
 function update_cache_omega!(inst::Instance, params::Parameters, cache::Cache)
     for scen in 1:inst.num_scenarios
-        delta = cache.scenarios[scen].state.x - cache.x_hat
+        delta = cache.scenarios[scen].state - cache.x_hat
         cache.scenarios[scen].omega += params.progressive_hedging.rho * delta
     end
     return nothing
@@ -26,7 +26,7 @@ end
 function update_cache_x_average!(inst::Instance, 
                                  params::Parameters, 
                                  cache::Cache)
-    cache.x_average = sum(inst.scenarios[scen].p * cache.scenarios[scen].state.x 
+    cache.x_average = sum(inst.scenarios[scen].p * cache.scenarios[scen].state 
                           for scen in 1:inst.num_scenarios) / 
                     sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
 
@@ -185,7 +185,7 @@ function update_cache_best_convergence_delta!(inst::Instance,
     conv_delta = 0.0
     x_avg = cache.x_average
     for scen in eachindex(inst.scenarios)
-        x =  cache.scenarios[scen].state.x
+        x =  cache.scenarios[scen].state
         # cache.deltas[scen] = maximum(abs, x - cache.x_average)
         cache.deltas[scen] = 
             sum(abs(x[i] - x_avg[i]) / x_avg[i] for i in 1:inst.num_K 
@@ -245,7 +245,7 @@ function comp_delta_obj(params::Parameters,
                         cache::T, 
                         scen::Int64, 
                         tep::TEPModel) where T <: Union{Cache, WorkerCache}
-    x = tep.jump_model.ext[:state].x
+    x = tep.jump_model.ext[:state]
     x_hat = cache.x_hat 
     # Piece-wise linear function for the squared two-norm:
     #     (a - b)² = a² - 2ab + b² (binary first stage variables)
@@ -273,14 +273,14 @@ end
 Update SEP-rho x_min and x_max.
 """
 function update_cache_sep_rho_x_min_max!(inst::Instance, cache::Cache)
-    cache.sep_rho_x_min = cache.scenarios[1].state.x
-    cache.sep_rho_x_max = cache.scenarios[1].state.x
+    cache.sep_rho_x_min = cache.scenarios[1].state
+    cache.sep_rho_x_max = cache.scenarios[1].state
 
     for scen in 2:inst.num_scenarios
         cache.sep_rho_x_min = 
-                    min.(cache.sep_rho_x_min, cache.scenarios[scen].state.x)
+                    min.(cache.sep_rho_x_min, cache.scenarios[scen].state)
         cache.sep_rho_x_max = 
-                    max.(cache.sep_rho_x_max, cache.scenarios[scen].state.x)
+                    max.(cache.sep_rho_x_max, cache.scenarios[scen].state)
     end
 
     return nothing
@@ -581,7 +581,7 @@ function repair!(inst::Instance, params::Parameters, cache::WorkerCache,
                  scen::Int64, lp::LPModel, inserted::Set{CandType})
     # unfix_s_vars!(lp)
 
-    update_lp!(inst, params, lp, inserted)
+    update_lp!(inst, params, lp, inserted, true)
     viol = comp_viol(lp)
 
     # TODO Converter todos para inteiro como tava antes
@@ -965,7 +965,7 @@ function run_integrated!(inst::Instance,
 
     neigh_st = NeighborhoodStatus[]
     solver_rt = 0.0
-    state_values = State(Vector{Float64}(), Vector{Float64}())
+    state_values = nothing
 
     # Used in utils:bs.jl:comp_penalized_cost
     params.progressive_hedging.is_en = msg.it > 1
@@ -1009,22 +1009,16 @@ function run_integrated!(inst::Instance,
     if has_vals
         state_values = get_state_values(mip)
     else
-        # TODO: Obter state values através da lista de inserted, sem reotimizar
-        # Isso pode impactar na próxima iteração do ph?
-        update_lp!(inst, params, lp_with_slacks, inserted, true)
-
-        st = JuMP.termination_status(lp_with_slacks.jump_model)
-        @warn "status:$st scen:$(msg.scen)"
+        state_values = get_state_values(inst, inserted)
         if params.debugging_level == 1
-            is_opt = st == MOI.OPTIMAL
-            @assert is_opt "Not opt scen#$(msg.scen)"
+            update_lp!(inst, params, lp, inserted, true)
+            st = JuMP.termination_status(lp.jump_model)
+            @assert st == MOI.OPTIMAL "status:$st scen:$(msg.scen)"
         end
-        state_values = 
-                get_state_values(inst, lp_with_slacks, inserted)
     end
     @info "got state values in $(round(time() - t, digits = 2))"
 
-    return inserted, neigh_st, solver_rt, state_values
+    return neigh_st, solver_rt, state_values
 end
 
 function apply_fence_cons!(inst::Instance, 

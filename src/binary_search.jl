@@ -70,7 +70,7 @@ function binary_search!(inst::Instance,
             rp_count += 1
             set_time_limit!(params, lp_with_slacks, init_time)
             t = time()
-            update_lp!(inst, params, lp_with_slacks, inserted)
+            update_lp!(inst, params, lp_with_slacks, inserted, false)
             rm_lines!(inst, params, lp_with_slacks, rm_cands, true)
             viol, reinserted = repair!(inst, params, scen, 
                                        lp_with_slacks, rm_cands, viol)

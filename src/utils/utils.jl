@@ -414,9 +414,7 @@ function fix_for_symmetry_contrs!(inst::Instance,
     return nothing
 end
 
-function set_state!(mip::MIPModel, 
-                    x::Dict{CandType, JuMP.VariableRef}, 
-                    y::Dict{Int64, JuMP.VariableRef})
+function set_state!(inst::Instance, mip::MIPModel)
     # In case the x is a single variable instead of a vector
     # if x isa JuMP.VariableRef
     #     x = [x]
@@ -427,36 +425,28 @@ function set_state!(mip::MIPModel,
     # if !(:state in keys(md.ext))
     #     md.ext[:state] = []
     # end
-    mip.jump_model.ext[:state] = State([v for (_, v) in x], [v for (_, v) in y])
+    mip.jump_model.ext[:state] = [mip.x[k] for k in keys(inst.K)]
 
     return nothing
 end
 
-function set_state!(lp::LPModel, y::Dict{Int64, JuMP.VariableRef})
-    # lp.jump_model.ext[:key_to_index] = 
-    #                         Dict(k => i for (i, k) in enumerate(keys(inst.K)))
-    lp.jump_model.ext[:state] = 
-                        State(Vector{JuMP.VariableRef}(), [v for (_, v) in y])
-
+function set_state!(inst::Instance, lp::LPModel)
     return nothing
 end
 
 function get_state_values(mip::MIPModel)
-    x = mip.jump_model.ext[:state].x
-    y = mip.jump_model.ext[:state].y
-    return State(value.(x), value.(y))
+    return JuMP.value.(mip.jump_model.ext[:state])
 end
 
-function get_state_values(inst::Instance, lp::LPModel, inserted)
+function get_state_values(inst::Instance, inserted::Set{CandType})
     x = zeros(Float64, inst.num_K)
 
     for k in inserted
         i = inst.key_to_index[k]
         x[i] = 1.0
     end
-    y = lp.jump_model.ext[:state].y
 
-    return State(x, JuMP.value.(y))
+    return x
 end
 
 """
