@@ -414,8 +414,7 @@ function fix_for_symmetry_contrs!(inst::Instance,
     return nothing
 end
 
-function set_state!(inst::Instance, 
-                    mip::MIPModel)
+function set_state!(inst::Instance, mip::MIPModel)
     # In case the x is a single variable instead of a vector
     # if x isa JuMP.VariableRef
     #     x = [x]
