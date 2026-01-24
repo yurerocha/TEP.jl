@@ -194,14 +194,9 @@ end
 
 # ----------------------------- PH data structures -----------------------------
 
-struct State{T <: Union{Float64, JuMP.VariableRef}}
-    x::Vector{T}
-    y::Vector{T}
-end
-
 mutable struct ScenarioCache
     omega::Vector{Float64}
-    state::State{Float64}
+    state::Vector{Float64}
 end
 
 mutable struct Solution
@@ -268,8 +263,7 @@ mutable struct Cache
     Cache(inst::Instance, params::Parameters) = 
         new(0, 
             [ScenarioCache(zeros(inst.num_K), 
-                State(Vector{Float64}(), 
-                    Vector{Float64}())) for _ in 1:inst.num_scenarios],
+                           Vector{Float64}()) for _ in 1:inst.num_scenarios],
             # [zeros(num_vars) for _ in 1:num_scenarios], 
             # Vector{Vector{Float64}}(undef, num_vars), 
             # Vector{Vector{Float64}}(undef, num_vars), 
@@ -348,7 +342,7 @@ mutable struct SolutionInfo
 end
 
 mutable struct WorkerMessage
-    state_values::State{Float64}
+    state_values::Vector{Float64}
     it::Int64
     scen::Int64
     sol_info_lb::SolutionInfo

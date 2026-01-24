@@ -113,7 +113,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     end
 
     # for scen in 1:inst.num_scenarios
-    #     println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
+    #     println("Scen#$(scen): $(cache.scenarios[scen].state)")
     # end
 
     # JQM.mpi_barrier()
@@ -146,13 +146,10 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         params.solver.num_threads = 1
 
         mip = build_mip(inst, params, current_model_scen)
-        set_state!(mip, mip.x, mip.g)
+        set_state!(inst, mip)
 
         lp_with_slacks = build_lp(inst, params, current_model_scen, true)
-        set_state!(lp_with_slacks, lp_with_slacks.g)
-
         lp = build_lp(inst, params, current_model_scen, false)
-        set_state!(lp, lp.g)
 
         # Reset the number of threads to the default value
         params.solver.num_threads = num_threads
@@ -164,7 +161,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                 break
             end
 
-            state_values = State(Vector{Float64}(), Vector{Float64}())
+            state_values = Vector{Float64}()
             sol_info_lb = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
             sol_info_ub = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
             start_time = time()
@@ -190,7 +187,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                                         comp_gen_costs!(inst, params, lp, msg)
                 elseif msg.cache.option == opt_run_integrated
                     # Run the integrated approach
-                    inserted, neigh_st, solver_rt, state_values = 
+                    neigh_st, solver_rt, state_values = 
                                 run_integrated!(inst, params, lp_with_slacks, 
                                                 lp, mip, msg, start_time)
                 end

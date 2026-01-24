@@ -23,7 +23,7 @@ function run_serial_ph!(inst::Instance, params::Parameters)
                 # TODO: Change LP objective as well
                 # TODO: Run heuristic in every it
                 mip = build_mip(inst, params, scen)
-                set_state!(mip, mip.x, mip.g)
+                set_state!(inst, mip)
                 
                 # (start, _) = build_solution(inst, params, scen)
                 # fix_start!(inst, params, scen, mip, start)
@@ -59,7 +59,7 @@ function run_serial_ph!(inst::Instance, params::Parameters)
     end
 
     for scen in 1:inst.num_scenarios
-        println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
+        println("Scen#$(scen): $(cache.scenarios[scen].state)")
     end
 
     return cache
