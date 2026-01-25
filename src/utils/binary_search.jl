@@ -181,7 +181,8 @@ function update_lp!(inst::Instance,
                     inserted::Set{CandType}, 
                     is_opt_req::Bool = true)
     # log(params, "It update $it", true)
-    rm_lines!(inst, params, lp, Set{CandType}(keys(inst.K)), false)
+    # rm_lines!(inst, params, lp, Set{CandType}(keys(inst.K)), false)
+    rm_lines!(inst, params, lp, lp.remaining_candidates, false)
     add_lines!(inst, params, lp, inserted, is_opt_req)
 
     # return termination_status(lp.jump_model) == MOI.OPTIMAL

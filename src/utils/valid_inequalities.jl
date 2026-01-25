@@ -95,7 +95,6 @@ function push_fence_cons!(fence_cons::Vector{FenceConstraints},
         # If new_cons already in fence_cons, ignore it
         if new_cons.candidate_circuits == fc.candidate_circuits
             fence_cons[i].rhs = max(fence_cons[i].rhs, new_cons.rhs)
-            @info "Equal sets: $(fc.rhs), $(new_cons.rhs)" 
             return nothing
         end
     end

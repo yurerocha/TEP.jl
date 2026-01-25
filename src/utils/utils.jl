@@ -494,8 +494,8 @@ function get_log_filename(inst::Instance, params::Parameters, scen::Int64)
     return "$(params.log_dir)/$(inst.name)/#$scen.log"
 end
 
-function init_cache_in_rm(inst::Instance)
-    return Set{CandType}(keys(inst.K)), Set{CandType}()
+function init_cache_in_rm(inst::Instance, lp::LPModel)
+    return deepcopy(lp.remaining_candidates), Set{CandType}()
 end
 
 function roundp(sol::Set{CandType}, den::Int64, digits::Int64 = 2)

@@ -39,6 +39,9 @@ function update_cache_sols!(inst::Instance,
     th = params.progressive_hedging.lb_threshold
     cache.sol_lb.insert = Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
                                             if isg(cache.x_average[i], th)])
+    # Union the inserted fence constraints candidates with the lb insert set
+    union!(cache.sol_lb.insert, cache.inserted_fence_cons_candidates)
+
     cache.sol_ub.insert = Set{CandType}([k for (i, k) in enumerate(keys(inst.K)) 
                                             if !iseq(cache.x_average[i], 0.0)])
 
@@ -69,9 +72,18 @@ function update_cache_sol_costs_and_viols!(cache::Cache, msg::WorkerMessage)
     return nothing
 end
 
+"""
+    update_cache_fence_cons!(cache::Cache, msg::WorkerMessage)
+
+Update the cache fence constraints with those received from a worker and the
+cache set of candidates involved in fence constraints.
+"""
 function update_cache_fence_cons!(cache::Cache, msg::WorkerMessage)
     for fc in msg.fence_cons
         push_fence_cons!(cache.fence_cons, fc)
+        for k in fc.candidate_circuits
+            push!(cache.fence_cons_candidates, k)
+        end
     end
 
     return nothing
@@ -615,7 +627,7 @@ function repair!(inst::Instance, params::Parameters, cache::WorkerCache,
         end
     end
     repair_st = (repair_count, repair_success)
-    
+
     return reinsert, repair_st, reinsert_st
 end
 
@@ -780,6 +792,9 @@ function jqm_run_integrated!(inst::Instance,
                              controller, 
                              start_time::Float64)
     t = time()
+    # The set of inserted candidates involved in fence constraints is reset
+    # at each iteration
+    cache.inserted_fence_cons_candidates = Set{CandType}()
     for scen in 1:inst.num_scenarios
         tl = comp_bs_time_limit(inst, params, time() - start_time)
         
@@ -795,7 +810,7 @@ function jqm_run_integrated!(inst::Instance,
             job_answer = JQM.check_for_job_answers(controller)
             if !isnothing(job_answer)
                 msg = JQM.get_message(job_answer)
-                update_cache_incumbent!(cache, msg)
+                update_cache_incumbent!(inst, cache, msg)
                 # update_cache_sol_costs_and_viols!(cache, msg)
                 update_cache_status!(cache, msg)
             end
@@ -884,8 +899,22 @@ function has_finished_all_jobs(controller::JobQueueMPI.Controller)
            !JobQueueMPI.any_pending_jobs(controller)
 end
 
-function update_cache_incumbent!(cache::Cache, msg::WorkerMessage)
+"""
+    update_cache_incumbent!(inst::Instance, cache::Cache, msg::WorkerMessage)
+
+Update the cache incumbent solution based on the worker message and the set of 
+inserted candidates involved in fence constraints.
+"""
+function update_cache_incumbent!(inst::Instance, 
+                                 cache::Cache, 
+                                 msg::WorkerMessage)
     cache.scenarios[msg.scen].state = msg.state_values
+    for k in cache.fence_cons_candidates
+        i = inst.key_to_index[k]
+        if iseq(msg.state_values[i], 1.0)
+            push!(cache.inserted_fence_cons_candidates, k)
+        end
+    end
     # cache.sol_lb.count_use += msg.sol_info_lb.count_use
     # cache.sol_ub.count_use += msg.sol_info_ub.count_use
 
@@ -974,6 +1003,7 @@ function run_integrated!(inst::Instance,
     # TODO Compute once in controller
     # removed = setdiff(Set{CandType}(keys(inst.K)), inserted)
     removed = setdiff(lp.remaining_candidates, inserted)
+    @info "length rm:$(length(removed)) in:$(length(inserted))"
     cost = msg.cache.costs[msg.scen]
     @info "prepared data in $(round(time() - t, digits = 2))"
     t = time()
@@ -985,15 +1015,14 @@ function run_integrated!(inst::Instance,
     tl = comp_time_limit(msg.time_limit, start_time)
     has_vals = false
     t = time()
+    inserted = union(inserted, inserted_fence_cons_cands)
     if isg(tl, 0.0)
         update_model!(inst, params, msg.cache, msg.scen, mip)
         @info "updated mip in $(round(time() - t, digits = 2))"
-        @info "num of received fence cons: $(length(msg.cache.fence_cons))"
         t = time()
         # If feasible, continue the execution
         # TODO FC: Atualizar o MIP com os candidatos da RCL que foram adicionados
-        if fix_start!(inst, params, msg.scen, mip, 
-                      union(inserted, inserted_fence_cons_cands))
+        if fix_start!(inst, params, msg.scen, mip, inserted)
             tl = comp_time_limit(msg.time_limit, start_time)
 
             set_attribute(mip.jump_model, "TimeLimit", tl)
@@ -1004,6 +1033,7 @@ function run_integrated!(inst::Instance,
         end
     end
     @info "solved mip in $(round(time() - t, digits = 2))"
+    @info "num of received fence cons: $(length(msg.cache.fence_cons))"
 
     t = time()
     if has_vals
@@ -1042,9 +1072,9 @@ function apply_fence_cons!(inst::Instance,
     rm_lines!(inst, params, lp_prime, Set{CandType}(keys(inst.K)), false)
     add_lines!(inst, params, lp_prime, inserted, true)
 
+    in_fence_cons_cands = 
+                    intersect(lp.fence_cons_candidates, msg.cache.inserted)
     inserted = setdiff(msg.cache.inserted, lp.fence_cons_candidates)
-    inserted_fence_cons_cands = 
-                        intersect(lp.fence_cons_candidates, msg.cache.inserted)
 
-    return inserted, inserted_fence_cons_cands
+    return inserted, in_fence_cons_cands
 end

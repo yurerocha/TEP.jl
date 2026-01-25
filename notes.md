@@ -518,3 +518,7 @@ capacidade média de geração
 - Duas frentes
   - Movimentos de perturbação no PH
   - Tentar inserir mais info, mas com relação à geração, nas fos
+
+
+
+Atualizar o modelo corretamente em rm_lines, add_lines e logo antes do repair em binary_search

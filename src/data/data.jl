@@ -267,6 +267,8 @@ mutable struct Cache
     count_cycle_it::Vector{Int64}
     status::Vector{ScenarioStatus}
     fence_cons::Vector{FenceConstraints}
+    fence_cons_candidates::Set{CandType}
+    inserted_fence_cons_candidates::Set{CandType}
 
     Cache(inst::Instance, params::Parameters) = 
         new(0, 
@@ -300,7 +302,7 @@ mutable struct Cache
             zeros(Int64, inst.num_K), 
             [ScenarioStatus(NeighborhoodStatus[], 0.0, (0, 0), 
                 (0, 0, 0)) for _ in eachindex(inst.scenarios)], 
-            Vector{FenceConstraints}()) 
+            Vector{FenceConstraints}(), Set{CandType}(), Set{CandType}()) 
 end
 
 @enum WorkerOption opt_repair_sols opt_comp_gen_costs opt_run_integrated

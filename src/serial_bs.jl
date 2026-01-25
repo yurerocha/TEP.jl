@@ -23,7 +23,7 @@ function run_serial_bs!(inst::Instance,
     best_cost = cost
     init_cost = cost
 
-    cache_in, cache_rm = init_cache_in_rm(inst)
+    cache_in, cache_rm = init_cache_in_rm(inst, lp)
     # Set the inserted lines according to cache_in and cache_rm
     update_lp!(inst, params, lp, cache_in, false)
 

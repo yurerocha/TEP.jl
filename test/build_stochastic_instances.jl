@@ -4,9 +4,8 @@ using TEP
 params = TEP.Parameters()
 
 start_file = 1 # 1354
-end_file = 1 # 13659
+end_file = 5 # 13659
 dir = "submodules/pglib-opf/"
-# dir = "submodules/CATS-CaliforniaTestSystem/MATPOWER/"
 output_dir = "input_bin"
 
 # try
@@ -16,13 +15,11 @@ output_dir = "input_bin"
 # end
 
 files = [
-        #  "CaliforniaTestSystem.m"
-        #  "pglib_opf_case3012wp_k.m",
-        #  "pglib_opf_case6495_rte.m",
-        #  "pglib_opf_case7336_epigrids.m",
-        #  "pglib_opf_case9591_goc.m",
-        #  "pglib_opf_case10000_goc.m"
-        "pglib_opf_case13659_pegase.m"
+         "pglib_opf_case3012wp_k.m",
+         "pglib_opf_case6495_rte.m",
+         "pglib_opf_case7336_epigrids.m",
+         "pglib_opf_case9591_goc.m",
+         "pglib_opf_case10000_goc.m"
          ]
 
 # files = TEP.select_files(dir, end_file)

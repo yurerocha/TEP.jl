@@ -55,7 +55,7 @@ end
 
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     is_en::Bool = false
-    time_limit::Float64 = 7200.0
+    time_limit::Float64 = 3600.0
     num_threads::Int64 = 49
     rho::Float64 = 1.0
     is_sep_rho_en::Bool = false # Calibrar true, false

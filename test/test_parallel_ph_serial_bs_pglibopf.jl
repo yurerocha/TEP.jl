@@ -6,7 +6,7 @@ params = TEP.Parameters()
 
 start_file = 1
 end_file = 1 # 40
-log_dir = "test/fence_cuts"
+log_dir = "test/fence_cuts4"
 log_file = "$log_dir/log.md"
 dir = "input_bin/"
 num_threads = params.progressive_hedging.num_threads
