@@ -67,6 +67,10 @@ function run_serial_bs!(inst::Instance,
                         # viol = comp_viol(lp)
                     end
 
+                    if params.debugging_level == 2 && is_feas
+                        debug_lps(inst, params, cache, scen, in_cands)
+                    end
+
                     msg = BSWorkerMessage(i, lines, is_feas, cost, viol)
 
                     add_node!(params, UB, msg, node)

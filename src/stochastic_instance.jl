@@ -101,7 +101,8 @@ function build_stochastic_instance(params::Parameters,
     end
 
     rm_unnecessary_candidate_circuits!(inst)
-    
+    update_order2_adjacent_buses!(inst)
+
     return inst
 end
 
@@ -179,6 +180,7 @@ function build_cats_stochastic_instance(params::Parameters,
     end
 
     rm_unnecessary_candidate_circuits!(inst)
+    update_order2_adjacent_buses!(inst)
 
     return inst
 end

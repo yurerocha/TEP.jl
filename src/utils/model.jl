@@ -51,6 +51,9 @@ function add_vars!(inst::Instance,
     end
 
     for i in inst.I
+        if mip.is_alpha_model && haskey(inst.order2_adjacent_buses, i)
+            continue
+        end
         mip.theta[i] = @variable(mip.jump_model, base_name = "theta[$i]")
     end
 
@@ -82,6 +85,9 @@ function add_vars!(inst::Instance,
     end
 
     for i in inst.I
+        if lp.is_alpha_model && haskey(inst.order2_adjacent_buses, i)
+            continue
+        end
         lp.theta[i] = @variable(lp.jump_model, base_name = "theta[$i]")
     end
 
@@ -90,12 +96,13 @@ end
 
 function add_Dtheta_vars_cons!(inst::Instance, tep::TEPModel)
     for j in keys(inst.J)
-        br = j[2:3]
-        if !haskey(tep.Dtheta, br)
-            tep.Dtheta[br] = @variable(tep.jump_model, 
-                                       base_name = "Dtheta[$br]")
+        c = get_endpoints(inst, j)
+        if !haskey(tep.Dtheta, c)
+            b1, _, b3 = get_Dtheta_buses(inst, tep, j)
+            tep.Dtheta[c] = @variable(tep.jump_model, 
+                                      base_name = "Dtheta[$c]")
             @constraint(tep.jump_model, 
-                        tep.Dtheta[br] == tep.theta[j[2]] - tep.theta[j[3]])
+                        tep.Dtheta[c] == tep.theta[b1] - tep.theta[b3])
         end
     end
 end
@@ -240,16 +247,16 @@ function add_ohms_law_cons!(inst::Instance, tep::TEPModel)
     # Ohm's law for existing circuits
     for j in keys(inst.J)
         # Dtheta = tep.theta[j[2]] - tep.theta[j[3]]
+        m = get_alpha_or_gamma(inst.J, tep, j)
         @constraint(tep.jump_model, 
-                    tep.f[j] == inst.J[j].gamma * tep.Dtheta[j[2:3]],
+                    tep.f[j] == m * tep.Dtheta[j[2:3]],
                     # tep.f[j] == inst.J[j].gamma * Dtheta,
                     base_name = "ol[$j]")
     end
     # Ohm's law for candidate circuits
     for k in keys(inst.K)
-        # Dtheta = tep.theta[k[1][2]] - tep.theta[k[1][3]]
-        # y = tep.f[k] - inst.K[k].gamma * Dtheta
-        y = tep.f[k] - inst.K[k].gamma * tep.Dtheta[k[1][2:3]]
+        m = get_alpha_or_gamma(inst.K, tep, k)
+        y = tep.f[k] - m * tep.Dtheta[k[1][2:3]]
 
         bigM = comp_bigM(inst, k)
 
@@ -267,19 +274,17 @@ end
 function add_ohms_law_cons!(inst::Instance, lp::LPModel)
     # Ohm's law for existing circuits
     for j in keys(inst.J)
-        # Dtheta = lp.theta[j[2]] - lp.theta[j[3]]
+        m = get_alpha_or_gamma(inst.J, lp, j)
         lp.f_cons[j] = @constraint(lp.jump_model, 
-                                lp.f[j] == inst.J[j].gamma * lp.Dtheta[j[2:3]],
-                                # lp.f[j] == inst.J[j].gamma * Dtheta,
-                                base_name = "ol.j[$j]")
+                                   lp.f[j] == m * lp.Dtheta[j[2:3]],
+                                   base_name = "ol.j[$j]")
     end
     # Ohm's law for candidate circuits
     for k in keys(inst.K)
-        # Dtheta = lp.theta[k[1][2]] - lp.theta[k[1][3]]
+        m = get_alpha_or_gamma(inst.K, lp, k)
         lp.f_cons[k] = @constraint(lp.jump_model, 
-                        lp.f[k] == inst.K[k].gamma * lp.Dtheta[k[1][2:3]],
-                        # lp.f[k] == inst.K[k].gamma * Dtheta,
-                        base_name = "ol.k[$k]")
+                                   lp.f[k] == m * lp.Dtheta[k[1][2:3]],
+                                   base_name = "ol.k[$k]")
     end
 
     return nothing
@@ -316,16 +321,16 @@ function add_Dtheta_bounds_cons!(inst::Instance, lp::LPModel)
 end
 
 """
-    add_fkl_cons!(inst::Instance, 
-                  scen::Int64, 
-                  tep::TEPModel)
+    add_fkl_cons!(inst::Instance, scen::Int64, tep::TEPModel)
 
 Add first Kirchhoff law constraints.
 """
-function add_fkl_cons!(inst::Instance, 
-                       scen::Int64, 
-                       tep::TEPModel)
+function add_fkl_cons!(inst::Instance, scen::Int64, tep::TEPModel)
     for i in inst.I
+        if tep.is_alpha_model && haskey(inst.order2_adjacent_buses, i)
+            continue
+        end
+
         e = comp_candidate_incident_flows(inst, tep, i)
         # e += comp_existing_incident_flows(inst, f, i)
         add_to_expression!(e, comp_existing_incident_flows(inst, tep, i))
@@ -345,16 +350,16 @@ function add_fkl_cons!(inst::Instance,
 end
 
 """
-    update_fkl_cons_rhs!(inst::Instance, 
-                         scen::Int64, 
-                         tep::TEPModel)
+    update_fkl_cons_rhs!(inst::Instance, scen::Int64, tep::TEPModel)
 
 Update the right-hand side coefficients of the first Kirchhoff law constraints.
 """
-function update_fkl_cons_rhs!(inst::Instance, 
-                              scen::Int64, 
-                              tep::TEPModel)
+function update_fkl_cons_rhs!(inst::Instance, scen::Int64, tep::TEPModel)
     for i in inst.I
+        if tep.is_alpha_model && haskey(inst.order2_adjacent_buses, i)
+            continue
+        end
+
         d = haskey(inst.scenarios[scen].D, i) ? inst.scenarios[scen].D[i] : 0.0
         JuMP.set_normalized_rhs(tep.fkl_cons[i], d)
     end
@@ -377,7 +382,6 @@ end
              params::Parameters, 
              scen::Int64, 
              is_slacks_req::Bool, 
-             is_build_obj_req::Bool, 
              tep::TEPModel)
 
 Set the objective to minimize the costs of expanding the network.
@@ -386,13 +390,10 @@ function set_obj!(inst::Instance,
                   params::Parameters, 
                   scen::Int64, 
                   is_slacks_req::Bool, 
-                  is_build_obj_req::Bool, 
                   tep::TEPModel)
     # Cost of building new candidate lines
-    if (is_build_obj_req)
-        for k in keys(inst.K)
-            add_to_expression!(tep.obj, inst.K[k].cost, tep.x[k])
-        end
+    for k in keys(inst.K)
+        add_to_expression!(tep.obj, inst.K[k].cost, tep.x[k])
     end
     # Generation costs
     for k in keys(tep.g)
@@ -410,7 +411,6 @@ end
              params::Parameters, 
              scen::Int64, 
              is_slacks_req::Bool, 
-             is_build_obj_req::Bool, 
              lp::LPModel)
 
 Set the objective to minimize the slacks.
@@ -419,7 +419,6 @@ function set_obj!(inst::Instance,
                   params::Parameters, 
                   scen::Int64, 
                   is_slacks_req::Bool, 
-                  is_build_obj_req::Bool, 
                   lp::LPModel)
     # Generation costs
     lambda = 0.0

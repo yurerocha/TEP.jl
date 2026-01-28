@@ -538,3 +538,503 @@ end
 function get_bus_load(inst::Instance, scen::Int64, b::Int64)
     return haskey(inst.scenarios[scen].D, b) ? inst.scenarios[scen].D[b] : 0.0
 end
+
+function get_alpha_or_gamma(L::Dict{T, BranchInfo}, 
+                            tep::TEPModel, 
+                            l::T) where T <: Union{Tuple3I, CandType} 
+    if tep.is_alpha_model && !iseq(L[l].alpha, 0.0)
+        return L[l].alpha
+    else
+        return L[l].gamma
+    end
+end
+
+# ------------------------- Rm and add lines functions -------------------------
+"""
+    rm_lines!(inst::Instance, 
+              params::Parameters, 
+              lp::LPModel,  
+              lines::Set{CandType}, 
+              is_opt_req::Bool = false)
+
+Remove lines from the model by setting the susceptances to a small value.
+"""
+function rm_lines!(inst::Instance, 
+                   params::Parameters, 
+                   lp::LPModel,  
+                   lines::Set{CandType}, 
+                   is_opt_req::Bool = false)
+    # Para que não estiver na lista de remoção, verificar se seu coeficiente é 
+    # diferente de zero. Se for o caso, considerar o seu gamma.
+    # Para os que estiverem na lista de remoção, pegar seu gamma como zero.
+    for k in lines
+        # if !lp.has_fixed_s_vars && !is_fixed(lp.s[k])
+        #     fix(lp.s[k], 0.0; force = true)
+        # end
+
+        # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
+        #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
+        #                            [0, 0])
+        # if !iseq(normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]]), 0)
+        # set_normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]], 0)
+        if is_update_alpha_req(inst, lp, k)
+            update_alpha_model_norm_coeffs!(inst, params, lp, lines, k, true)
+        else
+            JuMP.set_normalized_coefficient(lp.f_cons[k], 
+                                            lp.Dtheta[k[1][2:3]], 
+                                            0)
+        end
+        # end
+        # fix(lp.f[k], 0.0; force = true)
+    end
+
+    if is_opt_req
+        optimize!(lp.jump_model)
+    end
+
+    return nothing
+end
+
+"""
+    add_lines!(inst::Instance, 
+               lp::LPModel, 
+               lines::Set{CandType}, 
+               is_opt_req::Bool = true)
+
+Insert lines in the model by setting the diagonal terms of the susceptance.
+"""
+function add_lines!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel,
+                    lines::Set{CandType}, 
+                    is_opt_req::Bool = true)
+    for k in lines
+        # if params.model.is_lp_model_s_var_set_req && is_fixed(lp.s[k])
+        # Attention! Beam search requires the s variables to be always fixed at 
+        # zero
+        # if !lp.has_fixed_s_vars && is_fixed(lp.s[k])
+        #     unfix(lp.s[k])
+        #     set_lower_bound(lp.s[k], 0.0)
+        # end
+
+        # if is_fixed(lp.f[k])
+        #     unfix(lp.f[k])
+        # end
+
+        # set_normalized_coefficient([lp.f_cons[k], lp.f_cons[k]], 
+        #                            [lp.theta[k[1][2]], lp.theta[k[1][3]]], 
+        #                            [-inst.K[k].gamma, inst.K[k].gamma])
+        # if iseq(normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]]), 
+        #         -inst.K[k].gamma)
+        if is_update_alpha_req(inst, lp, k)
+            update_alpha_model_norm_coeffs!(inst, params, lp, lines, k, false)
+        else
+            JuMP.set_normalized_coefficient(lp.f_cons[k], 
+                                            lp.Dtheta[k[1][2:3]], 
+                                            -inst.K[k].gamma)
+        end
+        # end
+        # unfix(lp.f[k])
+    end
+
+    if is_opt_req
+        optimize!(lp.jump_model)
+    end
+
+    return nothing
+end
+
+function is_update_alpha_req(inst::Instance, lp::LPModel, k::CandType)
+    fr, to = get_endpoints(inst, k)
+    return lp.is_alpha_model && (haskey(inst.order2_adjacent_buses, fr) || 
+                                 haskey(inst.order2_adjacent_buses, to))
+end
+
+"""
+    update_lp!(inst::Instance, 
+               params::Parameters, 
+               lp::LPModel, 
+               inserted::Set{CandType}, 
+               is_opt_req::Bool = true)
+    
+Remove all candidate lines, next insert candidates from a set and reoptimize.
+"""
+function update_lp!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel, 
+                    inserted::Set{CandType}, 
+                    is_opt_req::Bool = true)
+    # log(params, "It update $it", true)
+    rm_lines!(inst, params, lp, Set{CandType}(keys(inst.K)), false)
+    add_lines!(inst, params, lp, inserted, is_opt_req)
+
+    # return termination_status(lp.jump_model) == MOI.OPTIMAL
+    return nothing
+end
+
+"""
+    update_lp!(inst::Instance, 
+               params::Parameters, 
+               lp::LPModel, 
+               cache_rm::Set{CandType}, 
+               insert::Set{CandType})
+    
+Remove all candidate lines, next insert candidates from a set and reoptimize.
+
+For multiple iterations, it can be more efficient by storing previously removed 
+candidates lines in an initially empty set.
+"""
+function update_lp!(inst::Instance, 
+                    params::Parameters, 
+                    lp::LPModel, 
+                    cache_in::Set{CandType}, 
+                    cache_rm::Set{CandType}, 
+                    insert::Set{CandType})
+    # Remove inserted lines out of the new insert set
+    rm = setdiff(cache_in, insert)
+    rm_lines!(inst, params, lp, rm, false)
+
+    # Insert lines not previously inserted
+    ins = setdiff(insert, cache_in)
+    add_lines!(inst, params, lp, ins, true)
+
+    # Update the set of removed lines
+    empty!(cache_in)
+    union!(cache_in, insert)
+    union!(cache_rm, rm)
+    setdiff!(cache_rm, ins)
+
+    if params.debugging_level == 1
+        @assert length(cache_in) + length(cache_rm) == inst.num_K
+    end
+
+    return nothing
+end
+
+function update_alpha_model_norm_coeffs!(inst::Instance, 
+                                         params::Parameters,
+                                         lp::LPModel, 
+                                         lines::Set{CandType}, 
+                                         k::CandType, 
+                                         is_rm::Bool)
+    b1, b2, b3 = get_Dtheta_buses(inst, lp, k)
+
+    Bl = 0.0
+    Bm = 0.0
+    if is_rm
+        Bl = rm_lines_comp_sum_gamma_values(inst, lp, b1, b2, lines)
+        Bm = rm_lines_comp_sum_gamma_values(inst, lp, b2, b3, lines)
+    else
+        Bl = add_lines_comp_sum_gamma_values(inst, lp, b1, b2, lines)
+        Bm = add_lines_comp_sum_gamma_values(inst, lp, b2, b3, lines)
+    end
+
+    Am = Bm / (Bl + Bm)
+    Al = Bl / (Bl + Bm)
+
+    if params.debugging_level == 2
+        @assert b1 != b2 && b1 != b3 && b2 != b3 "error in alpha model bus: " *
+            "self-looping line $k ($b1, $b2, $b3)"
+
+        @assert iseq(Bl * Am, Bm * Al) "error in alpha model coeffs $k: " *
+            "$(Bl * Am) != $(Bm * Al)"
+    end
+
+    # set_norm_coeffs!(inst, lp, b1, b2, Am, lines)
+    # set_norm_coeffs!(inst, lp, b2, b3, Al, lines)
+
+    if is_rm
+        rm_lines_set_norm_coeffs!(inst, lp, b1, b2, Am, lines)
+        rm_lines_set_norm_coeffs!(inst, lp, b2, b3, Al, lines)
+    else
+        add_lines_set_norm_coeffs!(inst, lp, b1, b2, Am, lines)
+        add_lines_set_norm_coeffs!(inst, lp, b2, b3, Al, lines)
+    end
+
+    return nothing
+end
+
+function get_Dtheta_buses(inst::Instance, tep::TEPModel, l)
+    fr, to = get_endpoints(inst, l)
+
+    if !tep.is_alpha_model
+        return fr, 0, to
+    elseif haskey(inst.order2_adjacent_buses, fr)
+        # In case fr is an order-2 bus (i - k (fr) - j), the constraint is
+        # defined between i (the other bus in the adjacency list) and j (to)
+        return get_other_bus(inst, fr, to), fr, to
+    elseif haskey(inst.order2_adjacent_buses, to)
+        # Otherwise, if to is an order-2 bus (i - k (to) - j), the constraint is
+        # defined between i (fr) and j (the other bus in the adjacency list)
+        return fr, to, get_other_bus(inst, to, fr)
+    else
+        return (fr, 0, to)
+    end
+end
+
+function comp_sum_gamma_values(inst::Instance, 
+                               b1::Int64, b2::Int64, 
+                               inserted = keys(inst.K))
+    B = 0.0
+
+    for j in inst.existing_circuits[(b1, b2)]
+        B += inst.J[j].gamma
+        for k in inst.candidate_circuits[j]
+            if k in inserted
+                B += inst.K[k].gamma
+            end
+        end
+    end
+
+    return B
+end
+
+function rm_lines_comp_sum_gamma_values(inst::Instance, lp::LPModel, 
+                                        b1::Int64, b2::Int64, 
+                                        lines::Set{CandType})
+    B = 0.0
+
+    for j in inst.existing_circuits[(b1, b2)]
+        B += inst.J[j].gamma
+        for k in inst.candidate_circuits[j]
+            if k in lines
+                continue
+            end
+            c = JuMP.normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]])
+            if !iseq(c, 0.0)
+                # Line is inserted in the model
+                B += inst.K[k].gamma
+            end
+        end
+    end
+
+    return B
+end
+
+function add_lines_comp_sum_gamma_values(inst::Instance, lp::LPModel, 
+                                         b1::Int64, b2::Int64, 
+                                         lines::Set{CandType})
+    B = 0.0
+
+    for j in inst.existing_circuits[(b1, b2)]
+        B += inst.J[j].gamma
+        for k in inst.candidate_circuits[j]
+            if k in lines
+                B += inst.K[k].gamma
+                continue
+            end
+            c = JuMP.normalized_coefficient(lp.f_cons[k], lp.Dtheta[k[1][2:3]])
+            if !iseq(c, 0.0)
+                # Line is inserted in the model
+                B += inst.K[k].gamma
+            end
+        end
+    end
+
+    return B
+end
+
+function set_norm_coeffs!(inst::Instance, 
+                          lp::LPModel, 
+                          fr::Int64, to::Int64, 
+                          A::Float64,
+                          inserted::Set{CandType})
+    for j in inst.existing_circuits[(fr, to)]
+        JuMP.set_normalized_coefficient(lp.f_cons[j], 
+                                        lp.Dtheta[j[2:3]], 
+                                        -inst.J[j].gamma * A)
+        for k in inst.candidate_circuits[j]
+            m = 0.0
+            if k in inserted
+                m = -inst.K[k].gamma * A
+            end
+            JuMP.set_normalized_coefficient(lp.f_cons[k], 
+                                            lp.Dtheta[k[1][2:3]], 
+                                            m)
+        end
+    end
+
+    return nothing
+end
+
+function rm_lines_set_norm_coeffs!(inst::Instance, 
+                                   lp::LPModel, 
+                                   fr::Int64, to::Int64, 
+                                   A::Float64,
+                                   lines::Set{CandType})
+    for j in inst.existing_circuits[(fr, to)]
+        JuMP.set_normalized_coefficient(lp.f_cons[j], 
+                                        lp.Dtheta[j[2:3]], 
+                                        -inst.J[j].gamma * A)
+        for k in inst.candidate_circuits[j]
+            m = 0.0
+            if k in lines
+                m = 0.0
+            else
+                c = JuMP.normalized_coefficient(lp.f_cons[k], 
+                                                lp.Dtheta[k[1][2:3]])
+                if !iseq(c, 0.0)
+                    # Line is inserted in the model
+                    m = -inst.K[k].gamma * A
+                end
+            end
+            JuMP.set_normalized_coefficient(lp.f_cons[k], 
+                                            lp.Dtheta[k[1][2:3]], 
+                                            m)
+        end
+    end
+
+    return nothing
+end
+
+function add_lines_set_norm_coeffs!(inst::Instance, 
+                                    lp::LPModel, 
+                                    fr::Int64, to::Int64, 
+                                    A::Float64,
+                                    lines::Set{CandType})
+    for j in inst.existing_circuits[(fr, to)]
+        JuMP.set_normalized_coefficient(lp.f_cons[j], 
+                                        lp.Dtheta[j[2:3]], 
+                                        -inst.J[j].gamma * A)
+        for k in inst.candidate_circuits[j]
+            m = 0.0
+            if k in lines
+                m = -inst.K[k].gamma * A
+            else
+                c = JuMP.normalized_coefficient(lp.f_cons[k], 
+                                                lp.Dtheta[k[1][2:3]])
+                if !iseq(c, 0.0)
+                    # Line is inserted in the model
+                    m = -inst.K[k].gamma * A
+                end
+            end
+            JuMP.set_normalized_coefficient(lp.f_cons[k], 
+                                            lp.Dtheta[k[1][2:3]], 
+                                            m)
+        end
+    end
+
+    return nothing
+end
+
+function debug_lps(inst::Instance, 
+                   params::Parameters, 
+                   cache::WorkerCache, 
+                   scen::Int64, 
+                   inserted::Set{CandType})
+    # Colocar param para considerar apenas o modelo normal
+    lp = build_lp(inst, params, scen, false, false)
+    lp_alpha = build_lp(inst, params, scen, false, true)
+
+    update_lp!(inst, params, lp, inserted, true)
+    update_lp!(inst, params, lp_alpha, inserted, true)
+
+    if JuMP.termination_status(lp.jump_model) != MOI.OPTIMAL ||
+            JuMP.termination_status(lp_alpha.jump_model) != MOI.OPTIMAL
+        return nothing
+    end
+
+    cost_lp1, _ = comp_penalized_cost(inst, params, scen, 
+                                        lp, cache, inserted)
+    cost_lp2, _ = comp_penalized_cost(inst, params, scen, 
+                                        lp_alpha, cache, inserted)
+    @assert iseq(cost_lp1, cost_lp2, 1e-1) "debug lps insert pcosts lp:" * 
+        "$cost_lp1 != lp_alpha:$cost_lp2 diff:$(abs(cost_lp1 - cost_lp2))"
+
+    obj_lp1 = JuMP.objective_value(lp.jump_model)
+    obj_lp2 = JuMP.objective_value(lp_alpha.jump_model)
+    @assert iseq(obj_lp1, obj_lp2, 1e-1) "debug lps insert lp:$obj_lp1 != " * 
+        "lp_alpha: $obj_lp2 diff:$(abs(obj_lp1 - obj_lp2))"
+
+    return nothing
+end
+
+function debug_lps_reinsert(inst::Instance, 
+                            params::Parameters, 
+                            cache::WorkerCache, 
+                            scen::Int64, 
+                            inserted::Set{CandType}, 
+                            reinserted::Set{CandType}, 
+                            is_lp_debug_en::Bool)
+    lps = []
+    labels = []
+
+    if is_lp_debug_en
+        lp = build_lp(inst, params, scen, false, false)
+        lp_alpha = build_lp(inst, params, scen, false, true)
+        push!(lps, [lp, lp_alpha])
+        push!(labels, ["lp", "lp_alpha"])
+    end
+
+    lp_prime = build_lp(inst, params, scen, true, false)
+    lp_prime_alpha = build_lp(inst, params, scen, true, true)
+    push!(lps, [lp_prime, lp_prime_alpha])
+    push!(labels, ["lp_prime", "lp_prime_alpha"])
+
+
+    for (i, lp_pair) in enumerate(lps)
+        update_lp!(inst, params, lp_pair[1], inserted, false)
+        update_lp!(inst, params, lp_pair[2], inserted, false)
+
+        add_lines!(inst, params, lp_pair[1], reinserted, true)
+        add_lines!(inst, params, lp_pair[2], reinserted, true)
+
+        if is_lp_debug_en && i == 1
+            # If the lp models are being evaluated
+            if JuMP.termination_status(lp_pair[1].jump_model) != MOI.OPTIMAL || 
+                    JuMP.termination_status(lp_pair[2].jump_model) != MOI.OPTIMAL
+                continue
+            end
+            # For prime models, the obj value have to be the same, but the 
+            # generation profile may differ
+            cost_lp1, gc1 = comp_penalized_cost(inst, params, scen, 
+                                            lp_pair[1], cache, inserted)
+            cost_lp2, gc2 = comp_penalized_cost(inst, params, scen, 
+                                            lp_pair[2], cache, inserted)
+            @assert iseq(cost_lp1, cost_lp2, 1e-1) debug_name * 
+                "pcosts $(labels[i][1]):$cost_lp1 != $(labels[i][2]):$cost_lp2 " * 
+                "diff:$(abs(cost_lp1 - cost_lp2))"
+        end
+
+        obj_lp1 = JuMP.objective_value(lp_pair[1].jump_model)
+        obj_lp2 = JuMP.objective_value(lp_pair[2].jump_model)
+        debug_name = "debug lps reinsert "
+        @assert iseq(obj_lp1, obj_lp2, 1e-1) debug_name * 
+            "$(labels[i][1]):$obj_lp1 != $(labels[i][2]): $obj_lp2 " * 
+            "diff:$(abs(obj_lp1 - obj_lp2))"
+    end
+
+    return nothing
+end
+
+# function debug_prime_lps_reinsert(inst::Instance, 
+#                                   params::Parameters, 
+#                                   cache::WorkerCache, 
+#                                   scen::Int64, 
+#                                   inserted::Set{CandType}, 
+#                                   reinserted::Set{CandType})
+#     lp_prime = build_lp(inst, params, scen, true, false)
+#     lp_prime_alpha = build_lp(inst, params, scen, true, true)
+
+#     update_lp!(inst, params, lp_prime, inserted, false)
+#     update_lp!(inst, params, lp_prime_alpha, inserted, false)
+
+#     add_lines!(inst, params, lp_prime, reinserted, true)
+#     add_lines!(inst, params, lp_prime_alpha, reinserted, true)
+
+#     obj_lp1 = JuMP.objective_value(lp_prime.jump_model)
+#     obj_lp2 = JuMP.objective_value(lp_prime_alpha.jump_model)
+#     debug_name = "debug prime lps reinsert "
+#     @assert iseq(obj_lp1, obj_lp2, 1e-2) debug_name * 
+#         "$(labels[i][1]):$obj_lp1 != $(labels[i][2]): $obj_lp2 " * 
+#         "diff:$(abs(obj_lp1 - obj_lp2))"
+
+#     cost_lp1, _ = comp_penalized_cost(inst, params, scen, 
+#                                       lp_prime, cache, inserted)
+#     cost_lp2, _ = comp_penalized_cost(inst, params, scen, 
+#                                       lp_prime_alpha, cache, inserted)
+#     @assert iseq(cost_lp1, cost_lp2, 1e-2) debug_name * 
+#         "pcosts $cost_lp1 != $cost_lp2 diff:$(abs(cost_lp1 - cost_lp2))"
+
+#     return nothing
+# end

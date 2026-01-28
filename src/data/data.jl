@@ -61,6 +61,7 @@ mutable struct BranchInfo
     f_bar::Float64 # Capacity of circuits
     x::Float64 # Reactance of circuits
     gamma::Float64 # Susceptance of circuits
+    alpha::Float64 # Aggregated susceptance, circuits incident to order-2 buses
     cost::Float64 # Cost of candidate circuits
     Dtheta_bounds::Tuple{Float64, Float64}
 end
@@ -74,6 +75,7 @@ mutable struct Instance
     existing_circuits::Dict{Tuple{Int64, Int64}, Set{Tuple3I}}
      # Candidate lines for each j
     candidate_circuits::Dict{Tuple3I, Vector{CandType}}
+    order2_adjacent_buses::Dict{Int64, Vector{Int64}}
     key_to_index::Dict{CandType, Int64}
     costs::Vector{Float64}
     # f_bar::Vector{Float64} # Capacity of circuits
@@ -95,6 +97,7 @@ abstract type TEPModel end
 struct MIPModel <: TEPModel
     jump_model::JuMP.Model
     obj::AffQuadExpr
+    is_alpha_model::Bool
     x::Dict{CandType, JuMP.VariableRef}
     f::Dict{Any, JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
@@ -103,10 +106,11 @@ struct MIPModel <: TEPModel
     Dtheta::Dict{Tuple{Int64, Int64}, JuMP.VariableRef}
     fkl_cons::Dict{Int64, JuMP.ConstraintRef}
 
-    MIPModel(params::Parameters) = 
+    MIPModel(params::Parameters, is_alpha_model::Bool) = 
                 new(# direct_model(Gurobi.Optimizer()), 
                     JuMP.Model(params.model.optimizer), 
                     params.model.is_dcp_power_model_en ? QuadExpr() : AffExpr(), 
+                    is_alpha_model, 
                     Dict{CandType, JuMP.VariableRef}(), 
                     Dict{Any, JuMP.VariableRef}(), 
                     Dict{Int64, JuMP.VariableRef}(), 
@@ -120,6 +124,7 @@ mutable struct LPModel <: TEPModel
     jump_model::JuMP.Model
     obj::AffExpr
     has_fixed_s_vars::Bool
+    is_alpha_model::Bool
     s::Dict{Any, JuMP.VariableRef}
     f::Dict{Any, JuMP.VariableRef}
     g::Dict{Int64, JuMP.VariableRef}
@@ -129,17 +134,17 @@ mutable struct LPModel <: TEPModel
     fkl_cons::Dict{Int64, JuMP.ConstraintRef}
     f_cons::Dict{Any, JuMP.ConstraintRef}
 
-    LPModel(params::Parameters) = new(JuMP.Model(params.model.optimizer), 
-                                      AffExpr(), 
-                                      false, 
-                                      Dict{Any, JuMP.VariableRef}(), 
-                                      Dict{Any, JuMP.VariableRef}(), 
-                                      Dict{Int64, JuMP.VariableRef}(), 
-                                      Dict{Int64, JuMP.AffExpr}(), 
-                                      Dict{Int64, JuMP.VariableRef}(), 
-                                      Dict{Int64, JuMP.VariableRef}(), 
-                                      Dict{Int64, JuMP.ConstraintRef}(), 
-                                      Dict{Any, JuMP.ConstraintRef}())
+    LPModel(params::Parameters, is_alpha_model::Bool) = 
+                        new(JuMP.Model(params.model.optimizer), AffExpr(), 
+                                       false, is_alpha_model, 
+                                       Dict{Any, JuMP.VariableRef}(), 
+                                       Dict{Any, JuMP.VariableRef}(), 
+                                       Dict{Int64, JuMP.VariableRef}(), 
+                                       Dict{Int64, JuMP.AffExpr}(), 
+                                       Dict{Int64, JuMP.VariableRef}(), 
+                                       Dict{Int64, JuMP.VariableRef}(), 
+                                       Dict{Int64, JuMP.ConstraintRef}(), 
+                                       Dict{Any, JuMP.ConstraintRef}())
 end
 
 const TepModel = Union{MIPModel, LPModel}

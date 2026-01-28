@@ -169,7 +169,7 @@ function build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
         # min_gamma = min(min_gamma, gamma)
         # max_gamma = max(max_gamma, gamma)
         J[j] = BranchInfo(dt["rate_a"], 
-                          x, gamma, 0.0, 
+                          x, gamma, 0.0, 0.0, 
                           (dt["angmin"], dt["angmax"]))
     end
     # @warn min_gamma, max_gamma
@@ -194,7 +194,7 @@ function build_candidate_circuits(params::Parameters,
         candidate_circuits[j] = CandType[]
         for l in 1:params.instance.num_candidates
             k = (j, l)
-            K[k] = v
+            K[k] = deepcopy(v)
             # Compute the new costs based on the gamma values
             c = params.instance.cost_mult * abs(v.x)
             # n = rand(params.rng, 1:params.instance.max_rand)
@@ -276,10 +276,10 @@ function comp_cap_constraints(inst::Instance, scen::Int64)
         end
         if isl(cap, D[d])
             count += 1
-            @warn "Bus $d has capacity $cap and demand $(D[d])"
+            @warn "cus $d has capacity $cap and demand $(D[d])"
         end
     end
-    @info "Count cap cons: $count"
+    @info "count cap cons: $count"
     return nothing
 end
 
@@ -366,6 +366,126 @@ function rm_candidate_circuits!(inst::Instance, incident_j::Tuple3I)
                 deleteat!(inst.candidate_circuits[incident_j], i)
                 break
             end
+        end
+    end
+
+    return nothing
+end
+
+function update_order2_adjacent_buses!(inst::Instance)
+    degree, adj_buses = comp_order_and_adjacent_buses(inst)
+    order2_adj_buses = comp_order2_intermediate_buses(inst, degree, adj_buses)
+    del_series_order2_buses!(order2_adj_buses)
+
+    n = length(order2_adj_buses)
+    @info "num order-2 adj buses:$n (%$(100.0 * n / inst.num_I))"
+
+    inst.order2_adjacent_buses = order2_adj_buses
+    update_order2_buses_alpha_values!(inst)
+
+    return nothing
+end
+
+function comp_order_and_adjacent_buses(inst::Instance)
+    degree = Dict{Int64, Int64}()
+    adj_buses = Dict{Int64, Vector{Int64}}()
+
+    for j in keys(inst.J), b1 in j[2:3]
+        b2 = (b1 == j[2] ? j[3] : j[2])
+        if haskey(degree, b1)
+            degree[b1] += 1
+            push!(adj_buses[b1], b2)
+        else
+            degree[b1] = 1
+            adj_buses[b1] = Vector{Int64}([b2])
+        end
+    end
+
+    return degree, adj_buses
+end
+
+function comp_order2_intermediate_buses(inst::Instance, 
+                                        degree::Dict{Int64, Int64}, 
+                                        adj_buses::Dict{Int64, Vector{Int64}})
+    # Identify order-2 buses with zero load and generation in all scenarios
+    order2_adj_buses = Dict{Int64, Vector{Int64}}()
+    
+    for (b, count) in degree
+        if count != 2 || adj_buses[b][1] == adj_buses[b][2]
+            # Not order-2 bus. If adj_buses[b][1] == adj_buses[b][2], it is a 
+            # self-looping line
+            continue
+        end
+        
+        is_order2 = true
+        for scen in eachindex(inst.scenarios)
+            d = get_bus_load(inst, scen, b)
+            g = get_bus_gen_cap(inst, scen, b)
+            if !iseq(d, 0.0) || !iseq(g, 0.0)
+                is_order2 = false
+                break
+            end
+        end
+        if is_order2
+            order2_adj_buses[b] = adj_buses[b]
+        end
+    end
+
+    return order2_adj_buses
+end
+
+function del_series_order2_buses!(order2_adj_buses::Dict{Int64, Vector{Int64}})
+    # Delete order-2 buses in series association
+    while true
+        has_del = false
+        for (b1, adj_buses) in order2_adj_buses, b2 in adj_buses
+            if haskey(order2_adj_buses, b2)
+                delete!(order2_adj_buses, b2)
+                has_del = true
+                break
+            end
+        end
+        if !has_del
+            break
+        end
+    end
+
+    return nothing
+end
+
+function update_order2_buses_alpha_values!(inst::Instance)
+    for (b2, adj_buses) in inst.order2_adjacent_buses
+        b1 = adj_buses[1]
+        b3 = adj_buses[2]
+        # Compute Bl and Bm, where: 
+        # - Bl: sum of gamma values of circuits connecting i and k
+        # - Bm: sum of gamma values of circuits connecting k and j
+        Bl = comp_sum_gamma_values(inst, b1, b2)
+        Bm = comp_sum_gamma_values(inst, b2, b3)
+
+        update_alpha_values!(inst, b1, b2, Bm / (Bl + Bm))
+        update_alpha_values!(inst, b2, b3, Bl / (Bl + Bm))
+    end
+
+    return nothing
+end
+
+function get_other_bus(inst::Instance, b_ref::Int64, b_adj::Int64)
+    adj_buses = inst.order2_adjacent_buses[b_ref]
+    if adj_buses[1] == b_adj
+        return adj_buses[2]
+    else
+        return adj_buses[1]
+    end
+end
+
+function update_alpha_values!(inst::Instance, 
+                              b1::Int64, b2::Int64, 
+                              A::Float64)
+    for j in inst.existing_circuits[(b1, b2)]
+        inst.J[j].alpha = inst.J[j].gamma * A
+        for k in inst.candidate_circuits[j]
+            inst.K[k].alpha = inst.K[k].gamma * A
         end
     end
 

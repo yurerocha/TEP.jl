@@ -36,6 +36,7 @@ function build_instance(params::Parameters, filepath::String)
 
     return Instance(get_inst_name(filepath), I, J, K, 
                     existing_circuits, candidate_circuits, 
+                    Dict{Int64, Vector{Int64}}(), 
                     key_to_idx, costs, 
                     length(I), length(J), length(K), 
                     ref_bus, 

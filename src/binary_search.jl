@@ -82,9 +82,18 @@ function binary_search!(inst::Instance,
 
         has_impr = false
         if iseq(viol, 0.0)
-            union!(in_cands, reinserted)
             if length(reinserted) > 0
                 add_lines!(inst, params, lp, reinserted, true)
+                if params.debugging_level == 2
+                    debug_lps_reinsert(inst, params, cache, scen, 
+                                       in_cands, reinserted, true)
+                end
+            end
+            
+            union!(in_cands, reinserted)
+
+            if params.debugging_level == 2
+                debug_lps(inst, params, cache, scen, in_cands)
             end
             cost, _ = 
                     comp_penalized_cost(inst, params, scen, lp, cache, in_cands)

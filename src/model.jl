@@ -2,18 +2,18 @@ function build_mip(inst::Instance,
                    params::Parameters, 
                    scen::Int64 = 1, 
                    is_slacks_req::Bool = true, 
-                   is_build_obj_req::Bool = true)
-    mip = MIPModel(params)
-    return build_model(inst, params, scen, is_slacks_req, is_build_obj_req, mip)
+                   is_alpha_model::Bool = false)
+    mip = MIPModel(params, is_alpha_model)
+    return build_model(inst, params, scen, is_slacks_req, mip)
 end
 
 function build_lp(inst::Instance, 
                   params::Parameters, 
                   scen::Int64 = 1, 
                   is_slacks_req::Bool = true, 
-                  is_build_obj_req::Bool = true)
-    lp = LPModel(params)
-    return build_model(inst, params, scen, is_slacks_req, is_build_obj_req, lp)
+                  is_alpha_model::Bool = false)
+    lp = LPModel(params, is_alpha_model)
+    return build_model(inst, params, scen, is_slacks_req, lp)
 end
 
 """
@@ -21,7 +21,6 @@ end
                 params::Parameters, 
                 scen::Int64, 
                 is_slacks_req::Bool, 
-                is_build_obj_req::Bool, 
                 tep::TEPModel)
 
 Build either a mixed-integer programming (MIP) model or a linear programming 
@@ -31,7 +30,6 @@ function build_model(inst::Instance,
                      params::Parameters, 
                      scen::Int64, 
                      is_slacks_req::Bool, 
-                     is_build_obj_req::Bool, 
                      tep::TEPModel)
     config!(inst, params, scen, tep)
 
@@ -55,7 +53,7 @@ function build_model(inst::Instance,
 
     add_ref_bus_cons!(inst, tep)
 
-    set_obj!(inst, params, scen, is_slacks_req, is_build_obj_req, tep)
+    set_obj!(inst, params, scen, is_slacks_req, tep)
 
     # write_to_file(tep.jump_model, "model.lp")
     # open("model.lp", "w") do f

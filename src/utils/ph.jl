@@ -800,7 +800,12 @@ function comp_costs_and_viol!(inst::Instance,
                               lp::LPModel, 
                               cache::WorkerCache, 
                               inserted::Set{CandType})
-    update_lp!(inst, params, lp, inserted)
+    update_lp!(inst, params, lp, inserted, true)
+
+    if params.debugging_level == 2
+        debug_lps(inst, params, cache, scen, inserted)
+    end
+
     cost, g_cost = comp_penalized_cost(inst, params, scen, lp, cache, inserted)
 
     return cost, g_cost, comp_relative_viol(inst, lp)
@@ -902,6 +907,13 @@ function repair_solutions!(inst::Instance,
     sol_iub.reinsert, ub_rep_st, ub_rein_st = 
                                     repair!(inst, params, msg.cache, msg.scen, 
                                             lp_with_slacks, msg.cache.sol_ub)
+
+    if params.debugging_level == 2
+        debug_lps_reinsert(inst, params, msg.cache, msg.scen, 
+                           msg.cache.sol_lb, sol_ilb.reinsert, false)
+        debug_lps_reinsert(inst, params, msg.cache, msg.scen, 
+                           msg.cache.sol_ub, sol_iub.reinsert, false)
+    end
 
     # Update tuples with results from both lb and ub repairs
     repair_st = map((a, b) -> a + b, lb_rep_st, ub_rep_st)

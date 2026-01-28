@@ -148,8 +148,8 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         mip = build_mip(inst, params, current_model_scen)
         set_state!(inst, mip)
 
-        lp_with_slacks = build_lp(inst, params, current_model_scen, true)
-        lp = build_lp(inst, params, current_model_scen, false)
+        lp_with_slacks = build_lp(inst, params, current_model_scen, true, true)
+        lp = build_lp(inst, params, current_model_scen, false, true)
 
         # Reset the number of threads to the default value
         params.solver.num_threads = num_threads
@@ -176,7 +176,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                 current_model_scen = 
                                     update_models!(inst, params, lp_with_slacks, 
                                                 lp, msg, current_model_scen)
-
+                                        
                 if msg.cache.option == opt_repair_sols
                     # Repair solutions
                     sol_info_lb, sol_info_ub, repair_st, reinsert_st = 
