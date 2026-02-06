@@ -178,8 +178,8 @@ function log_header(outputfile::String)
     #          "| Rt solve (s) | LB | UB | Gap (%) | Start (s) | RNRBS (s) " * 
     #          "| Rm | RNRBS impr | BS (s) | Start UB | PH (s) | \n"
     # outstr *= "|:---"^21 * "| \n"
-    s = "| Instance | L | N | L/N | Best | LB | UB | Gap | Add  | Heur " * 
-        "| Solver | Time | Viol | Feas | \n"
+    s = "| Instance | L | N | L/N | Start | Best | LB | UB | Gap | Add  " * 
+        "| Heur | Solver | Time | Feas | \n"
     s *= "|:---"^14 * "| \n"
     log(outputfile, s)
 
@@ -191,8 +191,8 @@ function get_keys_results()
     #         "status", "root_best_bound", "root_time", "lb", "ub", "gap", 
     #         "fix_start_time", "rnr_time", "rm_rat", "rnr_impr_rat", 
     #         "bs_time", "start_ub", "ph_time"]
-    return ["best", "lb", "ub", "gap", "add_rat", "heur_time", "solver_time", 
-            "time", "viol", "is_feas"]
+    return ["start", "best", "lb", "ub", "gap", "add_rat", 
+            "heur_time", "solver_time", "time", "is_feas"]
 end
 
 """
@@ -414,7 +414,8 @@ function fix_for_symmetry_contrs!(inst::Instance,
     return nothing
 end
 
-function set_state!(inst::Instance, mip::MIPModel)
+function set_state!(inst::Instance, 
+                    mip::MIPModel)
     # In case the x is a single variable instead of a vector
     # if x isa JuMP.VariableRef
     #     x = [x]
@@ -447,6 +448,19 @@ function get_state_values(inst::Instance, inserted::Set{CandType})
     end
 
     return x
+end
+
+function get_inserted_candidates(inst::Instance, mip::MIPModel)
+    x = JuMP.value.(mip.jump_model.ext[:state])
+
+    inserted = Set{CandType}()
+    for (i, k) in enumerate(keys(inst.K))
+        if iseq(x[i], 1.0)
+            push!(inserted, k)
+        end
+    end
+
+    return inserted
 end
 
 """

@@ -114,6 +114,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
 
     # for scen in 1:inst.num_scenarios
     #     println("Scen#$(scen): $(cache.scenarios[scen].state)")
+    #     println("Scen#$(scen): $(cache.scenarios[scen].state)")
     # end
 
     # JQM.mpi_barrier()
