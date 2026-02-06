@@ -66,7 +66,7 @@ function run_parallel_ph!(inst::Instance, params::Parameters)
     end
 
     for scen in 1:inst.num_scenarios
-        println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
+        println("Scen#$(scen): $(cache.scenarios[scen].state)")
     end
 
     # JQM.mpi_barrier()
@@ -82,7 +82,7 @@ function ph_workers_loop(inst::Instance, params::Parameters)
         # Build model for the first scenario
         current_model_scen = 1
         mip = build_mip(inst, params, current_model_scen)
-        set_state!(mip, mip.x, mip.g)
+        set_state!(inst, mip)
         while true
             job = JQM.receive_job(worker)
             msg = JQM.get_message(job)

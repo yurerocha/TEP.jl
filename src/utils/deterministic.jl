@@ -16,7 +16,7 @@ function solve_deterministic!(inst::Instance, params::Parameters)
     if has_values(mip.jump_model)
         for scen in 1:inst.num_scenarios
             update_cache_incumbent!(cache, scen, subproblems[scen])
-            x = cache.scenarios[scen].state.x
+            x = cache.scenarios[scen].state
             println("Scen#$(scen): $(round(Int64, sum(x)))/$(length(x))")
         end
     end
@@ -128,9 +128,9 @@ function update_state_vars!(model::JuMP.Model,
                             subproblem::JuMP.Model, 
                             var_in_model::Dict{JuMP.VariableRef, 
                                                JuMP.VariableRef})
-    x = [build_expr(x, var_in_model) for x in subproblem.ext[:state].x]
-    y = [build_expr(y, var_in_model) for y in subproblem.ext[:state].y]
-    subproblem.ext[:state] = State(x, y)
+    x = [build_expr(subproblem.ext[:state][k], 
+                    var_in_model) for k in keys(inst.K)]
+    subproblem.ext[:state] = x
     return nothing
 end
 
@@ -146,8 +146,8 @@ function add_non_anticipativity_cons!(inst::Instance,
                                       model::JuMP.Model, 
                                       subproblems::Vector{MIPModel})
     for scen in 2:inst.num_scenarios
-        @constraint(model, subproblems[1].jump_model.ext[:state].x .== 
-                           subproblems[scen].jump_model.ext[:state].x)
+        @constraint(model, subproblems[1].jump_model.ext[:state] .== 
+                           subproblems[scen].jump_model.ext[:state])
     end
     return nothing
 end
@@ -164,7 +164,7 @@ function add_obj_build_costs!(inst::Instance,
                               subproblems::Vector{MIPModel})
     incumbent = JuMP.objective_function(model)
 
-    x = subproblems[1].jump_model.ext[:state].x
+    x = subproblems[1].jump_model.ext[:state]
     build = sum(inst.K[k].cost * x[i] for (i, k) in enumerate(keys(inst.K)))
 
     @objective(model, Min, build + incumbent)

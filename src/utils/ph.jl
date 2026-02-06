@@ -10,14 +10,14 @@ function update_cache_incumbent!(cache::Cache, scen::Int64, mip::MIPModel)
 end
 
 function update_cache_x_hat!(inst::Instance, cache::Cache)
-    cache.x_hat = sum(inst.scenarios[scen].p * cache.scenarios[scen].state.x 
+    cache.x_hat = sum(inst.scenarios[scen].p * cache.scenarios[scen].state 
                       for scen in 1:inst.num_scenarios)
     return nothing
 end
 
 function update_cache_omega!(inst::Instance, params::Parameters, cache::Cache)
     for scen in 1:inst.num_scenarios
-        delta = cache.scenarios[scen].state.x - cache.x_hat
+        delta = cache.scenarios[scen].state - cache.x_hat
         cache.scenarios[scen].omega += params.progressive_hedging.rho * delta
     end
     return nothing
@@ -26,7 +26,7 @@ end
 function update_cache_x_average!(inst::Instance, 
                                  params::Parameters, 
                                  cache::Cache)
-    cache.x_average = sum(inst.scenarios[scen].p * cache.scenarios[scen].state.x 
+    cache.x_average = sum(inst.scenarios[scen].p * cache.scenarios[scen].state 
                           for scen in 1:inst.num_scenarios) / 
                     sum(inst.scenarios[scen].p for scen in 1:inst.num_scenarios)
 
@@ -169,7 +169,7 @@ function update_cache_best_convergence_delta!(inst::Instance,
     conv_delta = 0.0
     x_avg = cache.x_average
     for scen in eachindex(inst.scenarios)
-        x =  cache.scenarios[scen].state.x
+        x =  cache.scenarios[scen].state
         # cache.deltas[scen] = maximum(abs, x - cache.x_average)
         cache.deltas[scen] = 
             sum(abs(x[i] - x_avg[i]) / x_avg[i] for i in 1:inst.num_K 
@@ -229,7 +229,7 @@ function comp_delta_obj(params::Parameters,
                         cache::T, 
                         scen::Int64, 
                         tep::TEPModel) where T <: Union{Cache, WorkerCache}
-    x = tep.jump_model.ext[:state].x
+    x = tep.jump_model.ext[:state]
     x_hat = cache.x_hat 
     # Piece-wise linear function for the squared two-norm:
     #     (a - b)² = a² - 2ab + b² (binary first stage variables)
@@ -257,14 +257,14 @@ end
 Update SEP-rho x_min and x_max.
 """
 function update_cache_sep_rho_x_min_max!(inst::Instance, cache::Cache)
-    cache.sep_rho_x_min = cache.scenarios[1].state.x
-    cache.sep_rho_x_max = cache.scenarios[1].state.x
+    cache.sep_rho_x_min = cache.scenarios[1].state
+    cache.sep_rho_x_max = cache.scenarios[1].state
 
     for scen in 2:inst.num_scenarios
         cache.sep_rho_x_min = 
-                    min.(cache.sep_rho_x_min, cache.scenarios[scen].state.x)
+                    min.(cache.sep_rho_x_min, cache.scenarios[scen].state)
         cache.sep_rho_x_max = 
-                    max.(cache.sep_rho_x_max, cache.scenarios[scen].state.x)
+                    max.(cache.sep_rho_x_max, cache.scenarios[scen].state)
     end
 
     return nothing

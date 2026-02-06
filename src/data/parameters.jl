@@ -27,7 +27,8 @@ end
 
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
-    penalty::Float64 = 1.0
+    # penalty::Float64 = 100.0 # 1, 2, 3
+    penalty::Float64 = 1000.0
     # is_lp_model_s_var_set_req = true
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel

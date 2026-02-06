@@ -12,7 +12,7 @@ function build_deterministic(inst::Instance, params::Parameters)
         # TODO: Change LP objective as well
         # TODO: Run heuristic in every it
         subproblem = build_mip(inst, params, scen, false)
-        set_state!(subproblem, subproblem.x, subproblem.g)
+        set_state!(inst, subproblem)
         add_subproblem!(inst, mip.jump_model, scen, subproblem.jump_model)
         subproblems[scen] = subproblem
     end

@@ -134,7 +134,7 @@ function run_parallel_ph_serial_bs!(inst::Instance, params::Parameters)
     end
 
     # for scen in 1:inst.num_scenarios
-    #     println("Scen#$(scen): $(cache.scenarios[scen].state.x)")
+    #     println("Scen#$(scen): $(cache.scenarios[scen].state)")
     # end
 
     # JQM.mpi_barrier()
@@ -167,10 +167,9 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
         params.solver.num_threads = 1
 
         mip = build_mip(inst, params, current_model_scen)
-        set_state!(mip, mip.x, mip.g)
+        set_state!(inst, mip)
 
         lp = build_lp(inst, params, current_model_scen)
-        set_state!(lp, lp.g)
 
         # Reset the number of threads to the default value
         params.solver.num_threads = num_threads
@@ -182,7 +181,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                 break
             end
 
-            state_values = State(Vector{Float64}(), Vector{Float64}())
+            state_values = Float64[]
             sol_info_lb = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
             sol_info_ub = SolutionInfo(0.0, 0.0, 0.0, Set{CandType}())
             start_time = time()
@@ -276,7 +275,7 @@ function ph_serial_bs_workers_loop(inst::Instance, params::Parameters)
                                         MOI.OPTIMAL
                             @assert is_opt "Not opt scen#$(msg.scen)"
                         end
-                        state_values = get_state_values(inst, lp, inserted)
+                        state_values = get_state_values(inst, inserted)
                     end
                 end
                 # flush(io[msg.scen])
