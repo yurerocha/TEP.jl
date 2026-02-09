@@ -30,7 +30,7 @@ function run(logname::String = "log.md")
     # Number of seconds since the Unix epoch
     # seed = Int(floor(datetime2unix(now())))
     # Random.seed!(seed)
-    rng = Random.MersenneTwister(123)
+    # rng = Random.MersenneTwister(123)
 
     log_header(logfile)
 

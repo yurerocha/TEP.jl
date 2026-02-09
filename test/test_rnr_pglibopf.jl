@@ -29,7 +29,7 @@ end
 # Number of seconds since the Unix epoch
 # seed = Int(floor(datetime2unix(now())))
 # Random.seed!(seed)
-rng = Random.MersenneTwister(123)
+# rng = Random.MersenneTwister(123)
 
 dir = "submodules/pglib-opf"
 files = TEP.select_files(dir, end_file)

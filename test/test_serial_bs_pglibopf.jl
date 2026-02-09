@@ -19,7 +19,7 @@ scen = 1
 #     @warn e
 # end
 
-rng = Random.MersenneTwister(123)
+# rng = Random.MersenneTwister(123)
 
 files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first

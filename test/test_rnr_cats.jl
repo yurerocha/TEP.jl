@@ -32,7 +32,7 @@ catch e
     @warn e
 end
 
-rng = Random.MersenneTwister(123)
+# rng = Random.MersenneTwister(123)
 
 dir = "input"
 files = select_files(dir, num_scenarios)

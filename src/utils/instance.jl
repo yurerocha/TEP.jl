@@ -173,16 +173,17 @@ function build_candidate_circuits(params::Parameters,
                                 J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo})
     # TODO: K and J with the same key format
     K = Dict{CandType, BranchInfo}()
-    for (j, v) in J
-        # Candidate circuits are copies of the existing ones
-        for l in 1:params.instance.num_candidates
-            K[(j, l)] = v
-            # Compute the new costs based on the gamma values
-            c = params.instance.cost_mult * abs(v.x)
-            # n = rand(params.rng, 1:params.instance.max_rand)
-            # K[(j, l)].cost = c / (params.instance.num_candidates + 1) + c / n
-            K[(j, l)].cost = c / (params.instance.num_candidates + 1)
-        end
+    rng = Random.MersenneTwister(params.instance.seed)
+    # Candidate circuits are copies of the existing ones
+    for (j, v) in J, l in 1:params.instance.num_candidates
+        K[(j, l)] = deepcopy(v)
+        # Compute the new costs based on the gamma values
+        # c = params.instance.cost_mult * abs(v.x)
+        # K[(j, l)].cost = c / (params.instance.num_candidates + 1)
+        c = params.instance.cost_mult * 
+                abs(v.x) / (params.instance.num_candidates + 1)
+        m = params.instance.cost_delta_mult * rand(rng, 1:10)
+        K[(j, l)].cost = c * (1 + m)
     end
 
     return K
