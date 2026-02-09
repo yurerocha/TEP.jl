@@ -23,7 +23,7 @@ log_file = "$log_dir/log.md"
 #     @warn e
 # end
 
-rng = Random.MersenneTwister(123)
+# rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 

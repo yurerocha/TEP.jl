@@ -7,21 +7,32 @@ function run_serial_bs!(inst::Instance,
                         inserted::Set{CandType}, 
                         removed::Set{CandType}, 
                         cost::Float64, 
-                        init_time::Float64)
-    bs_init_time = time()
-    init_in = length(inserted)
-    init_cost = cost
-    bin_rm_rat = (init_in - length(inserted)) / inst.num_K
+                        start_time::Float64)
+    params.binary_search.time_limit = 
+                        params.beam_search.time_limit - (time() - start_time)
+    num_ins_start = length(inserted)
+
+    # Compute BS improvement wrt the initial cost
+    start_cost = cost
+
+    cost = binary_search!(inst, params, scen, lp, cache, 
+                            inserted, removed, cost, start_time)
+    bin_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
+
+    # params.solver.log_level = 2
+    # lp = build_lp(inst, params, scen)
+    # @warn "aqui"
+
+    # readline()
     
     # Update time limit
     time_limit = params.beam_search.time_limit - (time() - init_time)
 
-    # fix_s_vars!(lp)
+    fix_s_vars!(lp)
 
     init_in = length(inserted)
     num_in = length(inserted)
     best_cost = cost
-    init_cost = cost
 
     cache_in, cache_rm = init_cache_in_rm(inst)
     # Set the inserted lines according to cache_in and cache_rm
@@ -58,7 +69,7 @@ function run_serial_bs!(inst::Instance,
                     cost = const_infinite
                     is_feas = false
                     viol = 0.0
-                    if JuMP.has_values(lp.jump_model)
+                    if JuMP.termination_status(lp.jump_model) == MOI.OPTIMAL
                         cost, _ = comp_penalized_cost(inst, params, scen, 
                                                         lp, cache, in_cands)
                         is_feas = true

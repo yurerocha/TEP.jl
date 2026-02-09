@@ -3,19 +3,20 @@ module TestBeamSearchPGLibOPF
 using TEP
 using JuMP
 using MPI
-using Random
+# using Random
 using PowerModels
 # using Profile, PProf
 using Serialization
 
 # start_file = 38
-start_file = 6
+start_file = 2
 end_file = 6 # 61
 dir = "submodules/pglib-opf"
 # dir = "submodules/CATS-CaliforniaTestSystem/MATPOWER/"
 scen = 1
-log_dir = "test/integrated"
+log_dir = "test/new_integrated"
 log_file = "$log_dir/log.md"
+is_heur_en = true
 
 params = TEP.Parameters()
 
@@ -25,14 +26,16 @@ catch e
     @warn e
 end
 
-rng = Random.MersenneTwister(123)
+# rng = Random.MersenneTwister(123)
 
-files = ["CaliforniaTestSystem.m",
+files = [
+         "CaliforniaTestSystem.m",
          "pglib_opf_case3012wp_k.m",
          "pglib_opf_case6495_rte.m",
          "pglib_opf_case7336_epigrids.m",
          "pglib_opf_case9591_goc.m",
-         "pglib_opf_case10000_goc.m"]
+         "pglib_opf_case10000_goc.m"
+        ]
 
 # files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
@@ -58,7 +61,8 @@ for (i, file) in enumerate(files[start_file:end_file])
     params.log_file = "$log_dir/$file"
     
     inst = TEP.build_instance(params, filepath)
-    try
+    # try
+        TEP.log(params, "Test $file num $(start_file + i - 1)", true)
         lp = TEP.build_lp(inst, params, scen)
         mip = TEP.build_mip(inst, params, scen)
         TEP.set_state!(inst, mip)
@@ -66,13 +70,24 @@ for (i, file) in enumerate(files[start_file:end_file])
         inserted = Set{TEP.CandType}(keys(inst.K))
         removed = Set{TEP.CandType}()
 
+        # Compute initial cost for bin status report
+        TEP.fix_s_vars!(lp)
+        TEP.update_lp!(inst, params, lp, inserted)
+        start_cost, _ = TEP.comp_penalized_cost(inst, params, scen, 
+                                                lp, cache, inserted)
+        # TEP.unfix_s_vars!(lp)
+
+        # Run serial D&R-BS approach
         start_time = time()
-        start_cost = TEP.const_infinite
-        inserted, _, _ = 
+        heur_runtime = 0.0
+        if is_heur_en
+            inserted, _, _ = 
                 TEP.run_serial_bs!(inst, params, scen, lp, cache, 
                                    inserted, removed, start_cost, start_time)
-        heur_runtime = time() - start_time
+            heur_runtime = time() - start_time
+        end
 
+        TEP.fix_s_vars!(lp)
         TEP.update_lp!(inst, params, lp, inserted)
         start_cost, _ = TEP.comp_penalized_cost(inst, params, scen, 
                                                 lp, cache, inserted)
@@ -96,8 +111,8 @@ for (i, file) in enumerate(files[start_file:end_file])
         cost, _ = TEP.comp_penalized_cost(inst, params, scen, 
                                           lp, cache, inserted)
 
+        @warn opt_ub, cost
         @assert TEP.iseq(opt_ub, cost, 1e-1) "diff obj values $opt_ub $cost"
-
 
         results = TEP.init_results()
 
@@ -113,10 +128,10 @@ for (i, file) in enumerate(files[start_file:end_file])
         results["is_feas"] = true
 
         TEP.log_instance(log_file, file, inst, results)
-    catch e
-        @warn e
-        TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
-    end
+    # catch e
+    #     @warn e
+    #     TEP.log_instance(log_file, "<s>" * file * "</s>", inst, Dict())
+    # end
 end
 
 end # module

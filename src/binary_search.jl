@@ -95,9 +95,11 @@ function binary_search!(inst::Instance,
                 end
                 has_impr = true
                 it_wo_impr = 0
-                st = Status("bin it:$it", length(rm_cands), inst.num_K, 
-                            cost, init_cost, init_time)
-                @infov 2 log(st)
+                LoggingExtras.withlevel(Info; verbosity = params.log_level) do
+                    st = Status("bin it:$it", length(rm_cands), inst.num_K, 
+                                cost, init_cost, start_time)
+                    @infov 2 log(st)
+                end
 
                 best_rm = rm_cands
                 best_cost = cost

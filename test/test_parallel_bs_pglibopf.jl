@@ -18,7 +18,7 @@ catch e
     @warn e
 end
 
-rng = Random.MersenneTwister(123)
+# rng = Random.MersenneTwister(123)
 
 TEP.log_header(log_file)
 

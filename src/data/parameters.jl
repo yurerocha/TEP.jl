@@ -12,9 +12,10 @@ struct Deterministic <: AbstractSolutionStrategy end
 struct Parallel <: AbstractSolutionStrategy end
 
 Base.@kwdef mutable struct InstanceParameters
+    seed::Int64 = 123 # Used for generating random number for the instance
     load_gen_mult::Float64 = 2.0 # Multiplier for the load and generation
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
-    max_rand::Int64 = 100 # Max random value for the new cost (see text)
+    cost_delta_mult::Float64 = 0.1 # Value multiplied by the delta in cost
     num_candidates::Int64 = 2 # Number of candidates available per existing line
     cost_mult::Float64 = 1e4 # Value multiplied by x to build the costs
     ref_bus::Int64 = 1 # Default reference bus used when none is found
@@ -28,7 +29,7 @@ end
 Base.@kwdef mutable struct ModelParameters
     is_mip_en::Bool = true
     # penalty::Float64 = 100.0 # 1, 2, 3
-    penalty::Float64 = 1000.0
+    penalty::Float64 = 1.0
     # is_lp_model_s_var_set_req = true
     is_symmetry_en::Bool = false
     is_dcp_power_model_en::Bool = false # Build DCPPowerModel
@@ -37,13 +38,13 @@ end
 
 Base.@kwdef mutable struct BinarySearchParameters
     is_en::Bool = true
-    time_limit::Float64 = 300.0
+    time_limit::Float64 = 600.0
     max_it::Int64 = 15 # 1.Calibrar 5, 10, 15: 10
     num_max_it_wo_impr::Int64 = 15 # 1.Calibrar 1, 3, 5: 1
 end
 
 Base.@kwdef mutable struct BeamSearchParameters
-    time_limit::Float64 = 300.0
+    time_limit::Float64 = 600.0
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
     num_children_per_level_mult::Float64 = 0.5 # gamma
@@ -87,6 +88,6 @@ Base.@kwdef mutable struct Parameters
     beam_search::BeamSearchParameters = BeamSearchParameters()
     progressive_hedging::ProgressiveHedgingParameters = 
                                                   ProgressiveHedgingParameters()
-    rng::MersenneTwister = Random.MersenneTwister(123)
+    # rng::MersenneTwister = Random.MersenneTwister(123)
     solution_strategy::AbstractSolutionStrategy = Serial()
 end
