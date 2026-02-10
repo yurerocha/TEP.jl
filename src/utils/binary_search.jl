@@ -1,9 +1,3 @@
-function set_time_limit!(params::Parameters, lp::LPModel, start_time::Float64)
-    el = time() - start_time
-    tl = max(params.binary_search.time_limit - el, 0.0)
-    JuMP.set_attribute(lp.jump_model, "TimeLimit", tl)
-end
-
 function has_reached_stop(params::Parameters, it::Int64, it_wo_impr::Int64, 
                          num_cands_prev_it::Int64, rm_cands::Set{CandType}, 
                          start_time::Float64, is_log_en::Bool = false)

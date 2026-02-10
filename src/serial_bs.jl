@@ -63,6 +63,8 @@ function run_serial_bs!(inst::Instance,
                     in_cands = setdiff(node.inserted, lines)
                     # Set max time limit according to elapsed time
                     # set_attribute(lp.jump_model, "TimeLimit", time_limit - el)
+                    set_time_limit!(params, lp, start_time, 
+                                    params.beam_search.time_limit)
                     update_lp!(inst, params, lp, cache_in, cache_rm, in_cands)
 
                     cost = const_infinite
@@ -133,8 +135,10 @@ function run_serial_bs!(inst::Instance,
         end
     end
     # union!(inserted, Set(cache.fixed_x_variables))
+    JuMP.set_attribute(lp.jump_model, "TimeLimit", GRB_INFINITY)
     update_lp!(inst, params, lp, cache_in, cache_rm, inserted)
 
+    @info "bs best cost:$best_cost"
     
     bs_rm_rat = (num_ins_start - length(inserted)) / inst.num_K
 

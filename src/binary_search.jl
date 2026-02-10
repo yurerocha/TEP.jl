@@ -52,14 +52,15 @@ function binary_search!(inst::Instance,
     num_cands = length(rm_cands)
     while !has_reached_stop(params, it, it_wo_impr, 
                             num_prev_cands, rm_cands, start_time)
-        set_time_limit!(params, lp, start_time)
+        set_time_limit!(params, lp, start_time, params.binary_search.time_limit)
         
         rm_lines!(inst, params, lp, rm_cands, true)
         
         viol = comp_viol(lp)
         reinserted = Set{CandType}()
         if isg(viol, 0.0)
-            set_time_limit!(params, lp, start_time)
+            set_time_limit!(params, lp, start_time, 
+                            params.binary_search.time_limit)
             viol, reinserted = repair!(inst, params, scen, lp, rm_cands, viol)
         end
 
@@ -119,6 +120,7 @@ function binary_search!(inst::Instance,
     st = Status("bin it:$it", num_ins_start - length(inserted), inst.num_K, 
                 best_cost, init_cost, start_time)
     @info log(st)
+    @info "bin best cost:$best_cost"
 
     return best_cost
 end

@@ -517,3 +517,13 @@ end
 function roundp(num, den, digits::Int64 = 2)
     return round(100.0 * num / den, digits = digits)
 end
+
+function set_time_limit!(params::Parameters, 
+                         lp::LPModel, 
+                         start_time::Float64, 
+                         time_limit::Float64)
+    el = time() - start_time
+    tl = max(time_limit - el, 0.0)
+    tl = min(tl, params.solver.lp_time_limit)
+    JuMP.set_attribute(lp.jump_model, "TimeLimit", tl)
+end

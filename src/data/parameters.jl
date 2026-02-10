@@ -15,7 +15,7 @@ Base.@kwdef mutable struct InstanceParameters
     seed::Int64 = 123 # Used for generating random number for the instance
     load_gen_mult::Float64 = 2.0 # Multiplier for the load and generation
     g_slack::Float64 = 0.15 # Generation slack with respect to the load
-    cost_delta_mult::Float64 = 0.1 # Value multiplied by the delta in cost
+    cost_delta_mult::Float64 = 1e-2 # Value multiplied by the delta in cost
     num_candidates::Int64 = 2 # Number of candidates available per existing line
     cost_mult::Float64 = 1e4 # Value multiplied by x to build the costs
     ref_bus::Int64 = 1 # Default reference bus used when none is found
@@ -69,6 +69,7 @@ end
 
 Base.@kwdef mutable struct SolverParameters
     time_limit::Float64 = 7200.0
+    lp_time_limit::Float64 = 10.0
     num_threads::Int64 = 1
     log_level::Int64 = 0
 end
