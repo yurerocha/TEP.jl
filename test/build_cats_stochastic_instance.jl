@@ -3,7 +3,7 @@ using TEP
 
 params = TEP.Parameters()
 
-output_dir = "input_bin_cats"
+output_dir = "input_bin"
 file = "CaliforniaTestSystem.m"
 inputfile = "submodules/CATS-CaliforniaTestSystem/MATPOWER/" * 
             "CaliforniaTestSystem.m"

@@ -38,6 +38,14 @@ struct Status
 end
 
 # -------------------------- Instance data structures --------------------------
+struct CostData
+    voltage_classes::Vector{String}
+    reactances_km::Dict{String, Float64}
+    costs_km::Dict{String, Float64} # Costs in $/km-hr
+    transformers::Dict{Tuple{String, String}, Float64} # Costs in $/MVA-hr
+    gen_costs_mult::Dict{String, Float64} # Inflation adjustments for gen costs
+end
+
 mutable struct GeneratorInfo
     bus::Int64
     lower_bound::Float64

@@ -14,9 +14,17 @@ output_dir = "input_bin"
 #     @warn e
 # end
 
-files = TEP.select_files(dir, end_file)
+files = [
+         "pglib_opf_case3012wp_k.m",
+         "pglib_opf_case6495_rte.m",
+         "pglib_opf_case7336_epigrids.m",
+         "pglib_opf_case9591_goc.m",
+         "pglib_opf_case10000_goc.m"
+        ]
+
+# files = TEP.select_files(dir, end_file)
 # Sort files so that the smallest instances are solved first
-sort!(files, by=x->parse(Int, match(r"\d+", x).match))
+# sort!(files, by=x->parse(Int, match(r"\d+", x).match))
 skip = []
 
 for (i, file) in enumerate(files[start_file:end_file])

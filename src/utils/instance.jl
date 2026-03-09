@@ -42,7 +42,7 @@ Return the filename without the path and the extension.
 """
 function get_inst_name(input::String)
     e = split(input, "/")[end]
-    return split(e, ".")[1]
+    return String(split(e, ".")[1])
 end
 
 """
@@ -101,11 +101,26 @@ function build_loads(params::Parameters,
 end
 
 """
-    build_gens(params::Parameters, mpc::Dict{String, Any})
+    build_gens(params::Parameters, 
+               mpc::Dict{String, Any}, 
+               cost_data::CostData, 
+               inst_name::String)
 
 Build generation data from MATPOWER file.
 """
-function build_gens(params::Parameters, gen::Dict{String, Any})
+function build_gens(params::Parameters, 
+                    gen::Dict{String, Any}, 
+                    cost_data::CostData, 
+                    inst_name::String)
+    # Get the inflation adjustment for the instance if it exists
+    c_mult = 1.0
+    if haskey(cost_data.gen_costs_mult, inst_name)
+        c_mult = cost_data.gen_costs_mult[inst_name]
+    else
+        @warn "no inflation adjustment found for instance $inst_name\n" * 
+                "\tusing 1.0 as multiplier."
+    end
+    
     G = Dict{Int64, GeneratorInfo}()
     for g in gen
         dt = g[2]
@@ -115,21 +130,24 @@ function build_gens(params::Parameters, gen::Dict{String, Any})
         end
         lb = params.instance.load_gen_mult * dt["pmin"]
         ub = params.instance.load_gen_mult * dt["pmax"]
-        G[dt["index"]] = 
-                GeneratorInfo(dt["gen_bus"], lb, ub, abs.(reverse(dt["cost"])))
+        costs = c_mult * abs.(reverse(dt["cost"]))
+        G[dt["index"]] = GeneratorInfo(dt["gen_bus"], lb, ub, costs)
     end
 
     return G
 end
 
 """
-    build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
+    build_existing_circuits(params::Parameters, 
+                            baseMVA::Union{Int64, Float64}, 
+                            cost_data::CostData)
 
 Build existing lines, gamma values and capacities of circuits.
 """
-function build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
-    J = Dict{Tuple{Int64, Int64, Int64}, BranchInfo}()
-    existing_circuits = Dict{Tuple{Int64, Int64}, Set{Tuple3I}}()
+function build_existing_circuits(params::Parameters, 
+                                 mpc::Dict{String, Any}, 
+                                 cost_data::CostData)
+    J = Dict{Tuple3I, BranchInfo}()
     # min_gamma = 1e15
     # max_gamma = 0.0
     for b in mpc["branch"]
@@ -166,10 +184,11 @@ function build_existing_circuits(params::Parameters, mpc::Dict{String, Any})
         end
 
         gamma = comp_gamma(params, x, r)
+        cost = comp_existing_cost(mpc, cost_data, dt)
         # min_gamma = min(min_gamma, gamma)
         # max_gamma = max(max_gamma, gamma)
         J[j] = BranchInfo(dt["rate_a"], 
-                          x, gamma, 0.0, 
+                          x, gamma, cost, 
                           (dt["angmin"], dt["angmax"]))
     end
     # @warn min_gamma, max_gamma
@@ -180,12 +199,12 @@ end
 
 """
     build_candidate_circuits!(params::Parameters, 
-                              J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo})
+                              J::Dict{Tuple3I, BranchInfo})
 
 Build candidate circuits based on exsting lines.
 """
 function build_candidate_circuits(params::Parameters, 
-                                J::Dict{Tuple{Int64, Int64, Int64}, BranchInfo})
+                                  J::Dict{Tuple3I, BranchInfo})
     # TODO: K and J with the same key format
     K = Dict{CandType, BranchInfo}()
     rng = Random.MersenneTwister(params.instance.seed)
@@ -193,12 +212,7 @@ function build_candidate_circuits(params::Parameters,
     for (j, v) in J, l in 1:params.instance.num_candidates
         K[(j, l)] = deepcopy(v)
         # Compute the new costs based on the gamma values
-        # c = params.instance.cost_mult * abs(v.x)
-        # K[(j, l)].cost = c / (params.instance.num_candidates + 1)
-        c = params.instance.cost_mult * 
-                abs(v.x) / (params.instance.num_candidates + 1)
-        m = params.instance.cost_delta_mult * rand(rng, 1:10)
-        K[(j, l)].cost = c * (1 + m)
+        K[(j, l)].cost = comp_candidate_cost(params, v.cost, rng)
     end
 
     return K, candidate_circuits
@@ -240,130 +254,144 @@ function read_reference_bus(params::Parameters, mpc::Dict{String, Any})
     return ref_bus
 end
 
-"""
-    get_endpoints(inst::Instance, k::Any)
+function read_cost_data(params::Parameters, costs_path::String)
+    f = readlines(costs_path)
 
-Return the endpoints (from_bus, to_bus) of existing or candidate line k.
+    # Parse circuit data
+    i = findfirst(x -> contains(x, "# circuit data"), f) + 3
+    @assert i != nothing "error: # circuit data section not found"
+
+    voltage_classes = String[]
+    reactances_km = Dict{String, Float64}()
+    costs_km = Dict{String, Float64}()
+    exp_lifetime = params.instance.expected_lifetime
+    for line in f[i:end]
+        if contains(line, "END")
+            break
+        end
+        s = split(line)
+
+        vclass = s[1]
+        rkm = parse(Float64, s[2])
+        ckm = parse(Float64, s[3])
+        
+        push!(voltage_classes, vclass)
+        reactances_km[vclass] = rkm
+        # Convert from M$/km-yr to $/km-hr
+        costs_km[vclass] = ckm * 1e6 / (exp_lifetime * 365 * 24.0)
+    end
+
+    sort!(voltage_classes, by = x -> parse(Float64, x))
+
+    # Parse transformer data
+    i = findfirst(x -> contains(x, "# transformer data"), f) + 3
+    @assert i != nothing "error: # transformer data section not found"
+
+    transformers = Dict{Tuple{String, String}, Float64}()
+    for line in f[i:end]
+        if contains(line, "END")
+            break
+        end
+        s = split(line)
+        vclass1 = s[1]
+        for j in 2:length(s)
+            vclass2 = voltage_classes[j - 1]
+            # Convert from $/MVA-yr to $/MVA-hr
+            transformers[(vclass1, vclass2)] = 
+                            parse(Float64, s[j]) / (exp_lifetime * 365 * 24.0)
+        end
+    end
+
+    # Generation costs inflation adjustments
+    i = findfirst(x -> contains(x, "# inflation adjustments"), f) + 3
+    @assert i != nothing "error: # inflation adjustments section not found"
+
+    gen_costs_mult = Dict{String, Float64}()
+    for line in f[i:end]
+        if contains(line, "END")
+            break
+        end
+        s = split(line)
+        gen_costs_mult[s[1]] = parse(Float64, s[3])
+    end
+
+    return CostData(voltage_classes, 
+                    reactances_km, 
+                    costs_km, 
+                    transformers, 
+                    gen_costs_mult)
+end
+
 """
-function get_endpoints(inst::Instance, k::Any)
-    if k isa CandType
-        return k[1][2], k[1][3]
-    else 
-        return k[2], k[3]
+    vclass(cost_data::CostData, voltage_class::Int64)
+
+Select the smallest voltage class that is greater than or equal to the given 
+voltage class.
+"""
+function vclass(cost_data::CostData, voltage_class::String)
+    i = findfirst(x -> parse(Float64, x) >= parse(Float64, voltage_class), 
+                  cost_data.voltage_classes)
+    @assert i != nothing "error: voltage class $voltage_class not assigned"
+
+    return cost_data.voltage_classes[i]
+end
+
+function comp_length_km(baseMVA::Union{Int64, Float64}, 
+                        cost_data::CostData, 
+                        vclass::String, 
+                        x_pu::Float64)
+    x_ohms = x_pu * parse(Float64, vclass)^2 / baseMVA
+    
+    return x_ohms / cost_data.reactances_km[vclass]
+end
+
+function comp_circuit_cost(baseMVA::Union{Int64, Float64}, 
+                           cost_data::CostData, 
+                           voltage_class::String, 
+                           x_pu::Float64)
+    vcls = vclass(cost_data, voltage_class)
+    length = comp_length_km(baseMVA, cost_data, vcls, x_pu)
+
+    return cost_data.costs_km[vcls] * length
+end
+
+function comp_transformer_cost(baseMVA::Union{Int64, Float64}, 
+                               cost_data::CostData, 
+                               voltage_class_f::String, 
+                               voltage_class_t::String)
+    vcls_f = vclass(cost_data, voltage_class_f)
+    vcls_t = vclass(cost_data, voltage_class_t)
+    
+    return cost_data.transformers[(vcls_f, vcls_t)] * baseMVA
+end
+
+function comp_existing_cost(mpc::Dict{String, Any},
+                            cost_data::CostData, 
+                            dt::Dict{String, Any})
+    vcls_f = string(mpc["bus"]["$(dt["f_bus"])"]["base_kv"])
+    vcls_t = string(mpc["bus"]["$(dt["t_bus"])"]["base_kv"])
+
+    if vcls_f == vcls_t
+        # Transmission line
+        return comp_circuit_cost(mpc["baseMVA"], cost_data, vcls_f, dt["br_x"])
+    else
+        # Transformer
+        return comp_transformer_cost(mpc["baseMVA"], cost_data, vcls_f, vcls_t)
     end
 end
 
-function comp_cap_constraints(inst::Instance, scen::Int64)
-    count = 0
-    D = inst.scenarios[scen].D
-    G = inst.scenarios[scen].G
-    for d in keys(D)
-        cap = 0.0
-        for k in keys(inst.J)
-            c = get_endpoints(inst, k)
-            if c[1] == d || c[2] == d
-                cap += inst.J[k].f_bar
-            end
-        end
-        for g in keys(G)
-            if G[g].bus == d
-                cap += G[g].upper_bound
-            end
-        end
-        if isl(cap, D[d])
-            count += 1
-            @warn "Bus $d has capacity $cap and demand $(D[d])"
-        end
-    end
-    @info "Count cap cons: $count"
-    return nothing
-end
+function comp_candidate_cost(params::Parameters, 
+                             cost_existing_circuit::Float64, 
+                             rng)
+    # c = params.instance.cost_mult * abs(v.x)
+    # K[(j, l)].cost = c / (params.instance.num_candidates + 1)
 
-"""
-    rm_unnecessary_candidate_circuits!(inst::Instance)
+    # c = params.instance.cost_mult * 
+    #         abs(v.x) / (params.instance.num_candidates + 1)
+    # m = params.instance.cost_delta_mult * rand(rng, 1:10)
+    # return c * (1 + m)
 
-Remove candidate circuits connecting incident to leaf nodes when the existing 
-lines are enough to handle power flow in and out of the nodes.
-
-This function can only be applied to multi-scenario planning after scenarios are
-built.
-"""
-function rm_unnecessary_candidate_circuits!(inst::Instance)
-    leaf_count = 0
-    rm_cands_count = 0
-
-    num_K = inst.num_K
-    for b in inst.I
-        max_cap = 0.0
-        incident_j = nothing
-        incidence_count = 0
-        # Reminder: in case of multiple existing lines, the node is not a leaf
-        for j in keys(inst.J)
-            ep = get_endpoints(inst, j)
-            if b in ep
-                max_cap += inst.J[j].f_bar
-                incident_j = j
-                incidence_count += 1
-                if incidence_count > 1
-                    break
-                end
-            end
-        end
-        # Multiple existing lines involving bus b
-        if incidence_count > 1
-            continue
-        end
-
-        leaf_count += 1
-        max_unserved_d = 0.0
-        max_available_g = 0.0
-        for scen in eachindex(inst.scenarios)
-            d = haskey(inst.scenarios[scen].D, b) ? 
-                                        inst.scenarios[scen].D[b] : 0.0
-            g = get_bus_gen_cap(inst, scen, b)
-            max_unserved_d = max(d - g, max_unserved_d)
-            max_available_g = max(g - d, max_available_g)
-        end
-
-        if isl(max_unserved_d, max_cap) && isl(max_available_g, max_cap)
-            # @info "Rm cands involving bus $b " * 
-            #         "(max_unserved_d:$max_unserved_d " * 
-            #         "max_available_g:$max_available_g max_cap:$max_cap)"
-            rm_cands_count += 1
-            rm_candidate_circuits!(inst, incident_j)
-        end
-
-    end
-    # @info inst.name
-    # @info "Leaf nodes:$leaf_count rm:$(2*rm_cands_count) " * 
-    #         "total:$(inst.num_K)"
-    inst.key_to_index = Dict(k => i for (i, k) in enumerate(keys(inst.K)))
-    inst.costs = [inst.K[k].cost for k in keys(inst.K)]
-    inst.num_K = length(inst.K)
-
-    @warn "num of candidate circuits reduced $num_K -> $(inst.num_K)"
-
-    return nothing
-end
-
-function rm_candidate_circuits!(inst::Instance, incident_j::Tuple3I)
-    rm = Set{CandType}()
-
-    for k in keys(inst.K)
-        if k[1] == incident_j
-            push!(rm, k)
-        end
-    end
-
-    for k in rm
-        delete!(inst.K, k)
-        for i in eachindex(inst.candidate_circuits[incident_j])
-            if inst.candidate_circuits[incident_j][i] == k
-                deleteat!(inst.candidate_circuits[incident_j], i)
-                break
-            end
-        end
-    end
-
-    return nothing
+    m = params.instance.cost_delta_mult * rand(rng, 0:10)
+    # cost_existing_circuit /= params.instance.num_candidates
+    return  cost_existing_circuit * (1.0 + m)
 end

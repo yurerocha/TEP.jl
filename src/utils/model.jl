@@ -7,6 +7,12 @@ Configure the solver parameters.
 function config!(inst::Instance, params::Parameters, scen::Int64, tep::TEPModel)
     set_attribute(tep.jump_model, "Threads", params.solver.num_threads)
     # set_attribute(tep.jump_model, "DualReductions", 0)
+    # TODO: Investigate reason for numerical trouble with barrier algorithm for 
+    # deterministic systems
+    # if tep isa LPModel
+    #     set_attribute(tep.jump_model, "Method", 2)
+    #     set_attribute(tep.jump_model, "Crossover", 0)
+    # end
     # set_attribute(tep.jump_model, "Method", 6)
     # set_attribute(tep.jump_model, "GURO_PAR_PDHGGPU", 1)
     # set_attribute(tep.jump_model, "Method", 0)
@@ -22,8 +28,8 @@ function config_log!(inst::Instance,
                      scen::Int64, 
                      tep::TEPModel)
     if params.model.optimizer == Gurobi.Optimizer
-        if tep isa LPModel
-        # if params.solver.log_level == 0
+        # if tep isa LPModel
+        if tep isa LPModel || params.solver.log_level == 0
             JuMP.set_silent(tep.jump_model)
             # set_attribute(tep.jump_model, "OutputFlag", 0)
         elseif params.solver.log_level == 1 || params.solver.log_level == 3

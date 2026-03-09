@@ -526,6 +526,6 @@ function set_time_limit!(params::Parameters,
                          time_limit::Float64)
     el = time() - start_time
     tl = max(time_limit - el, 0.0)
-    tl = min(tl, params.solver.lp_time_limit)
+    # tl = min(tl, params.solver.lp_time_limit)
     JuMP.set_attribute(lp.jump_model, "TimeLimit", tl)
 end

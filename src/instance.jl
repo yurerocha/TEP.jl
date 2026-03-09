@@ -3,16 +3,22 @@
 
 Build Instance data structure.
 """
-function build_instance(params::Parameters, filepath::String)
+function build_instance(params::Parameters, 
+                        filepath::String, 
+                        costs_path::String="costs.txt")
     mpc = PowerModels.parse_file(filepath)
 
     if params.model.is_dcp_power_model_en
         rm_g_nonlinear_coeffs!(mpc)
+        rm_g_nonlinear_coeffs!(mpc)
     end
+
+    cost_data = read_cost_data(params, costs_path)
+    inst_name = get_inst_name(filepath)
     
     I = build_buses(mpc)
     D = build_loads(params, mpc["load"], mpc["shunt"])
-    G = build_gens(params, mpc["gen"])
+    G = build_gens(params, mpc["gen"], cost_data, inst_name)
 
     sumD = sum(d for d in values(D))
     sum_lb = sum(g.lower_bound for g in values(G))
@@ -24,8 +30,8 @@ function build_instance(params::Parameters, filepath::String)
         @assert isl(sumD, sum_ub)
     end
 
-    J, existing_circuits = build_existing_circuits(params, mpc)
-    K, candidate_circuits = build_candidate_circuits(params, J)
+    J = build_existing_circuits(params, mpc, cost_data)
+    K = build_candidate_circuits(params, J)
 
     ref_bus = read_reference_bus(params, mpc)
 
@@ -33,9 +39,7 @@ function build_instance(params::Parameters, filepath::String)
 
     key_to_idx = Dict(k => i for (i, k) in enumerate(keys(K)))
     costs = [K[k].cost for k in keys(K)]
-
-    return Instance(get_inst_name(filepath), I, J, K, 
-                    existing_circuits, candidate_circuits, 
+    return Instance(inst_name, I, J, K, 
                     key_to_idx, costs, 
                     length(I), length(J), length(K), 
                     ref_bus, 
