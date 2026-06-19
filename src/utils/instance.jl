@@ -209,11 +209,19 @@ function build_candidate_circuits(params::Parameters,
     # TODO: K and J with the same key format
     K = Dict{CandType, BranchInfo}()
     rng = Random.MersenneTwister(params.instance.seed)
+    candidate_circuits = Dict{Tuple3I, Vector{CandType}}()
     # Candidate circuits are copies of the existing ones
-    for (j, v) in J, l in 1:params.instance.num_candidates
-        K[(j, l)] = deepcopy(v)
-        # Compute the new costs based on the gamma values
-        K[(j, l)].cost = comp_candidate_cost(params, v.cost, rng)
+    for (j, v) in J
+        # Candidate circuits are copies of the existing ones
+        candidate_circuits[j] = CandType[]
+        for l in 1:params.instance.num_candidates
+            k = (j, l)
+            K[k] = deepcopy(v)
+            # Compute the new costs based on the gamma values
+            K[k].cost = comp_candidate_cost(params, v.cost, rng)
+
+            push!(candidate_circuits[j], k)
+        end
     end
 
     return K, candidate_circuits

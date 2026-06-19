@@ -7,14 +7,14 @@ function run_serial_bs!(inst::Instance,
                         inserted::Set{CandType}, 
                         removed::Set{CandType}, 
                         cost::Float64, 
-                        init_time::Float64)
-    bs_init_time = time()
+                        start_time::Float64)
+    bs_start_time = time()
     init_in = length(inserted)
     init_cost = cost
     bin_rm_rat = (init_in - length(inserted)) / inst.num_K
     
     # Update time limit
-    time_limit = params.beam_search.time_limit - (time() - init_time)
+    time_limit = params.beam_search.time_limit - (time() - start_time)
 
     fix_s_vars!(lp)
 
@@ -45,7 +45,7 @@ function run_serial_bs!(inst::Instance,
                 batches = 
                     select_batches!(inst, params, lp, node, cands_per_batch_m)
                 for lines in batches
-                    el = time() - init_time
+                    el = time() - start_time
                     if isg(el, time_limit)
                         has_reached_tl = true
                         break
@@ -85,7 +85,7 @@ function run_serial_bs!(inst::Instance,
                                                 verbosity = params.log_level) do
                             st = Status("bs level:$it", init_in - num_in, 
                                         init_in, 
-                                        cost, init_cost, init_time)
+                                        cost, init_cost, start_time)
                             @infov 2 log(st)
                         end
                     end
@@ -104,7 +104,7 @@ function run_serial_bs!(inst::Instance,
                 break
             elseif num_it_wo_impr >= params.beam_search.num_max_it_wo_impr
                 st = Status("bs", init_in - num_in, 
-                            init_in, best_cost, init_cost, init_time)
+                            init_in, best_cost, init_cost, start_time)
                 @info log(st)
                 @info "max it wo impr reached"
                 break
@@ -117,7 +117,7 @@ function run_serial_bs!(inst::Instance,
             it += 1
         end
         if has_reached_tl
-            @info "bs tl reached $(round(time() - init_time, digits = 2))"
+            @info "bs tl reached $(round(time() - start_time, digits = 2))"
             break
         else
             @info "enable shuffle strategy"
@@ -127,7 +127,7 @@ function run_serial_bs!(inst::Instance,
     # union!(inserted, Set(cache.fixed_x_variables))
     # update_lp!(inst, params, lp_with_slacks, cache_in, cache_rm, inserted)
 
-    bs_neigh_st = NeighborhoodStatus(time() - bs_init_time, 
+    bs_neigh_st = NeighborhoodStatus(time() - bs_start_time, 
                             comp_rm_ratio(inst, length(inserted), init_in), 
                             comp_gap(best_cost, init_cost))
 

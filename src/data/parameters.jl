@@ -39,13 +39,13 @@ end
 
 Base.@kwdef mutable struct BinarySearchParameters
     is_en::Bool = true
-    time_limit::Float64 = 600.0
+    time_limit::Float64 = 450.0
     max_it::Int64 = 15 # 1.Calibrar 5, 10, 15: 10
     num_max_it_wo_impr::Int64 = 15 # 1.Calibrar 1, 3, 5: 1
 end
 
 Base.@kwdef mutable struct BeamSearchParameters
-    time_limit::Float64 = 600.0
+    time_limit::Float64 = 450.0
     num_children_per_parent::Int64 = 2 # w
     num_children_per_level::Int64 = 3 # N
     num_children_per_level_mult::Float64 = 0.5 # gamma
@@ -58,7 +58,7 @@ end
 
 Base.@kwdef mutable struct ProgressiveHedgingParameters
     is_en::Bool = false
-    time_limit::Float64 = 7200.0
+    time_limit::Float64 = 1800.0
     num_threads::Int64 = 49
     rho::Float64 = 1.0
     is_sep_rho_en::Bool = false # Calibrar true, false
