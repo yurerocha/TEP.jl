@@ -29,7 +29,7 @@ function build_instance(params::Parameters,
         @assert isl(sumD, sum_ub)
     end
 
-    J, existing_circuits = build_existing_circuits(params, mpc)
+    J, existing_circuits = build_existing_circuits(params, mpc, cost_data)
     K, candidate_circuits = build_candidate_circuits(params, J)
 
     ref_bus = read_reference_bus(params, mpc)

@@ -59,10 +59,8 @@ function binary_search!(inst::Instance,
     num_prev_cands = 0
     num_cands = length(rm_cands)
     while !has_reached_stop(params, it, it_wo_impr, 
-                            num_prev_cands, rm_cands, start_time)
-        set_time_limit!(params, lp, start_time, params.binary_search.time_limit)
                             num_prev_cands, rm_cands, init_time)
-        set_time_limit!(params, lp, init_time)
+        set_time_limit!(params, lp, init_time, params.binary_search.time_limit)
         
         rm_lines!(inst, params, lp, rm_cands, true)
         
@@ -70,7 +68,8 @@ function binary_search!(inst::Instance,
         reinserted = Set{CandType}()
         if isg(viol, 0.0)
             rp_count += 1
-            set_time_limit!(params, lp_with_slacks, init_time)
+            set_time_limit!(params, lp_with_slacks, 
+                            init_time, params.binary_search.time_limit)
             t = time()
             update_lp!(inst, params, lp_with_slacks, inserted, false)
             rm_lines!(inst, params, lp_with_slacks, rm_cands, true)

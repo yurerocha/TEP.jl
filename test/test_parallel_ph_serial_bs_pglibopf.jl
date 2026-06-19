@@ -4,18 +4,18 @@ using Random
 
 params = TEP.Parameters()
 
-start_file = 6
+start_file = 1
 end_file = 6 # 40
-log_dir = "test/two_models_300"
+log_dir = "test/ph"
 log_file = "$log_dir/log.md"
 dir = "input_bin/"
 num_threads = params.progressive_hedging.num_threads
 
-# try
-#     TEP.rm_dir(log_dir)
-# catch e
-#     @warn e
-# end
+try
+    TEP.rm_dir(log_dir)
+catch e
+    @warn e
+end
 
 TEP.log_header(log_file)
 
