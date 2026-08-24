@@ -114,8 +114,13 @@ end
 
 function build_cats_stochastic_instance(params::Parameters, 
                                     filepath::String, 
+                                    costs_path::String="costs.txt", 
                                     days::Set{Int64} = Set([79, 171, 265, 355]))
     log(params, "Build CATS stochastic instance", true)
+
+    cost_data = read_cost_data(params, costs_path)
+    inst_name = get_inst_name(filepath)
+
     # -------------- Set the scenarios based on the selected days --------------
     scenarios = Vector{Int64}()
     num_days = 24
@@ -150,7 +155,7 @@ function build_cats_stochastic_instance(params::Parameters,
 
 
     # ------------------------ Build multiple scenarios ------------------------
-    inst = build_instance(params, filepath)
+    inst = build_instance(params, filepath, costs_path)
     inst.scenarios = []
     inst.num_scenarios = length(scenarios)
     prob = 1.0 / inst.num_scenarios
@@ -164,7 +169,7 @@ function build_cats_stochastic_instance(params::Parameters,
         update_loads!(k, load_scens, mpc, load_mapping)
 
         D = build_loads(params, mpc["load"], mpc["shunt"])
-        G = build_gens(params, mpc["gen"])
+        G = build_gens(params, mpc["gen"], cost_data, inst_name)
 
         sumD = sum(d for d in values(D))
         sum_lb = sum(g.lower_bound for g in values(G))

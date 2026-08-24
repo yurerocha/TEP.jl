@@ -47,7 +47,7 @@ function build_instance(params::Parameters,
                     ref_bus, 
                     scenarios, length(scenarios))
 
-    rm_unnecessary_candidate_circuits!(inst)
+    # rm_unnecessary_candidate_circuits!(inst)
    
     return inst
 end
