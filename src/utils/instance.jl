@@ -447,85 +447,124 @@ end
 """
     rm_unnecessary_candidate_circuits!(inst::Instance)
 
-Remove candidate circuits connecting incident to leaf nodes when the existing 
-lines are enough to handle power flow in and out of the nodes.
+Remove candidate circuits at leaf buses when the existing circuits can carry
+the complete range of possible net injections for every scenario.
+
+A bus is considered a leaf when all its existing incident circuits connect it
+to the same neighboring bus. This includes parallel existing circuits.
 """
 function rm_unnecessary_candidate_circuits!(inst::Instance)
-    leaf_count = 0
-    rm_cands_count = 0
+    original_num_K = inst.num_K
 
-    num_K = inst.num_K
+    # Build the incident-circuit map once.
+    incident = Dict{Int64, Vector{Tuple3I}}(
+        b => Tuple3I[] for b in inst.I
+    )
+
+    for j in keys(inst.J)
+        from_bus, to_bus = get_endpoints(inst, j)
+        push!(incident[from_bus], j)
+        push!(incident[to_bus], j)
+    end
+
+    circuits_to_prune = Set{Tuple3I}()
+
     for b in inst.I
-        max_cap = 0.0
-        incident_j = nothing
-        incidence_count = 0
-        # Reminder: in case of multiple existing lines, the node is not a leaf
-        for j in keys(inst.J)
-            ep = get_endpoints(inst, j)
-            if b in ep
-                max_cap += inst.J[j].f_bar
-                incident_j = j
-                incidence_count += 1
-                if incidence_count > 1
-                    break
+        incident_lines = incident[b]
+
+        # An isolated bus has no existing circuit to reinforce.
+        isempty(incident_lines) && continue
+
+        # Determine the distinct neighbors of this bus.
+        neighbors = Set{Int64}()
+
+        for j in incident_lines
+            from_bus, to_bus = get_endpoints(inst, j)
+            push!(neighbors, from_bus == b ? to_bus : from_bus)
+        end
+
+        # Not a leaf if connected to more than one neighboring bus.
+        length(neighbors) == 1 || continue
+
+        # Parallel existing circuits to the same neighbor contribute jointly.
+        existing_capacity = sum(
+            inst.J[j].f_bar for j in incident_lines
+        )
+
+        removable = true
+
+        for scenario in inst.scenarios
+            demand = get(scenario.D, b, 0.0)
+
+            generation_lb = 0.0
+            generation_ub = 0.0
+
+            for generator in values(scenario.G)
+                if generator.bus == b
+                    generation_lb += generator.lower_bound
+                    generation_ub += generator.upper_bound
                 end
             end
-        end
-        # Multiple existing lines involving bus b
-        if incidence_count > 1
-            continue
+
+            # Greatest possible import occurs at minimum local generation.
+            required_import = max(0.0, demand - generation_lb)
+
+            # Greatest possible export occurs at maximum local generation.
+            required_export = max(0.0, generation_ub - demand)
+
+            if !isl(required_import, existing_capacity) ||
+               !isl(required_export, existing_capacity)
+                removable = false
+                break
+            end
         end
 
-        leaf_count += 1
-        max_unserved_d = 0.0
-        max_available_g = 0.0
-        for scen in eachindex(inst.scenarios)
-            d = haskey(inst.scenarios[scen].D, b) ? 
-                                        inst.scenarios[scen].D[b] : 0.0
-            g = get_bus_gen_cap(inst, scen, b)
-            max_unserved_d = max(d - g, max_unserved_d)
-            max_available_g = max(g - d, max_available_g)
+        if removable
+            union!(circuits_to_prune, incident_lines)
         end
-
-        if isl(max_unserved_d, max_cap) && isl(max_available_g, max_cap)
-            # @info "Rm cands involving bus $b " * 
-            #         "(max_unserved_d:$max_unserved_d " * 
-            #         "max_available_g:$max_available_g max_cap:$max_cap)"
-            rm_cands_count += 1
-            rm_candidate_circuits!(inst, incident_j)
-        end
-
     end
-    # @info inst.name
-    # @info "Leaf nodes:$leaf_count rm:$(2*rm_cands_count) " * 
-    #         "total:$(inst.num_K)"
-    inst.key_to_index = Dict(k => i for (i, k) in enumerate(keys(inst.K)))
-    inst.costs = [inst.K[k].cost for k in keys(inst.K)]
-    inst.num_K = length(inst.K)
 
-    @warn "num of candidate circuits reduced $num_K -> $(inst.num_K)"
+    for j in circuits_to_prune
+        rm_candidate_circuits!(inst, j)
+    end
+
+    # Use one key ordering for both the index map and cost vector.
+    candidate_keys = collect(keys(inst.K))
+
+    inst.key_to_index = Dict(
+        k => i for (i, k) in enumerate(candidate_keys)
+    )
+    inst.costs = [inst.K[k].cost for k in candidate_keys]
+    inst.num_K = length(candidate_keys)
+
+    @warn "num of candidate circuits reduced " *
+          "$original_num_K -> $(inst.num_K)"
 
     return nothing
 end
 
-function rm_candidate_circuits!(inst::Instance, incident_j::Tuple3I)
-    rm = Set{CandType}()
 
-    for k in keys(inst.K)
-        if k[1] == incident_j
-            push!(rm, k)
-        end
-    end
+"""
+    rm_candidate_circuits!(inst::Instance, existing_line::Tuple3I)
 
-    for k in rm
+Remove all candidate copies associated with an existing circuit.
+"""
+function rm_candidate_circuits!(
+    inst::Instance,
+    existing_line::Tuple3I,
+)
+    candidates = get(
+        inst.candidate_circuits,
+        existing_line,
+        CandType[],
+    )
+
+    for k in candidates
         delete!(inst.K, k)
-        for i in eachindex(inst.candidate_circuits[incident_j])
-            if inst.candidate_circuits[incident_j][i] == k
-                deleteat!(inst.candidate_circuits[incident_j], i)
-                break
-            end
-        end
     end
+
+    # Preserve the dictionary entry because callers may expect it to exist.
+    empty!(candidates)
 
     return nothing
 end
