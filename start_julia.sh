@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Open Julia, activate project, and import packages
+# julia --threads=40 -i -e '
 julia -i -e '
 using Pkg
 Pkg.activate("../TEP.jl/")

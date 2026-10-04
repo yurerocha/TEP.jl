@@ -2,6 +2,8 @@ module TEP
 
 # using BenchmarkTools
 # using BFloat16s
+using Base.Threads
+using Clustering
 using CSV
 using DataFrames
 using Dates
@@ -14,6 +16,7 @@ using Logging
 using LoggingExtras
 using MPI
 using OrderedCollections # OrderedDict
+using Plots
 using PowerModels
 using Profile
 using PProf
@@ -59,6 +62,7 @@ include("utils/valid_inequalities.jl")
 
 include("main.jl")
 
+include("cats_daily_profiles.jl")
 include("deterministic.jl")
 include("instance.jl")
 include("model.jl")

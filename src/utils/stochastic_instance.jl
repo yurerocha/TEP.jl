@@ -185,6 +185,18 @@ function scale_loads(params::Parameters,
     return D
 end
 
+
+"""
+    get_ren_gen_indices(gen_data::DataFrames.DataFrame, ren_type::String)
+
+Get the indices of renewable generators in the PGLib-OPF base instance for a
+given renewable type.
+"""
+function get_ren_gen_indices(gen_data::DataFrames.DataFrame, ren_type::String)
+    return Set([i for i in 1:size(gen_data)[1] if occursin(ren_type, 
+                                            lowercase(gen_data.FuelType[i]))])
+end
+
 """
     comp_ren_and_avg_cap(mpc::Dict{String, Any}, 
                          gen_data::DataFrame, 
@@ -195,8 +207,7 @@ Compute the renewable generation capacity.
 function comp_ren_and_avg_cap(mpc::Dict{String, Any}, 
                               gen_data::DataFrames.DataFrame, 
                               ren_type::String)
-    gen_indices = [g for g in 1:size(gen_data)[1] if occursin(ren_type, 
-                                               lowercase(gen_data.FuelType[g]))]
+    gen_indices = get_ren_gen_indices(gen_data, ren_type)
     
     # Renewable generation capacity
     rcap = sum(g["pmax"] for (i, g) in mpc["gen"] if g["index"] in gen_indices)
@@ -275,3 +286,28 @@ function assert_feas_build_all(inst::Instance, params::Parameters)
 
     return nothing
 end
+
+"""
+    comp_ren_cap(G::Dict{Int64, GeneratorInfo},
+                 gen::Dict{String, Any},
+                 gen_data::DataFrames.DataFrame,
+                 ren_type::String)
+
+Compute the renewable generation capacity.
+"""
+function comp_ren_cap(G::Dict{Int64, GeneratorInfo},
+                      gen::Dict{String, Any}, 
+                      gen_data::DataFrames.DataFrame,
+                      ren_type::String)
+    ren_gen_indices = get_ren_gen_indices(gen_data, ren_type)
+    acc_ren_cap = 0.0
+    for (_, g) in gen
+        if g["index"] in ren_gen_indices
+            if g["gen_status"] > 0
+                acc_ren_cap += G[g["index"]].upper_bound
+            end
+        end
+    end
+    return acc_ren_cap
+end
+    
