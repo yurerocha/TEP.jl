@@ -49,6 +49,9 @@ function build_stochastic_instance(params::Parameters,
     solar_gen = dict_hourly_data(hourly_data, scenarios, "Solar")
     wind_gen = dict_hourly_data(hourly_data, scenarios, "Wind")
 
+    # Preserve base capacities: hourly updates must always use these
+    pmax_og = [mpc["gen"][string(i)]["pmax"] for i in 1:size(gen_data, 1)]
+
     # ----- Build base PGLib-OPF scen generators with renewable penetration ----
     solar_cap, solar_avg = comp_ren_and_avg_cap(mpc, gen_data, "solar")
     wind_cap, wind_avg = comp_ren_and_avg_cap(mpc, gen_data, "wind")
@@ -67,6 +70,13 @@ function build_stochastic_instance(params::Parameters,
     inst.num_scenarios = length(scenarios)
     prob = 1.0 / inst.num_scenarios
     for (i, scen) in enumerate(scenarios)
+        # Update CATS generation and demand for this hour
+        update_rgen!(scen, mpc, gen_data,
+                     solar_gen, wind_gen,
+                     pmax_og, solar_cap, wind_cap)
+        update_loads!(scen, load_scens, mpc, load_mapping)
+
+        # Build the corresponding PGLib generator capacities
         G = deepcopy(pglib_mpc["gen"])
         scale_ren_gen!(params, scen, G, pglib_mpc, 
                        solar_gen_indices, 
@@ -76,9 +86,7 @@ function build_stochastic_instance(params::Parameters,
                        wind_gen, wind_cap)
         scale_gen_lb!(params, mpc, pglib_mpc, G)
 
-        # Update the loads in the CATS mpc according to the current scenario
-        update_loads!(scen, load_scens, mpc, load_mapping)
-
+        # Both CATS demand and generation now correspond to this hour.
         D = scale_loads(params, mpc, pglib_mpc, G)
 
         # Parse to the Instance format

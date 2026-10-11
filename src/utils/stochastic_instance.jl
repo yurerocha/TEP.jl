@@ -68,6 +68,8 @@ end
 Scale the capacity of renewable generators in a PGLIB-OPF scenario according 
 to a constant involving renewable generation computed for the associated CATS
 scenario.
+
+This function performs similarly to test_eval_functions.update_rgen!().
 """
 function scale_ren_gen!(params::Parameters, 
                         scen::Int64, 
